@@ -37,7 +37,9 @@
 	# Install Python executables
 	install(PROGRAMS
 	scripts/fc_cmd.py
+	scripts/camera.py
 	scripts/clock.py
+	scripts/save_image.py
 	scripts/manual_cmd.py
 	scripts/GCS.py
 	scripts/viconData.py
