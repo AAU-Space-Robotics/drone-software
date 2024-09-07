@@ -1,4 +1,17 @@
 	cmake_minimum_required(VERSION 3.5)
+# --- Fetch Serial --------------------------------------------------------------
+include(FetchContent)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+set(FETCHCONTENT_QUIET OFF)
+
+FetchContent_Declare(serial
+  GIT_REPOSITORY https://github.com/RoverRobotics-forks/serial-ros2.git
+  GIT_TAG        master
+  GIT_PROGRESS   TRUE
+  GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(serial)
+# ------------------------------------------------------------------------------
 	project(drone)
 
 	# Default to C++14
@@ -15,15 +28,19 @@
 	find_package(ament_cmake_python REQUIRED)
 	find_package(rclcpp REQUIRED)
 	find_package(rclpy REQUIRED)
-	find_package(serial REQUIRED)
+	# find_package(serial REQUIRED)
 	find_package(drone_interfaces REQUIRED)
 
 	# Include Cpp "include" directory
 	include_directories(include)
 
 	# Create Cpp executables - Controller_node
-	add_executable(Sensor src/Sensor.cpp) # change name of node
-	ament_target_dependencies(Sensor rclcpp serial drone_interfaces)
+	add_executable(GPS src/GPS.cpp) # change name of node
+	target_include_directories(serial PUBLIC
+	  "$<BUILD_INTERFACE:${serial_SOURCE_DIR}/include>"
+	  "$<INSTALL_INTERFACE:include/serial>")
+	target_link_libraries(GPS serial)
+	ament_target_dependencies(GPS rclcpp  drone_interfaces )
 
 	# Install Cpp executables
 	install(TARGETS

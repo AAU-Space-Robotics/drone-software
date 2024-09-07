@@ -12,8 +12,9 @@
   
   <depend>rclcpp</depend>
   <depend>rclpy</depend>
+  <depend>drone_interfaces</depend>
   
-  <exec_depend>serial</exec_depend>
+  <depend>serial</depend>
 
 
   <test_depend>ament_lint_auto</test_depend>
