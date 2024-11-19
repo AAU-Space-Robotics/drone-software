@@ -17,11 +17,13 @@
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
-#include <imfilebrowser.h>
 #include <cctype>
 #include <regex>
 #include <iostream>
 #include <algorithm> // For std::clamp
+
+// Alignment enum
+enum class Alignment { LEFT, CENTER, RIGHT };
 
 // Namespace to encapsulate GUI functionality
 namespace AppState {
@@ -44,6 +46,8 @@ namespace AppState {
         bool isTimerRunning;
     };
 
+
+
     struct windowVar {
         // Window dimensions
         static inline int display_w = 1280;
@@ -58,6 +62,15 @@ namespace AppState {
         static inline ImVec4 LightBackgroundColor = ImVec4(16.0f / 255.0f, 71.0f / 255.0f, 159.0f / 255.0f, 1.0f);
         static inline ImVec4 HighLightColor = ImVec4(0.12f, 0.56f, 1.0f, 1.0f);
 
+    };
+
+    struct dronePose {
+        float x;
+        float y;
+        float z;
+        float roll;
+        float pitch;
+        float yaw;
     };
 
     struct settingsVar {

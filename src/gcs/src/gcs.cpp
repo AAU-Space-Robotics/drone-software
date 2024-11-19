@@ -3,6 +3,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "gcslib.h"
 
+using namespace AppState;
+
 // Define the ROS2 Node class
 class GCSNode : public rclcpp::Node {
 public:
@@ -50,7 +52,7 @@ int main(int argc, char **argv) {
     // Setup GCS
     Setup();
 
-    GLFWwindow* window = glfwCreateWindow(windowVar::display_w, windowVar::display_h, ApplicationTitle.c_str(), nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(windowVar::display_w, windowVar::display_h, "GCS", nullptr, nullptr);
     if (window == nullptr)
         return 1;
     glfwMakeContextCurrent(window);
@@ -66,9 +68,6 @@ int main(int argc, char **argv) {
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
-
-    // Custom fonts
-    InitializeFonts();
 
     // Set custom colors for the title bar to always appear highlighted
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, windowVar::BackgroundColor);
@@ -89,36 +88,6 @@ int main(int argc, char **argv) {
     while (!glfwWindowShouldClose(window)) {
        
         // Ros 2 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-
-
-
-        node->publish_exerciseInfo();
-        if (exerciseVar::sendExerciseRequest){
-            std::cout << "Exercise request sent" << std::endl;
-            node->send_exercise_request();
-            exerciseVar::sendExerciseRequest = false;
-        }
-        else if ( exerciseVar::softLock){ //soft lock
-            std::cout << "stop request sent" << std::endl;
-            node->send_interrupt_request(2);
-            exerciseVar::softLock = false;
-        }
-        else if (exerciseVar::removeSoftLock){
-            std::cout << "remove soft lock request sent" << std::endl;
-            node->send_interrupt_request(3);
-            exerciseVar::removeSoftLock = false;
-        }
-        else if ( exerciseVar::pauseExercise){
-            std::cout << "pause request sent" << std::endl;
-            node->send_interrupt_request(0);
-            exerciseVar::pauseExercise = false;
-        }
-        else if ( exerciseVar::unPauseExercise){
-            std::cout << "Unpause request sent" << std::endl;
-            node->send_interrupt_request(1);
-            exerciseVar::unPauseExercise = false;
-        }
-        
         // Process ROS messages
         rclcpp::spin_some(node);
 
@@ -132,62 +101,23 @@ int main(int argc, char **argv) {
 
         // Set size of font and windows - - - - - - - - - - - - - - - - - - - - - - 
 
-        // Set the custom font
-        SetFont();
-
         //Update
         UpdateWindowSize();
 
        
         // Set the GLFW window size
-        if (windowVar::updateScreenResolution) {
-            glfwSetWindowSize(window, windowVar::display_w, windowVar::display_h);
-            windowVar::updateScreenResolution = false;
-        }
+  
+        glfwSetWindowSize(window, windowVar::display_w, windowVar::display_h);
 
 
-        // Tabs area - - - - - - - - - - - - - - - - - - - - - - - 
+        // interface area - - - - - - - - - - - - - - - - - - - - - - - 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(windowVar::tabs_w), static_cast<float>(windowVar::tabs_h)));
+        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(windowVar::display_w), static_cast<float>(windowVar::display_h)));
 
-        ImGui::Begin("Explorer", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 
-        // ImGui UI code for displaying exercises, settings and handling input
-        CreateTabsButtons("Tools", AppState::tools, AppState::exerciseVar::selectedTool, TabCategory::Tools, AppState::activeToolsFunction, AppState::windowVar::HighLightColor , ImVec4(0, 0, 0, 0), true);
-        
-        CreateTabsButtons("Settings", AppState::settings, AppState::exerciseVar::selectedSetting, TabCategory::Settings, AppState::activeSettingsFunction, AppState::windowVar::HighLightColor, ImVec4(0, 0, 0, 0),false);
+        //write code here!!!
+        //https://pthom.github.io/imgui_manual_online/manual/imgui_manual.html
 
-        ImGui::End(); // End Tabs window
-
-        // Application area - - - - - - - - - - - - - - - - - - - - - - - 
-
-        // Right Side Application Area
-        ImGui::SetNextWindowPos(ImVec2(static_cast<float>(windowVar::tabs_w), 0));
-        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(windowVar::application_w), static_cast<float>(windowVar::application_h)));
-
-        ImGui::Begin(ApplicationSpaceTitle.c_str(), nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
-
-        
-        // Call the active exercise function if selected
-        if (activeCategory == TabCategory::Tools && AppState::activeToolsFunction != nullptr) {
-            exerciseVar::selectedSetting = -1;
-            AppState::activeToolsFunction();
-
-        } else if (activeCategory == TabCategory::Settings && AppState::activeSettingsFunction != nullptr) {
-            exerciseVar::selectedTool = -1;
-            AppState::activeSettingsFunction();
-        }
-
-        ImGui::End(); // End Application Space
-
-        // Logging of data - - - - - - - - - - - - - - - - - - - - - - - 
-        if (loggingVar::loggingAllowed){
-            LogExercise(exerciseVar::jointAngles, exerciseVar::torques, exerciseVar::fullPath);
-        }
-
-        // Rendering pipeline - - - - - - - - - - - - - - - - - - - - - - - 
-
-        ImGui::PopFont();
 
         // Rendering
         ImGui::Render();

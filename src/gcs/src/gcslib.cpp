@@ -2,7 +2,8 @@
 
 #include "gcslib.h"
 
-namespace GCSState {
+
+namespace AppState {
 
     // Timer class implementation
     Timer::Timer(float countdown)
