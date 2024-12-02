@@ -1,11 +1,10 @@
 cmake_minimum_required(VERSION 3.5)
 
-# --- Fetch Serial -------------------------------------------------
+# Fetch Serial Library
 include(FetchContent)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 set(FETCHCONTENT_QUIET OFF)
 
-# Fetch serial-ros2
 FetchContent_Declare(serial
   GIT_REPOSITORY https://github.com/RoverRobotics-forks/serial-ros2.git
   GIT_TAG        master
@@ -22,48 +21,47 @@ if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 14)
 endif()
 
+# Compiler options
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
 # Find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(rclpy REQUIRED)
-find_package(interfaces REQUIRED)
 find_package(px4_msgs REQUIRED)
 
 # Include directories
 include_directories(include)
 
-# Create Cpp executable - Controller_node
-add_executable(FCI src/FCI.cpp)  # Change name of the node as needed
+# Create the C++ executable
+add_executable(fci src/fci_main.cpp src/fci_library.cpp) # Ensure the source file matches your project structure
 
-# Link libraries for FCI executable
-target_link_libraries(FCI
-  serial  # Link the serial library
-)
+# Link libraries for fci executable
+target_link_libraries(fci serial)
 
-# Add dependencies for FCI executable
-ament_target_dependencies(FCI
+# Add dependencies for fci executable
+ament_target_dependencies(fci
   rclcpp
-  interfaces
   px4_msgs
 )
 
-# Install Cpp executables
+# Ensure the `serial` library headers are available
+target_include_directories(fci PRIVATE ${serial_SOURCE_DIR}/include)
+
+# Install C++ executables
 install(TARGETS
-  FCI
+  fci
   DESTINATION lib/${PROJECT_NAME}
 )
 
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
-# Install Python executables
+# Install Python executables (adjust as needed)
 install(PROGRAMS  
-  DESTINATION lib/${PROJECT_NAME}  # Change name of the node in Python
+  #scripts/example.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 # Install launch files
@@ -72,4 +70,5 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/
 )
 
+# Mark the package as complete
 ament_package()

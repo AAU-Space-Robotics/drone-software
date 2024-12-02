@@ -1,6 +1,7 @@
 #!/bin/bash
 
-#chmod +x ~/drone/src/setup_workspace.sh
+#Guide: Stand in drone-software/src in terminal. Type following command:
+#chmod +x ~/src/fc_interface/setup_workspace.sh
 
 # Get the absolute path of the script's directory (where the script is located)
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
