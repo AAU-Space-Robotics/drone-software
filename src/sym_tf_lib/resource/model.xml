@@ -43,6 +43,21 @@
                 <q>theta1 theta2</q>
             </parameters>
         </gravity_vector>
+
+
+        <!-- Control input -->
+        <control_inputs rows="2" cols="1">
+            <name>u</name>
+            <description>Control Input</description>
+            <entries>
+                <u1>tau1</u1>
+                <u2>tau2</u2>
+            </entries>
+            <parameters>
+                <q>tau1 tau2</q>
+            </parameters>
+        </control_inputs>
+
         
     </model>
 </robot_model>

@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from sympy import symbols, Matrix, diff, sympify, cos, sin
+from sympy import symbols, Matrix, sympify
 import xml.etree.ElementTree as ET
 import re
 
@@ -13,32 +13,61 @@ class LinearizeNode(Node):
         # Load robot models from XML file
         self.models = self.load_robot_models_from_xml('/home/daroe/drone-software/src/sym_tf_lib/resource/model.xml')
 
-        #print velocity terms
-        for model in self.models:
-            print(model['velocity_terms'])
+        # With the robot models loaded, the linerazation can begin. The model is defined as tau = M(q) * q'' + V(q, q') + G(q). This will be transformed into a linear system.
+        # The linear system is defined as x' = A * x + B * u. First it needs to be put in the fomr x' = f(x, u), and then it can be linearized around working points.
+        # The linearization is done by computing the Jacobians of the system dynamics f(x, u) with respect to the state x and the input u.
+
+        #print self.models['mass_matrix']['matrix']
+        
+        self.linearize()
+
+    def get_matrix(self, models, matrix_type):
+        for model in models:
+            if model[matrix_type]:
+                MassMatrix = model[matrix_type]["matrix"]
+                return MassMatrix
+
+    def get_model_parameter(self, models, matrix_type):
+        for model in models:
+            if model[matrix_type]:
+                param = model[matrix_type]["parameters"]
+                return param
             
+    def linearize(self):
+        MassMatrix = self.get_matrix(self.models, "mass_matrix")
+        VelocityTerms = self.get_matrix(self.models, "velocity_terms")
+        GravityVector = self.get_matrix(self.models, "gravity_vector")
+        tau = self.get_matrix(self.models, "control_inputs")
+
+        print(MassMatrix)
+        print(VelocityTerms)
+        print(GravityVector)
+        print(tau)
+
+        if MassMatrix and VelocityTerms and GravityVector and tau:
+            acceleration = sympify(MassMatrix.inv() * (tau - VelocityTerms - GravityVector))
+        else:
+            self.get_logger().error("One or more matrices/parameters are missing.")
+
+
+        #Continue from here
+
+
+       
 
     def load_robot_models_from_xml(self, xml_file):
         """
         Parse the XML file and extract robot models, equations, and parameters.
-        Return matrices with specified names for the entries as sympy.Matrix objects.
-        Handles matrices and vectors of any size, ensuring all symbols in entries are recognized.
         """
-        
         def extract_symbols(expression):
             """Extract all unique symbols from a given expression string."""
-            # Reserved names that should not be converted into symbols
             reserved_names = {'cos', 'sin', 'tan', 'sqrt', 'pi', 'exp', 'log'}
-            # Use regex to find all possible variable names
             symbol_names = re.findall(r'[a-zA-Z_][a-zA-Z0-9_]*', expression)
-            # Filter out reserved names
             filtered_names = [name for name in symbol_names if name not in reserved_names]
-            # Create symbols for non-reserved names
             return symbols(set(filtered_names))
 
-
         def parse_matrix(element):
-            """Parse a matrix or vector element and return a sympy.Matrix object."""
+            """Parse a matrix or vector element and return a dictionary with matrix data and parameters."""
             # Extract entries
             entries = element.find('entries')
             if entries is None:
@@ -83,10 +112,21 @@ class LinearizeNode(Node):
                 entry_expressions[i * cols:(i + 1) * cols]
                 for i in range(rows)
             ]
-            return Matrix(reshaped_entries)
 
+            matrix_data = {
+                "matrix": Matrix(reshaped_entries),
+                "parameters": {}
+            }
 
+            # Extract parameters
+            parameters_element = element.find('parameters')
+            if parameters_element is not None:
+                for param in parameters_element:
+                    param_name = param.tag
+                    param_values = param.text.split()
+                    matrix_data["parameters"][param_name] = symbols(param_values)
 
+            return matrix_data
 
         tree = ET.parse(xml_file)
         root = tree.getroot()
@@ -116,25 +156,14 @@ class LinearizeNode(Node):
             if gravity_vector:
                 model_data['gravity_vector'] = parse_matrix(gravity_vector)
 
-            # Parse control inputs (multiple tau's)
+            # Parse control inputs
             control_inputs = model.find('control_inputs')
             if control_inputs:
-                for tau in control_inputs.findall('tau'):
-                    tau_expr = tau.find('expression').text
-                    tau_symbols = extract_symbols(tau_expr)
-                    tau_data = {
-                        'name': tau.find('name').text,
-                        'expression': sympify(tau_expr, locals={symbol.name: symbol for symbol in tau_symbols})
-                    }
-                    model_data['control_inputs'].append(tau_data)
+                model_data['control_inputs'] = parse_matrix(control_inputs)
 
             models.append(model_data)
 
         return models
-
-
-
-
 
 def main(args=None):
     rclpy.init(args=args)
@@ -142,4 +171,3 @@ def main(args=None):
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
-
