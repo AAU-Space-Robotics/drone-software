@@ -94,13 +94,6 @@ ament_target_dependencies(gcs_node
   interfaces
 )
 
-
-# Launch script
-install(DIRECTORY
-  launch
-  DESTINATION share/${PROJECT_NAME}
-)
-
 # Install the executable
 install(TARGETS gcs_node
   DESTINATION lib/${PROJECT_NAME}

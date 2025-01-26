@@ -35,7 +35,7 @@ find_package(px4_msgs REQUIRED)
 include_directories(include)
 
 # Create the C++ executable
-add_executable(fci src/fci_main.cpp src/fci_library.cpp) # Ensure the source file matches your project structure
+add_executable(fci src/fci_main.cpp src/fci_controller.cpp src/fci_utilities.cpp)
 
 # Link libraries for fci executable
 target_link_libraries(fci serial)
