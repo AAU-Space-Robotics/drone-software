@@ -24,14 +24,8 @@ endif()
 # Generate message files
 rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/DroneCommand.msg"
-"msg/DroneControlData.msg"
-"msg/DroneStatus.msg"
-"msg/DroneVideo.msg"
-"msg/ViconData.msg"
-"msg/DroneIMU.msg"
-"srv/Clock.srv"
-"msg/SensorData.msg"
-DEPENDENCIES builtin_interfaces geometry_msgs std_msgs sensor_msgs)
+"action/DroneCommand.action"
+DEPENDENCIES builtin_interfaces geometry_msgs std_msgs sensor_msgs action_msgs)
 
 
 

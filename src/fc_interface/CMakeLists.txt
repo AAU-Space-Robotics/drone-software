@@ -29,7 +29,9 @@ endif()
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(interfaces REQUIRED)
 
 # Include directories
 include_directories(include)
@@ -43,6 +45,8 @@ target_link_libraries(fci serial)
 # Add dependencies for fci executable
 ament_target_dependencies(fci
   rclcpp
+  rclcpp_action
+  interfaces
   px4_msgs
 )
 

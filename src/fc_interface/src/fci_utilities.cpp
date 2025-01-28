@@ -1,5 +1,58 @@
 #include "fci_utilities.h"
 
+// Setters & Getters
+void FCI_Utilities::setPositionNED(const PositionNED& new_data) {
+    std::lock_guard<std::mutex> lock(position_NED_mutex_);
+    position_NED_ = new_data;  // Thread-safe copy
+}
+
+PositionNED FCI_Utilities::getPositionNED() {
+    std::lock_guard<std::mutex> lock(position_NED_mutex_);
+    return position_NED_;  // Thread-safe copy
+}
+
+void FCI_Utilities::setAttitude(const Attitude& new_data) {
+    std::lock_guard<std::mutex> lock(attitude_data_mutex_);
+    attitude_ = new_data;  // Thread-safe copy
+}
+
+Attitude FCI_Utilities::getAttitude() {
+    std::lock_guard<std::mutex> lock(attitude_data_mutex_);
+    return attitude_;  // Thread-safe copy
+}
+
+void FCI_Utilities::setTargetPositionProfile(const TargetPositionProfile& new_data) {
+    std::lock_guard<std::mutex> lock(target_position_profile_mutex_);
+    target_position_profile_ = new_data;  // Thread-safe copy
+}
+
+TargetPositionProfile FCI_Utilities::getTargetPositionProfile() {
+    std::lock_guard<std::mutex> lock(target_position_profile_mutex_);
+    return target_position_profile_;  // Thread-safe copy
+}
+
+void FCI_Utilities::setDroneCmdAck(const DroneCmdAck& new_data) {
+    std::lock_guard<std::mutex> lock(drone_cmd_ack_mutex_);
+    drone_cmd_ack_ = new_data;  // Thread-safe copy
+}
+
+DroneCmdAck FCI_Utilities::getDroneCmdAck() {
+    std::lock_guard<std::mutex> lock(drone_cmd_ack_mutex_);
+    return drone_cmd_ack_;  // Thread-safe copy
+}
+
+void FCI_Utilities::setDroneState(const DroneState& new_data) {
+    std::lock_guard<std::mutex> lock(drone_state_mutex_);
+    drone_state_ = new_data;  // Thread-safe copy
+}
+
+DroneState FCI_Utilities::getDroneState() {
+    std::lock_guard<std::mutex> lock(drone_state_mutex_);
+    return drone_state_;  // Thread-safe copy
+}
+
+
+// Converter functions:
 std::vector<double> FCI_Utilities::euler_to_quaternion(double roll, double pitch, double yaw) {
     double cr = cos(roll * 0.5);
     double sr = sin(roll * 0.5);

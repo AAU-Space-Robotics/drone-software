@@ -4,8 +4,22 @@
 #include <vector>
 #include <stdexcept>
 
+// Controller gains
+struct PIDControllerGains {
+    double Kp_pitch = 0.1;
+    double Kd_pitch = 0.05;
+    double Kp_roll = 0.1;
+    double Kd_roll = 0.05;
+    double Kp_yaw = 0.1;
+    double Kd_yaw = 0.05;
+    double Kp_thrust = 5.0;
+    double Kd_thrust = 1.0;
+};
+
 class FCI_Controller {
 public:
+    PIDControllerGains PIDGains;
+
     std::vector<double> PID_control(
         double &sample_time,
         std::vector<double> &previous_position_NEDEarth_error,

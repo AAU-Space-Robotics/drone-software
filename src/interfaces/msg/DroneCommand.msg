@@ -20,3 +20,14 @@ int32 cmd_auto_yaw
 int32 cmd_auto_thrust
 uint8 cmd_auto_disarm
 
+
+
+#DroneCmd
+#float64 timestamp
+#int8 id
+#int8 mode
+#uint8 emergencystop
+#float64[2] cmd_jointangles
+#float64[2] cmd_jointspeeds
+#float64[2] cmd_torques
+
