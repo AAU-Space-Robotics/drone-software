@@ -174,11 +174,11 @@ private:
         }
        
         // Control loop
-        std::vector<double> controller_values = Controller.PID_control(dt, previous_pose_error_, NED_position, attitude, target_position);
+        std::vector<double> controller_values = Controller.PID_control(dt, previous_pose_error_, integral_pose_error_, NED_position, attitude, target_position);
 
         // set attiude setpoint
         publish_attitude_setpoint(controller_values[0], controller_values[1], 0.0, controller_values[2]);
-
+        
     }
 
     void ensureControlLoopRunning()
@@ -268,8 +268,6 @@ private:
 
         // Read state of the drone
         DroneState drone_state = Utils.getDroneState();
-
-
 
         // Validate command_type by checking if it is in the allowed_commands list
         if (std::find(allowed_commands.begin(), allowed_commands.end(), goal->command_type) == allowed_commands.end())
@@ -474,6 +472,7 @@ private:
 
     // Controller variables
     std::vector<double> previous_pose_error_ = {0.0, 0.0, 0.0};
+    std::vector<double> integral_pose_error_ = {0.0, 0.0, 0.0};
 
     // Mode variables
     int offboard_setpoint_counter_;

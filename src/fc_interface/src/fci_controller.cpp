@@ -2,8 +2,13 @@
 #include <cmath>
 #include <iostream>
 
-std::vector<double> FCI_Controller::PID_control(double &sample_time, std::vector<double> &previous_position_NEDEarth_error,
-    const std::vector<double> &position_NEDEarth, const std::vector<double> &attitude, const std::vector<double> &target_position_NEDEarth
+std::vector<double> FCI_Controller::PID_control(
+    double &sample_time, 
+    std::vector<double> &previous_position_NEDEarth_error,
+    std::vector<double> &integral_position_error_NEDEarth, // Add this vector to store integral error
+    const std::vector<double> &position_NEDEarth, 
+    const std::vector<double> &attitude, 
+    const std::vector<double> &target_position_NEDEarth
 ) {
     // Error calculations
     std::vector<double> position_error_NEDEarth(position_NEDEarth.size());
@@ -12,16 +17,28 @@ std::vector<double> FCI_Controller::PID_control(double &sample_time, std::vector
     for (size_t i = 0; i < position_NEDEarth.size(); ++i) {
         position_error_NEDEarth[i] = target_position_NEDEarth[i] - position_NEDEarth[i];
         position_error_NEDEarth_d[i] = (position_error_NEDEarth[i] - previous_position_NEDEarth_error[i]) / sample_time;
+
+        // Compute integral term
+        integral_position_error_NEDEarth[i] += position_error_NEDEarth[i] * sample_time;
     }
 
     // Transform errors to FRD frame
     std::vector<double> position_error_FRD = error_NEDEarth_to_FRD(position_error_NEDEarth, attitude);
     std::vector<double> position_error_FRD_d = error_NEDEarth_to_FRD(position_error_NEDEarth_d, attitude);
+    std::vector<double> integral_position_error_FRD = error_NEDEarth_to_FRD(integral_position_error_NEDEarth, attitude);
 
-    // Calculate control outputs
-    double roll = PIDGains.Kd_pitch * position_error_FRD[1] + PIDGains.Kd_roll * position_error_FRD_d[1];
-    double pitch = PIDGains.Kp_pitch * position_error_FRD[0] + PIDGains.Kd_pitch * position_error_FRD_d[0];
-    double thrust = PIDGains.Kp_thrust * position_error_FRD[2] + PIDGains.Kd_thrust * position_error_FRD_d[2];
+    // Calculate control outputs with P, I, and D terms
+    double roll = PIDGains.Kp_roll * position_error_FRD[1] 
+                + PIDGains.Ki_roll * integral_position_error_FRD[1] 
+                + PIDGains.Kd_roll * position_error_FRD_d[1];
+
+    double pitch = PIDGains.Kp_pitch * position_error_FRD[0] 
+                 + PIDGains.Ki_pitch * integral_position_error_FRD[0] 
+                 + PIDGains.Kd_pitch * position_error_FRD_d[0];
+
+    double thrust = PIDGains.Kp_thrust * position_error_FRD[2] 
+                  + PIDGains.Ki_thrust * integral_position_error_FRD[2] 
+                  + PIDGains.Kd_thrust * position_error_FRD_d[2];
 
     // Constrain outputs
     roll = constrain_angle(roll);
@@ -39,6 +56,7 @@ std::vector<double> FCI_Controller::PID_control(double &sample_time, std::vector
     // Return control outputs
     return {roll, -pitch, thrust};
 }
+
 
 double FCI_Controller::constrain_angle(double angle) const {
     constexpr double max_angle = M_PI / 4.0;

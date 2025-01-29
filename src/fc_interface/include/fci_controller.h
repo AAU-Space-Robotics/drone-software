@@ -7,12 +7,16 @@
 // Controller gains
 struct PIDControllerGains {
     double Kp_pitch = 0.1;
+    double Ki_pitch = 0.00;
     double Kd_pitch = 0.05;
     double Kp_roll = 0.1;
+    double Ki_roll = 0.00;
     double Kd_roll = 0.05;
     double Kp_yaw = 0.1;
+    double Ki_yaw = 0.0;
     double Kd_yaw = 0.05;
     double Kp_thrust = 5.0;
+    double Ki_thrust = 0.2;
     double Kd_thrust = 1.0;
 };
 
@@ -23,6 +27,7 @@ public:
     std::vector<double> PID_control(
         double &sample_time,
         std::vector<double> &previous_position_NEDEarth_error,
+        std::vector<double> &integral_position_error_NEDEarth,
         const std::vector<double> &position_NEDEarth,
         const std::vector<double> &attitude,
         const std::vector<double> &target_position_NEDEarth
