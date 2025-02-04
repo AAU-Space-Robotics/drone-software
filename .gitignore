@@ -10,6 +10,7 @@ drone_interfaces/build/
 drone_interfaces/install/
 drone_interfaces/log/
 .vscode/tasks.json
-.vscode/launch.json
 saved_images/**
 src/serial-ros2
+src/px4_ros_com
+src/px4_msgs

@@ -1,0 +1,14 @@
+# Goal definition
+string command_type     # "arm", "disarm", or "goto"
+float64[] target_pose   # [x, y, z], used if command_type is "goto"
+float64 yaw             # Yaw angle (only applicable for "goto")
+
+---
+# Result definition
+bool success
+string message
+
+---
+# Feedback definition
+float64[] current_pose  # [x, y, z]
+float64 current_yaw     # Current yaw angle
