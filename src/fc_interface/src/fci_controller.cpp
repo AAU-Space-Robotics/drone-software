@@ -59,7 +59,7 @@ std::vector<double> FCI_Controller::PID_control(
 
 
 double FCI_Controller::constrain_angle(double angle) const {
-    constexpr double max_angle = M_PI / 4.0;
+    constexpr double max_angle = M_PI / 18.0;
     if (angle > max_angle) {
         angle = max_angle;
     } else if (angle < -max_angle) {

@@ -17,7 +17,10 @@
 
 // cd PX4-Autopilot/ && make px4_sitl gz_x500
 // MicroXRCEAgent udp4 -p 8888
+// cd drone-software && source install/setup.bash && ros2 run fc_interface fci
+// Open qGround
 
+// cd drone-software && source install/setup.bash
 //ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'arm', target_pose: [], yaw: 0.0}"
 
 using namespace std::chrono_literals;
