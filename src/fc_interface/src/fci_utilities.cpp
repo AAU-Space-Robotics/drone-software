@@ -51,6 +51,51 @@ DroneState FCI_Utilities::getDroneState() {
     return drone_state_;  // Thread-safe copy
 }
 
+void FCI_Utilities::setManualControlInput(const ManualControlInput& new_data) {
+    std::lock_guard<std::mutex> lock(manual_control_input_mutex_);
+    manual_control_input_ = new_data;  // Thread-safe copy
+}
+
+ManualControlInput FCI_Utilities::getManualControlInput() {
+    std::lock_guard<std::mutex> lock(manual_control_input_mutex_);
+    return manual_control_input_;  // Thread-safe copy
+}
+
+void FCI_Utilities::setGPSOrigin(rclcpp::Time timestamp, double lat, double lon, double alt) {
+    std::lock_guard<std::mutex> lock(gps_data_mutex_);
+    gps_origin_data_ = {timestamp, lat, lon, alt};
+    gps_origin_set_ = true;
+    geographic_converter_.Reset(lat, lon, alt); // Reset GeographicLib LocalCartesian
+}
+
+bool FCI_Utilities::isGPSOriginSet() {
+    std::lock_guard<std::mutex> lock(gps_data_mutex_);
+    return gps_origin_set_;
+}
+
+GPSData FCI_Utilities::getGPSOrigin() {
+    std::lock_guard<std::mutex> lock(gps_data_mutex_);
+    return gps_origin_data_;
+}
+
+PositionNED FCI_Utilities::convertGPSToNED(rclcpp::Time timestamp, double lat, double lon, double alt) {
+    std::lock_guard<std::mutex> lock(gps_data_mutex_);
+    if (!gps_origin_set_) {
+        throw std::runtime_error("GPS origin not set!");
+    }
+
+    double x_enu, y_enu, z_enu;
+    geographic_converter_.Forward(lat, lon, alt, x_enu, y_enu, z_enu);
+
+    // Convert ENU → NED
+    double x_ned = y_enu;
+    double y_ned = x_enu;
+    double z_ned = -z_enu;
+
+    PositionNED ned_data = {timestamp, x_ned, y_ned, z_ned};
+
+    return ned_data;
+}
 
 // Converter functions:
 std::vector<double> FCI_Utilities::euler_to_quaternion(double roll, double pitch, double yaw) {

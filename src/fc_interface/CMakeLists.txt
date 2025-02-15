@@ -13,6 +13,15 @@ FetchContent_Declare(serial
 )
 FetchContent_MakeAvailable(serial)
 
+FetchContent_Declare(GeographicLib
+  GIT_REPOSITORY https://github.com/geographiclib/geographiclib.git
+  GIT_TAG        main
+  GIT_PROGRESS   TRUE
+  GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(GeographicLib)
+
+
 # ------------------------------------------------------------------------------
 project(fc_interface)
 
@@ -40,7 +49,7 @@ include_directories(include)
 add_executable(fci src/fci_main.cpp src/fci_controller.cpp src/fci_utilities.cpp)
 
 # Link libraries for fci executable
-target_link_libraries(fci serial)
+target_link_libraries(fci serial GeographicLib)
 
 # Add dependencies for fci executable
 ament_target_dependencies(fci
@@ -51,7 +60,7 @@ ament_target_dependencies(fci
 )
 
 # Ensure the `serial` library headers are available
-target_include_directories(fci PRIVATE ${serial_SOURCE_DIR}/include)
+target_include_directories(fci PRIVATE ${serial_SOURCE_DIR}/include ${GeographicLib_SOURCE_DIR}/include)
 
 # Install C++ executables
 install(TARGETS

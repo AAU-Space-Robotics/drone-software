@@ -23,6 +23,7 @@ endif()
 
 # Generate message files
 rosidl_generate_interfaces(${PROJECT_NAME}
+"msg/ManualControlInput.msg"
 "msg/DroneCommand.msg"
 "action/DroneCommand.action"
 DEPENDENCIES builtin_interfaces geometry_msgs std_msgs sensor_msgs action_msgs)

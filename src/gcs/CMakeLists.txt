@@ -80,6 +80,12 @@ add_executable(gcs_node
   ${implot_SOURCE_DIR}/implot_items.cpp     # Add ImPlot items source
 )
 
+# Manual controller node executable
+install(PROGRAMS
+  script/manual_controller.py
+  DESTINATION lib/${PROJECT_NAME}/scripts
+)
+
 # Link the necessary libraries
 target_link_libraries(gcs_node
   OpenGL::GL      # Link OpenGL

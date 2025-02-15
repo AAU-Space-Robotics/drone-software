@@ -8,6 +8,34 @@
 #include <mutex>
 #include <stdexcept>
 #include <rclcpp/rclcpp.hpp>
+#include <GeographicLib/LocalCartesian.hpp>
+
+
+enum class Command {
+    DISARM = 0,
+    ARM = 1,
+    TAKEOFF = 2,
+    GOTO = 3,
+    LAND = 4,
+    ESTOP = 5,
+    MANUAL = 6,
+    MANUAL_AIDED = 7
+};
+
+enum class ArmingState {
+    DISARMED = 0,
+    ARMED = 1,
+    ARMING = 2,
+    DISARMING = 3
+};
+
+enum class FlightMode {
+    STANDBY = -1,
+    MANUAL = 0,
+    MANUAL_AIDED = 1,
+    POSITION = 2
+};
+
 
 // PositionNED structure
 struct PositionNED {
@@ -18,6 +46,16 @@ struct PositionNED {
     float y = 0.0;
     float z = 0.0;
     
+};
+
+// GPSData structure
+struct GPSData {
+    rclcpp::Time timestamp = rclcpp::Time(0, 0);
+    
+    //GPS data
+    double latitude = 0.0;
+    double longitude = 0.0;
+    double altitude = 0.0;
 };
 
 // Attitude structure
@@ -54,13 +92,25 @@ struct DroneCmdAck {
     uint8_t result = 0;
 };
 
+// ManualControlInput structure
+struct ManualControlInput {
+    rclcpp::Time timestamp = rclcpp::Time(0, 0);
+    
+    //Manual control data
+    float roll = 0.0;
+    float pitch = 0.0;
+    float yaw = 0.0;
+    float thrust = 0.0;
+};
+
 // Drone state
 struct DroneState {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
     
     //Drone state data
-    uint8_t armed = 1;
-    uint8_t control_loop_running = 0;
+    Command command = Command::DISARM;
+    ArmingState arming_state = ArmingState::DISARMED;
+    FlightMode flight_mode = FlightMode::STANDBY;
 };
 
 // FCI_Utilities class definition
@@ -82,6 +132,15 @@ public:
     void setDroneState(const DroneState& new_data);
     DroneState getDroneState();
 
+    void setManualControlInput(const ManualControlInput& new_data);
+    ManualControlInput getManualControlInput();
+
+    // GPS data functions
+    void setGPSOrigin(rclcpp::Time timestamp, double lat, double lon, double alt);
+    GPSData getGPSOrigin();
+    PositionNED convertGPSToNED(rclcpp::Time timestamp, double lat, double lon, double alt);
+    bool isGPSOriginSet();
+
     // Utility functions
     static std::vector<double> euler_to_quaternion(double roll, double pitch, double yaw);
     static std::vector<double> quaternion_to_euler(double q0, double q1, double q2, double q3);
@@ -94,6 +153,12 @@ private:
     // position_NED_ instance and mutex for thread safety
     PositionNED position_NED_;
     std::mutex position_NED_mutex_;
+    GPSData gps_origin_data_;
+    bool gps_origin_set_ = false;
+    std::mutex gps_data_mutex_;
+    GeographicLib::LocalCartesian geographic_converter_;
+
+
     Attitude attitude_;
     std::mutex attitude_data_mutex_;
     TargetPositionProfile target_position_profile_;
@@ -102,6 +167,8 @@ private:
     std::mutex drone_cmd_ack_mutex_;
     DroneState drone_state_;
     std::mutex drone_state_mutex_;
+    ManualControlInput manual_control_input_;
+    std::mutex manual_control_input_mutex_;
 
 };
 
