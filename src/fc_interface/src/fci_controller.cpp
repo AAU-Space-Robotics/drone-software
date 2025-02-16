@@ -54,7 +54,7 @@ std::vector<double> FCI_Controller::PID_control(
     previous_position_NEDEarth_error = position_error_NEDEarth;
 
     // Return control outputs
-    return {roll, -pitch, thrust};
+    return {roll, -pitch, 0.0, thrust};
 }
 
 
@@ -66,6 +66,11 @@ double FCI_Controller::constrain_angle(double angle) const {
         angle = -max_angle;
     }
     return angle;
+}
+
+double FCI_Controller::map_norm_to_angle(double norm) const {
+    constexpr double max_angle = M_PI / 18.0;
+    return norm * max_angle;
 }
 
 double FCI_Controller::constrain_thrust(double thrust) const {

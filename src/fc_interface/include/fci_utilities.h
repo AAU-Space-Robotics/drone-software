@@ -7,8 +7,11 @@
 #include <vector>
 #include <mutex>
 #include <stdexcept>
+#include <unordered_map>
+#include <algorithm>
 #include <rclcpp/rclcpp.hpp>
 #include <GeographicLib/LocalCartesian.hpp>
+
 
 
 enum class Command {
@@ -42,9 +45,9 @@ struct PositionNED {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
     
     //Position data in NED frame 
-    float x = 0.0;
-    float y = 0.0;
-    float z = 0.0;
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
     
 };
 
@@ -74,13 +77,19 @@ struct TargetPositionProfile {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
     
     //Position data in NED frame 
-    float x = 0.0;
-    float y = 0.0;
-    float z = -1.5;
+    double x = 0.0;
+    double y = 0.0;
+    double z = -1.5;
     
     //Yaw data in radians
-    float yaw = 0.0;
+    double yaw = 0.0;
+};
 
+struct ControlInput {
+    double roll = 0.0;
+    double pitch = 0.0;
+    double yaw = 0.0;
+    double thrust = 0.0;
 };
 
 // DroneCmdAck structure

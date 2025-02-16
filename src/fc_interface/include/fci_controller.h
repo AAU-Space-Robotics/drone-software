@@ -33,9 +33,12 @@ public:
         const std::vector<double> &target_position_NEDEarth
     );
 
+    double map_norm_to_angle(double norm) const;
+
 private:
     double constrain_angle(double angle) const;
     double constrain_thrust(double thrust) const;
+    
     std::vector<double> error_NEDEarth_to_FRD(const std::vector<double> &error_NEDEarth, const std::vector<double> &attitude_FRD_to_NED) const;
 };
 

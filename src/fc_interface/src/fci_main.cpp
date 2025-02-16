@@ -19,10 +19,10 @@
 // cd PX4-Autopilot/ && make px4_sitl gz_x500
 // MicroXRCEAgent udp4 -p 8888
 // cd drone-software && source install/setup.bash && ros2 run fc_interface fci
-// Open qGround
+// Open qGroundControl
 
 // cd drone-software && source install/setup.bash
-// 
+    // ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'arm', target_pose: [0,0,-30], yaw: 0.0}"
 
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
@@ -83,37 +83,27 @@ private:
     void GPSCallback(const VehicleGlobalPosition::SharedPtr msg)
     {
         // Check if origin is set
-        if (!Utils.isGPSOriginSet())
-        {
-            // Set the GPS origin
-            Utils.setGPSOrigin(this->now(),msg->lat, msg->lon, msg->alt);
-        }
+        if (!Utils.isGPSOriginSet()) Utils.setGPSOrigin(this->now(), msg->lat, msg->lon, msg->alt);
 
-        // Get NED position
-        PositionNED ned_data = Utils.convertGPSToNED(this->now(),msg->lat, msg->lon, msg->alt);
-
-        // Update global data with the latest NED position
-        Utils.setPositionNED(ned_data);
+        //Convert GPS to NED, then update global data with the latest NED position
+        Utils.setPositionNED(Utils.convertGPSToNED(this->now(),msg->lat, msg->lon, msg->alt));
 
     }
 
-    void PositionNEDCallback(const VehicleLocalPosition::SharedPtr msg)
+    /* void PositionNEDCallback(const VehicleLocalPosition::SharedPtr msg)
     {
         // Make a thread-safe copy of the data
-        PositionNED position_data = {this->now(), msg->x, msg->y, msg->z};
+        //PositionNED position_data = {this->now(), msg->x, msg->y, msg->z};
 
         // Update global data with the latest local position
         //Utils.setPositionNED(position_data); It should not be used
         //RCLCPP_INFO(this->get_logger(), "Received local position data: x=%.2f, y=%.2f, z=%.2f", msg->x, msg->y, msg->z);
-    }
+    } */
 
     void AttitudeCallback(const VehicleAttitude::SharedPtr msg)
     {
-        // Make a thread-safe copy of the data
-        Attitude attitude_data = {this->now(), msg->q[0], msg->q[1], msg->q[2], msg->q[3]};
-
         // Update global data with the latest attitude
-        Utils.setAttitude(attitude_data);
+        Utils.setAttitude({this->now(), msg->q[0], msg->q[1], msg->q[2], msg->q[3]});
     }
 
     void VehicleStatusCallback(const VehicleStatus::SharedPtr msg)
@@ -134,7 +124,8 @@ private:
         //Read the manual control input
         ManualControlInput manual_control_input = Utils.getManualControlInput();
 
-        manual_control_input = {this->now(), msg->roll, msg->pitch, manual_control_input.yaw + msg->yaw_velocity, msg->thrust};
+        // Update the received data
+        manual_control_input = {this->now(), Controller.map_norm_to_angle(msg->roll), Controller.map_norm_to_angle(msg->pitch), manual_control_input.yaw + Controller.map_norm_to_angle(msg->yaw_velocity), msg->thrust};
 
         // Update global data with the latest manual control input
         Utils.setManualControlInput(manual_control_input);
@@ -171,9 +162,20 @@ private:
         offboard_control_mode_publisher_->publish(msg);
     }
 
-    void controlLoop(){   
-        // Implement some functions to determine the target position
+    ControlInput manualMode()
+    {
+        // Check for connection to the manual control input
 
+        // read the manual control input
+        ManualControlInput manual_control_input = Utils.getManualControlInput();
+        
+        // Set the manual control input as the control input
+        return {manual_control_input.roll, manual_control_input.pitch, manual_control_input.yaw, manual_control_input.thrust};
+    }
+
+    ControlInput controlMode()
+    {
+        // Target position
         TargetPositionProfile target_position_profile = Utils.getTargetPositionProfile();
         std::vector<double> target_position = {target_position_profile.x, target_position_profile.y, target_position_profile.z};
 
@@ -196,38 +198,83 @@ private:
             RCLCPP_WARN(this->get_logger(), "No data received in the last %.2f seconds!", timeout_threshold_);
             //received_local_position_data_ = false; // Reset flag to avoid repeated warnings
 
-            return;
+            return {0.0, 0.0, 0.0, 0.0}; //! Handle at some point...
         }
        
         // Control loop
-        std::vector<double> controller_values = Controller.PID_control(dt, previous_pose_error_, integral_pose_error_, NED_position, attitude, target_position);
+        std::vector<double> controller_output = Controller.PID_control(dt, previous_pose_error_, integral_pose_error_, NED_position, attitude, target_position);
 
         // set attiude setpoint
-        publish_attitude_setpoint(controller_values[0], controller_values[1], 0.0, controller_values[2]);
+        return {controller_output[0], controller_output[1], controller_output[2], controller_output[3]};
         
     }
 
-    void manualControlLoop()
+    ControlInput manualAidedMode()
     {
-        // Check for connection to the manual control input
-
-        // read the manual control input
+        // Get user input
         ManualControlInput manual_control_input = Utils.getManualControlInput();
 
-        //print the manual control input
-        RCLCPP_INFO(this->get_logger(), "Manual control input: roll: %.2f, pitch: %.2f, yaw: %.2f, thrust: %.2f", manual_control_input.roll, manual_control_input.pitch, manual_control_input.yaw, manual_control_input.thrust);
-
-        // Publish the manual control input
-        publish_attitude_setpoint(manual_control_input.roll, manual_control_input.pitch, manual_control_input.yaw, manual_control_input.thrust);
+        // Target position
+        TargetPositionProfile target_position_profile = Utils.getTargetPositionProfile();
+        target_position_profile.z += manual_control_input.thrust/10.0;
+        Utils.setTargetPositionProfile(target_position_profile);
+        std::vector<double> target_position = {target_position_profile.x, target_position_profile.y, target_position_profile.z};
         
+        // Get the current position and attitude data
+        PositionNED position_data = Utils.getPositionNED();
+        std::vector<double> NED_position = {position_data.x, position_data.y, position_data.z};
+
+        Attitude attitude_data = Utils.getAttitude();
+        std::vector<double> attitude = {attitude_data.qw, attitude_data.qx, attitude_data.qy, attitude_data.qz};
+
+        // Callculate the time since the last GPS message
+        auto now = this->now();
+        double dt = (now -  position_data.timestamp).seconds();
+
+        // Check for timeout --Remove position_data.received_local_position_data_
+        if ( dt > timeout_threshold_)
+        {
+            //Implement logic to handle missing data
+
+            RCLCPP_WARN(this->get_logger(), "No data received in the last %.2f seconds!", timeout_threshold_);
+            //received_local_position_data_ = false; // Reset flag to avoid repeated warnings
+
+            return {0.0, 0.0, 0.0, 0.0}; //! Handle at some point...
+        }
+       
+        // Control loop
+        std::vector<double> controller_output = Controller.PID_control(dt, previous_pose_error_, integral_pose_error_, NED_position, attitude, target_position);
+
+        return {manual_control_input.roll, manual_control_input.pitch, manual_control_input.yaw, controller_output[3]};
     }
 
-    void manualAidedControlLoop()
-    {
-        // Implement manual aided control logic
+    void controlLoop(int mode){
+        
+        ControlInput control_input;
+
+        switch (mode) {
+            case 0:
+                // Manual mode
+                control_input = manualMode();
+                break;
+            case 1:
+                // Manual aided mode
+                control_input = manualAidedMode();
+                break;
+            case 2:
+                // Control mode
+                control_input = controlMode();
+                break;
+            default:
+                RCLCPP_WARN(this->get_logger(), "Unknown control mode: %d", mode);
+                break;
+        }
+
+        publish_attitude_setpoint(control_input.roll, control_input.pitch, control_input.yaw, control_input.thrust);
     }
 
-    void cleanUpControlLoops()
+
+    void cleanUpControlLoop()
     {
        // Try to stop all control loops
         if (control_timer_) {
@@ -239,50 +286,24 @@ private:
             }
         }
 
-        if (manual_control_timer_) {
-            try {
-                manual_control_timer_->cancel();
-                RCLCPP_INFO(this->get_logger(), "Manual control loop successfully stopped.");
-            } catch (const rclcpp::exceptions::RCLError &e) {
-                RCLCPP_ERROR(this->get_logger(), "Error while stopping manual control loop: %s", e.what());
-            }
-        }
     }
 
     // Helper functions 
-    void ensureControlLoopRunning()
+    void ensureControlLoopRunning(int mode)
     {
-       //Check if the control loop is running
+        // Get the current state of the drone
         DroneState drone_state = Utils.getDroneState();
-        if (drone_state.flight_mode != FlightMode::POSITION)
+
+       //Check if the control loop is running
+        if (!control_timer_ && drone_state.arming_state == ArmingState::ARMED)
         {
             // Start the control loop
-            control_timer_ = this->create_wall_timer(10ms, std::bind(&FlightControllerInterface::controlLoop, this));
-            drone_state.flight_mode = FlightMode::POSITION;
-            Utils.setDroneState(drone_state);
+            control_timer_ = this->create_wall_timer(10ms, [this, mode]() { this->controlLoop(mode); });
         }
         else {
             RCLCPP_WARN(this->get_logger(), "Control loop is already running or the drone is not armed.");
         }
     }
-
-    void ensureManualControlLoopRunning()
-    {
-        //Check if the manual control loop is running
-        DroneState drone_state = Utils.getDroneState();
-        if (drone_state.flight_mode != FlightMode::MANUAL)
-        {
-            // Start the manual control loop
-            manual_control_timer_ = this->create_wall_timer(20ms, std::bind(&FlightControllerInterface::manualControlLoop, this));
-            drone_state.flight_mode = FlightMode::MANUAL;
-            Utils.setDroneState(drone_state);
-        }
-        else {
-            RCLCPP_WARN(this->get_logger(), "Manual control loop is already running or the drone is not armed.");
-        }
-    }
-    
-
 
     // Commander functions
     void arm()
@@ -338,7 +359,7 @@ private:
 
     // Action server functions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
     rclcpp_action::GoalResponse handle_drone_cmd(
-        const rclcpp_action::GoalUUID &uuid,
+        [[maybe_unused]] const rclcpp_action::GoalUUID &uuid,
         std::shared_ptr<const DroneCommand::Goal> goal)
     {
         RCLCPP_INFO(this->get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
@@ -404,9 +425,6 @@ private:
         // If "manual"
         if (goal->command_type == "manual")
         {
-            // print arming state
-            RCLCPP_INFO(this->get_logger(), "Arming state: %d", drone_state.arming_state);
-
             if (drone_state.flight_mode == FlightMode::MANUAL)
             {
                 RCLCPP_WARN(this->get_logger(), "Rejected goal: drone is already in manual mode.");
@@ -425,7 +443,7 @@ private:
     }
 
     rclcpp_action::CancelResponse handle_cancel(
-        const std::shared_ptr<GoalHandleDroneCommand> goal_handle)
+        [[maybe_unused]] const std::shared_ptr<GoalHandleDroneCommand> goal_handle)
     {
         RCLCPP_INFO(this->get_logger(), "Received request to cancel goal");
         return rclcpp_action::CancelResponse::ACCEPT;
@@ -456,7 +474,7 @@ private:
                 disarm(1);
 
                 // Ensure the control loop is stopped
-                cleanUpControlLoops();
+                cleanUpControlLoop();
 
                 result->success = true;
                 result->message = "Drone disarmed successfully.";
@@ -476,7 +494,7 @@ private:
                 disarm();
 
                 // Ensure the control loop is stopped
-                cleanUpControlLoops();
+                cleanUpControlLoop();
 
                 result->success = true;
                 result->message = "Drone disarmed successfully.";
@@ -484,7 +502,7 @@ private:
             else if (goal->command_type == "takeoff")
             {
                 // Ensure the control loop is running
-                ensureControlLoopRunning();
+                ensureControlLoopRunning(2);
 
                 // Read the target pose and yaw
                 float z = goal->target_pose[0];
@@ -503,7 +521,7 @@ private:
             else if (goal->command_type == "goto")
             {
                 // Ensure the control loop is running
-                ensureControlLoopRunning();
+                ensureControlLoopRunning(2);
 
                 // Read the target pose and yaw
                 std::vector<double> target_pose = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
@@ -519,10 +537,10 @@ private:
             else if (goal->command_type == "manual")
             {
                 // Ensure the control loop is stopped
-                cleanUpControlLoops();
+                cleanUpControlLoop();
 
                 // Listen to topic for manual control
-                ensureManualControlLoopRunning();
+                ensureControlLoopRunning(0);
 
                 result->success = true;
                 result->message = "Drone is in manual mode.";
@@ -530,7 +548,7 @@ private:
             else if (goal->command_type == "manual_aided")
             {
                 // Ensure the control loop is running
-                ensureControlLoopRunning();
+                ensureControlLoopRunning(1);
 
                 result->success = true;
                 result->message = "Drone is in manual mode with assistance.";
@@ -574,7 +592,6 @@ private:
     rclcpp::Subscription<interfaces::msg::ManualControlInput>::SharedPtr drone_manual_input_subscriber_;
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;
-    rclcpp::TimerBase::SharedPtr manual_control_timer_;
     rclcpp_action::Server<interfaces::action::DroneCommand>::SharedPtr drone_command_action_server_;
 
 
