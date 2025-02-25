@@ -1,3 +1,6 @@
+#include <rclcpp/rclcpp.hpp>
+#include "rclcpp_action/rclcpp_action.hpp"
+
 #include <px4_msgs/msg/offboard_control_mode.hpp>
 #include <px4_msgs/msg/trajectory_setpoint.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
@@ -8,13 +11,17 @@
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_command_ack.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
-#include <interfaces/action/drone_command.hpp>
-#include <interfaces/msg/manual_control_input.hpp>
-#include <rclcpp/rclcpp.hpp>
-#include "rclcpp_action/rclcpp_action.hpp"
 
 #include "fci_controller.h"
-#include "fci_utilities.h"
+#include "fci_state_manager.h"
+#include "fci_transformations.h"
+
+#include <interfaces/action/drone_command.hpp>
+#include <interfaces/msg/manual_control_input.hpp>
+
+
+//https://docs.px4.io/main/en/gps_compass/rtk_gps.html#tuning
+
 
 // cd PX4-Autopilot/ && make px4_sitl gz_x500
 // MicroXRCEAgent udp4 -p 8888
@@ -83,10 +90,10 @@ private:
     void GPSCallback(const VehicleGlobalPosition::SharedPtr msg)
     {
         // Check if origin is set
-        if (!Utils.isGPSOriginSet()) Utils.setGPSOrigin(this->now(), msg->lat, msg->lon, msg->alt);
+        if (!Transform.isGPSOriginSet()) Transform.setGPSOrigin(this->now(), msg->lat, msg->lon, msg->alt);
 
         //Convert GPS to NED, then update global data with the latest NED position
-        Utils.setPositionNED(Utils.convertGPSToNED(this->now(),msg->lat, msg->lon, msg->alt));
+        StateManager.setPositionNED(Transform.convertGPSToNED(this->now(),msg->lat, msg->lon, msg->alt));
 
     }
 
@@ -96,39 +103,39 @@ private:
         //PositionNED position_data = {this->now(), msg->x, msg->y, msg->z};
 
         // Update global data with the latest local position
-        //Utils.setPositionNED(position_data); It should not be used
+        //StateManager.setPositionNED(position_data); It should not be used
         //RCLCPP_INFO(this->get_logger(), "Received local position data: x=%.2f, y=%.2f, z=%.2f", msg->x, msg->y, msg->z);
     } */
 
     void AttitudeCallback(const VehicleAttitude::SharedPtr msg)
     {
         // Update global data with the latest attitude
-        Utils.setAttitude({this->now(), msg->q[0], msg->q[1], msg->q[2], msg->q[3]});
+        StateManager.setAttitude({this->now(), msg->q[0], msg->q[1], msg->q[2], msg->q[3]});
     }
 
     void VehicleStatusCallback(const VehicleStatus::SharedPtr msg)
     {
         // Get a copy of the current drone state
-        DroneState drone_state = Utils.getDroneState();
+        DroneState drone_state = StateManager.getDroneState();
 
         // Rewrite the received data
         drone_state.timestamp = this->now();
         drone_state.arming_state = (msg->arming_state == 2) ? ArmingState::ARMED : ArmingState::DISARMED;
 
         // Update global data with the latest drone state
-        Utils.setDroneState(drone_state);
+        StateManager.setDroneState(drone_state);
     }
 
     void ManualControlInputCallback(const interfaces::msg::ManualControlInput::SharedPtr msg)
     {
         //Read the manual control input
-        ManualControlInput manual_control_input = Utils.getManualControlInput();
+        ManualControlInput manual_control_input = StateManager.getManualControlInput();
 
         // Update the received data
-        manual_control_input = {this->now(), Controller.map_norm_to_angle(msg->roll), Controller.map_norm_to_angle(msg->pitch), manual_control_input.yaw + Controller.map_norm_to_angle(msg->yaw_velocity), msg->thrust};
+        manual_control_input = {this->now(), static_cast<float>(Controller.map_norm_to_angle(msg->roll)), static_cast<float>(Controller.map_norm_to_angle(msg->pitch)), manual_control_input.yaw + static_cast<float>(Controller.map_norm_to_angle(msg->yaw_velocity)), msg->thrust};
 
         // Update global data with the latest manual control input
-        Utils.setManualControlInput(manual_control_input);
+        StateManager.setManualControlInput(manual_control_input);
 
     }
 
@@ -167,7 +174,7 @@ private:
         // Check for connection to the manual control input
 
         // read the manual control input
-        ManualControlInput manual_control_input = Utils.getManualControlInput();
+        ManualControlInput manual_control_input = StateManager.getManualControlInput();
         
         // Set the manual control input as the control input
         return {manual_control_input.roll, manual_control_input.pitch, manual_control_input.yaw, manual_control_input.thrust};
@@ -176,14 +183,14 @@ private:
     ControlInput controlMode()
     {
         // Target position
-        TargetPositionProfile target_position_profile = Utils.getTargetPositionProfile();
+        TargetPositionProfile target_position_profile = StateManager.getTargetPositionProfile();
         std::vector<double> target_position = {target_position_profile.x, target_position_profile.y, target_position_profile.z};
 
         // Get the current position and attitude data
-        PositionNED position_data = Utils.getPositionNED();
+        PositionNED position_data = StateManager.getPositionNED();
         std::vector<double> NED_position = {position_data.x, position_data.y, position_data.z};
 
-        Attitude attitude_data = Utils.getAttitude();
+        Attitude attitude_data = StateManager.getAttitude();
         std::vector<double> attitude = {attitude_data.qw, attitude_data.qx, attitude_data.qy, attitude_data.qz};
 
         // Callculate the time since the last GPS message
@@ -212,19 +219,19 @@ private:
     ControlInput manualAidedMode()
     {
         // Get user input
-        ManualControlInput manual_control_input = Utils.getManualControlInput();
+        ManualControlInput manual_control_input = StateManager.getManualControlInput();
 
         // Target position
-        TargetPositionProfile target_position_profile = Utils.getTargetPositionProfile();
+        TargetPositionProfile target_position_profile = StateManager.getTargetPositionProfile();
         target_position_profile.z += manual_control_input.thrust/10.0;
-        Utils.setTargetPositionProfile(target_position_profile);
+        StateManager.setTargetPositionProfile(target_position_profile);
         std::vector<double> target_position = {target_position_profile.x, target_position_profile.y, target_position_profile.z};
         
         // Get the current position and attitude data
-        PositionNED position_data = Utils.getPositionNED();
+        PositionNED position_data = StateManager.getPositionNED();
         std::vector<double> NED_position = {position_data.x, position_data.y, position_data.z};
 
-        Attitude attitude_data = Utils.getAttitude();
+        Attitude attitude_data = StateManager.getAttitude();
         std::vector<double> attitude = {attitude_data.qw, attitude_data.qx, attitude_data.qy, attitude_data.qz};
 
         // Callculate the time since the last GPS message
@@ -292,7 +299,7 @@ private:
     void ensureControlLoopRunning(int mode)
     {
         // Get the current state of the drone
-        DroneState drone_state = Utils.getDroneState();
+        DroneState drone_state = StateManager.getDroneState();
 
        //Check if the control loop is running
         if (!control_timer_ && drone_state.arming_state == ArmingState::ARMED)
@@ -328,7 +335,7 @@ private:
         //Source: https://docs.px4.io/main/en/msg_docs/VehicleAttitudeSetpoint.html
 
         // Convert the Euler angles to quaternions
-        std::vector<double> q = Utils.euler_to_quaternion(roll, pitch, yaw);
+        std::vector<double> q = Transform.euler_to_quaternion(roll, pitch, yaw);
 
         VehicleAttitudeSetpoint msg{};
         msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
@@ -365,7 +372,7 @@ private:
         RCLCPP_INFO(this->get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
 
         // Read state of the drone
-        DroneState drone_state = Utils.getDroneState();
+        DroneState drone_state = StateManager.getDroneState();
 
         // Validate command_type by checking if it is in the allowed_commands list
         if (std::find(allowed_commands.begin(), allowed_commands.end(), goal->command_type) == allowed_commands.end())
@@ -464,7 +471,7 @@ private:
         auto result = std::make_shared<DroneCommand::Result>();
 
         // Get state of the drone
-        DroneState drone_state = Utils.getDroneState();
+        DroneState drone_state = StateManager.getDroneState();
 
         try
         {
@@ -513,7 +520,7 @@ private:
 
                 // Set the target position profile in the global data space
                 TargetPositionProfile target_position_profile = {this->now(), target_pose[0], target_pose[1], target_pose[2], target_yaw};
-                Utils.setTargetPositionProfile(target_position_profile);
+                StateManager.setTargetPositionProfile(target_position_profile);
 
                 result->success = true;
                 result->message = "Drone is taking off.";
@@ -529,7 +536,7 @@ private:
 
                 // Set the target position profile in the global data space
                 TargetPositionProfile target_position_profile = {this->now(), target_pose[0], target_pose[1], target_pose[2], target_yaw};
-                Utils.setTargetPositionProfile(target_position_profile);
+                StateManager.setTargetPositionProfile(target_position_profile);
                
                 result->success = true;
                 result->message = "Drone is moving to the target position.";
@@ -597,7 +604,8 @@ private:
 
     //Class Init
     FCI_Controller Controller;
-    FCI_Utilities Utils;
+    FCI_StateManager StateManager;
+    FCI_Transformations Transform;
 
     // Mutex and variables for attitude data
     std::mutex attitude_data_mutex_;

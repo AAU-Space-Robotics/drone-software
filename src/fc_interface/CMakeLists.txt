@@ -46,7 +46,7 @@ find_package(interfaces REQUIRED)
 include_directories(include)
 
 # Create the C++ executable
-add_executable(fci src/fci_main.cpp src/fci_controller.cpp src/fci_utilities.cpp)
+add_executable(fci src/fci_main.cpp src/fci_controller.cpp src/fci_state_manager.cpp src/fci_transformations.cpp src/fci_path_planner.cpp)
 
 # Link libraries for fci executable
 target_link_libraries(fci serial GeographicLib)
