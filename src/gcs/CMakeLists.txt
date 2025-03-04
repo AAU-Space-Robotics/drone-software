@@ -83,6 +83,7 @@ add_executable(gcs_node
 # Manual controller node executable
 install(PROGRAMS
   script/manual_controller.py
+  script/manual_arrow_controller.py
   DESTINATION lib/${PROJECT_NAME}/scripts
 )
 

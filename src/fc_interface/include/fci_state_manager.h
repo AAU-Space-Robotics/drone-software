@@ -48,6 +48,15 @@ struct PositionNED {
     
 };
 
+struct AccelerationNED {
+    rclcpp::Time timestamp = rclcpp::Time(0, 0);
+    
+    //Acceleration data in NED frame 
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+};
+
 // GPSData structure
 struct GPSData {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
@@ -119,12 +128,35 @@ struct DroneState {
     FlightMode flight_mode = FlightMode::STANDBY;
 };
 
+// Controller errors
+struct PIDError {
+    double error;
+    double error_d;
+    double error_integral;
+};
+
+struct AccelerationError {
+    PIDError X;
+    PIDError Y;
+    PIDError Z;
+};
+
+struct PositionError {
+    PIDError X;
+    PIDError Y;
+    PIDError Z;
+    PIDError Yaw;
+};
+
 // FCI_StateManager class definition
 class FCI_StateManager {
 public:
     // Thread-safe setters and getters for NED_Data
     void setPositionNED(const PositionNED& new_data);
     PositionNED getPositionNED();
+
+    void setAccelerationNED(const AccelerationNED& new_data);
+    AccelerationNED getAccelerationNED();
 
     void setAttitude(const Attitude& new_data);
     Attitude getAttitude();
@@ -141,23 +173,35 @@ public:
     void setManualControlInput(const ManualControlInput& new_data);
     ManualControlInput getManualControlInput();
 
+    void setPositionError(const PositionError& new_data);
+    PositionError getPositionError();
+
+    void setAccelerationError(const AccelerationError& new_data);
+    AccelerationError getAccelerationError();
+
 private:
     
     // Mutexes for thread safety
     std::mutex position_NED_mutex_;
+    std::mutex acceleration_NED_mutex_;
     std::mutex attitude_data_mutex_;
     std::mutex target_position_profile_mutex_;
     std::mutex drone_cmd_ack_mutex_;
     std::mutex drone_state_mutex_;
     std::mutex manual_control_input_mutex_;
+    std::mutex acceleration_error_mutex_;
+    std::mutex position_error_mutex_;
 
     // Data structures to store state information
     PositionNED position_NED_;
+    AccelerationNED acceleration_NED_;
     Attitude attitude_;
     TargetPositionProfile target_position_profile_;
     DroneCmdAck drone_cmd_ack_;
     DroneState drone_state_;
     ManualControlInput manual_control_input_;
+    AccelerationError acceleration_error_;
+    PositionError position_error_;
     
 };
 

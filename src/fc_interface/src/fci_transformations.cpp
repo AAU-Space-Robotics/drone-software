@@ -17,8 +17,6 @@ GPSData FCI_Transformations::getGPSOrigin() {
     return gps_origin_data_;
 }
 
-
-
 PositionNED FCI_Transformations::convertGPSToNED(rclcpp::Time timestamp, double lat, double lon, double alt) {
     double x_enu, y_enu, z_enu;
     geographic_converter_.Forward(lat, lon, alt, x_enu, y_enu, z_enu);
@@ -31,6 +29,19 @@ PositionNED FCI_Transformations::convertGPSToNED(rclcpp::Time timestamp, double 
     PositionNED ned_data = {timestamp, x_ned, y_ned, z_ned};
 
     return ned_data;
+}
+
+AccelerationNED FCI_Transformations::AccelFRDToNED(rclcpp::Time timestamp, const Attitude& attitude, const double &x, const double &y, const double &z) {
+    // Create Eigen quaternion (w, x, y, z)
+    Eigen::Quaterniond q(attitude.qw, attitude.qx, attitude.qy, attitude.qz);
+    
+    // Convert local acceleration to an Eigen vector
+    Eigen::Vector3d accel_body(x, y, z);
+    
+    // Rotate the acceleration vector from body frame to NED frame
+    Eigen::Vector3d accel_ned = q.conjugate() * accel_body; 
+
+    return {timestamp, accel_ned.x(), accel_ned.y(), accel_ned.z()};
 }
 
 std::vector<double> FCI_Transformations::euler_to_quaternion(double roll, double pitch, double yaw) {

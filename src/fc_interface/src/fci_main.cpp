@@ -11,6 +11,7 @@
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_command_ack.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
+#include <px4_msgs/msg/sensor_combined.hpp>
 
 #include "fci_controller.h"
 #include "fci_state_manager.h"
@@ -64,7 +65,8 @@ public:
         drone_attitude_subscriber_ = this->create_subscription<VehicleAttitude>("/fmu/out/vehicle_attitude", qos_settings, std::bind(&FlightControllerInterface::AttitudeCallback, this, std::placeholders::_1));
         drone_status_subscriber_ = this->create_subscription<VehicleStatus>("/fmu/out/vehicle_status", qos_settings, std::bind(&FlightControllerInterface::VehicleStatusCallback, this, std::placeholders::_1));
         drone_manual_input_subscriber_ = this->create_subscription<interfaces::msg::ManualControlInput>("drone/in/manual_input", qos_settings, std::bind(&FlightControllerInterface::ManualControlInputCallback, this, std::placeholders::_1));
-    
+        drone_sensor_combined_subscriber_ = this->create_subscription<SensorCombined>("/fmu/out/sensor_combined", qos_settings, std::bind(&FlightControllerInterface::SensorCombinedCallback, this, std::placeholders::_1));
+
         //drone_local_position_subscriber_ = this->create_subscription<VehicleLocalPosition>("/fmu/out/vehicle_local_position", qos_settings, std::bind(&FlightControllerInterface::PositionNEDCallback, this, std::placeholders::_1)); Removed, as the cube orange does not provide local position data. Only the simulation
     
         // Action server
@@ -95,6 +97,21 @@ private:
         //Convert GPS to NED, then update global data with the latest NED position
         StateManager.setPositionNED(Transform.convertGPSToNED(this->now(),msg->lat, msg->lon, msg->alt));
 
+    }
+
+    void SensorCombinedCallback(const SensorCombined::SharedPtr msg)
+    {
+        //Convert FRD accel to ENU
+        AccelerationNED acceleration_NED = Transform.AccelFRDToNED(this->now(), StateManager.getAttitude(), msg->accelerometer_m_s2[0], msg->accelerometer_m_s2[1], msg->accelerometer_m_s2[2]);
+
+        // Remove the gravity component
+        acceleration_NED.z += 9.81;
+
+        // Update global data with the latest acceleration data
+        StateManager.setAccelerationNED(acceleration_NED);
+
+        // print the acceleration data
+        RCLCPP_INFO(this->get_logger(), "Received acceleration data: x=%.2f, y=%.2f, z=%.2f", acceleration_NED.x, acceleration_NED.y, acceleration_NED.z);
     }
 
     /* void PositionNEDCallback(const VehicleLocalPosition::SharedPtr msg)
@@ -175,6 +192,10 @@ private:
 
         // read the manual control input
         ManualControlInput manual_control_input = StateManager.getManualControlInput();
+
+
+        RCLCPP_INFO(this->get_logger(), "Control input: thrust=%.2f",  manual_control_input.thrust);
+        
         
         // Set the manual control input as the control input
         return {manual_control_input.roll, manual_control_input.pitch, manual_control_input.yaw, manual_control_input.thrust};
@@ -189,6 +210,11 @@ private:
         // Get the current position and attitude data
         PositionNED position_data = StateManager.getPositionNED();
         std::vector<double> NED_position = {position_data.x, position_data.y, position_data.z};
+
+        AccelerationNED accelerationNED = StateManager.getAccelerationNED();
+        std::vector<double> acceleration_NED = {accelerationNED.x, accelerationNED.y, -accelerationNED.z};
+
+        std::vector<double> target_acceleration_NED = {0.0, 0.0, -1.5};
 
         Attitude attitude_data = StateManager.getAttitude();
         std::vector<double> attitude = {attitude_data.qw, attitude_data.qx, attitude_data.qy, attitude_data.qz};
@@ -209,10 +235,15 @@ private:
         }
        
         // Control loop
-        std::vector<double> controller_output = Controller.PID_control(dt, previous_pose_error_, integral_pose_error_, NED_position, attitude, target_position);
+        //std::vector<double> controller_output = Controller.PID_control(dt, previous_pose_error_, integral_pose_error_, NED_position, attitude, target_position);
+
+        std::vector<double> acceleration_controller_output = Controller.Acceleration_Controller(dt, previous_acceleration_error, attitude_data, acceleration_NED, target_acceleration_NED);
+
+        // log accel 3 control input 3
+        std::cout << "Thrust control input: " << acceleration_controller_output[3] << std::endl;
 
         // set attiude setpoint
-        return {controller_output[0], controller_output[1], controller_output[2], controller_output[3]};
+        return {acceleration_controller_output[0], acceleration_controller_output[1], acceleration_controller_output[2], acceleration_controller_output[3]};
         
     }
 
@@ -277,6 +308,8 @@ private:
                 break;
         }
 
+        //print the control input
+        RCLCPP_INFO(this->get_logger(), "Control input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f", control_input.roll, control_input.pitch, control_input.yaw, control_input.thrust);
         publish_attitude_setpoint(control_input.roll, control_input.pitch, control_input.yaw, control_input.thrust);
     }
 
@@ -592,11 +625,14 @@ private:
     rclcpp::Publisher<VehicleRatesSetpoint>::SharedPtr bodyrate_setpoint_publisher_;
     rclcpp::Publisher<VehicleAttitudeSetpoint>::SharedPtr attitude_setpoint_publisher_;
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
+
     rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr drone_state_subscriber_;
     rclcpp::Subscription<VehicleAttitude>::SharedPtr drone_attitude_subscriber_;
     rclcpp::Subscription<VehicleLocalPosition>::SharedPtr drone_local_position_subscriber_;
     rclcpp::Subscription<VehicleStatus>::SharedPtr drone_status_subscriber_;
     rclcpp::Subscription<interfaces::msg::ManualControlInput>::SharedPtr drone_manual_input_subscriber_;
+    rclcpp::Subscription<SensorCombined>::SharedPtr drone_sensor_combined_subscriber_;
+
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;
     rclcpp_action::Server<interfaces::action::DroneCommand>::SharedPtr drone_command_action_server_;
@@ -616,6 +652,10 @@ private:
     // Controller variables
     std::vector<double> previous_pose_error_ = {0.0, 0.0, 0.0};
     std::vector<double> integral_pose_error_ = {0.0, 0.0, 0.0};
+
+    AccelerationError previous_acceleration_error{};
+
+    
 
     // Mode variables
     int offboard_setpoint_counter_;

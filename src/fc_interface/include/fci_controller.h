@@ -3,26 +3,34 @@
 
 #include <vector>
 #include <stdexcept>
+#include <fci_state_manager.h>
 
 // Controller gains
-struct PIDControllerGains {
-    double Kp_pitch = 0.1;
-    double Ki_pitch = 0.00;
-    double Kd_pitch = 0.05;
-    double Kp_roll = 0.1;
-    double Ki_roll = 0.00;
-    double Kd_roll = 0.05;
-    double Kp_yaw = 0.1;
-    double Ki_yaw = 0.0;
-    double Kd_yaw = 0.05;
-    double Kp_thrust = 5.0;
-    double Ki_thrust = 0.2;
-    double Kd_thrust = 1.0;
+struct PIDGains {
+    double Kp;
+    double Ki;
+    double Kd;
 };
+
+struct PIDControllerGains {
+    PIDGains pitch{0.5, 0.005, 0.02};  
+    PIDGains roll{0.5, 0.005, 0.02};   
+    PIDGains yaw{0.3, 0.005, 0.02};    
+    PIDGains thrust{0.39, 0.00, 0.005};
+};
+// 0.35, 0.02, 0.12
+
+//struct PIDControllerGains {
+//    PIDGains pitch{0.1, 0.00, 0.05};
+//    PIDGains roll{0.1, 0.00, 0.05};
+//    PIDGains yaw{0.1, 0.00, 0.05};
+//   PIDGains thrust{5.0, 0.2, 1.0};
+//};
+
 
 class FCI_Controller {
 public:
-    PIDControllerGains PIDGains;
+    PIDControllerGains AttitudePIDGains;
 
     std::vector<double> PID_control(
         double &sample_time,
@@ -32,6 +40,16 @@ public:
         const std::vector<double> &attitude,
         const std::vector<double> &target_position_NEDEarth
     );
+
+    std::vector<double> Acceleration_Controller(
+        double &sample_time,
+        AccelerationError &previous_acceleration_error,
+        Attitude &attitude,
+        const std::vector<double> &acceleration_FRD,
+        const std::vector<double> &target_acceleration_FRD
+    );
+
+
 
     double map_norm_to_angle(double norm) const;
 

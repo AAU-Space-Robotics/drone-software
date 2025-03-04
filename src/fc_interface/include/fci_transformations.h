@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <algorithm>
+#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Geometry>
 #include <rclcpp/rclcpp.hpp>
 #include <GeographicLib/LocalCartesian.hpp>
 #include "fci_state_manager.h"
@@ -27,6 +29,7 @@ public:
     static std::vector<double> quaternion_to_euler(double q0, double q1, double q2, double q3);
     static std::vector<double> geodetic_to_ECEF(double lat, double lon, double alt);
     static std::vector<double> error_NEDEarth_to_FRD(const std::vector<double>& error_NEDEarth, const std::vector<double>& attitude_FRD_to_NED);
+    AccelerationNED AccelFRDToNED(rclcpp::Time timestamp, const Attitude& attitude, const double &x, const double &y, const double &z);
     static double deg_to_rad(double deg);
     static double rad_to_deg(double rad);
 
