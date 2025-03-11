@@ -10,3 +10,5 @@ Starting the system:
 
 Information about the RTK system, such as survery time and minimum accuraccy.
 https://hamishwillee.github.io/px4_vuepress/en/gps_compass/rtk_gps.html#rtk-connection-process
+
+//  nmap -sP 192.168.0.1/23

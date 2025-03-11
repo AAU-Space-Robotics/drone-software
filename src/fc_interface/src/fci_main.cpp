@@ -111,7 +111,7 @@ private:
         StateManager.setAccelerationNED(acceleration_NED);
 
         // print the acceleration data
-        RCLCPP_INFO(this->get_logger(), "Received acceleration data: x=%.2f, y=%.2f, z=%.2f", acceleration_NED.x, acceleration_NED.y, acceleration_NED.z);
+        //RCLCPP_INFO(this->get_logger(), "Received acceleration data: x=%.2f, y=%.2f, z=%.2f", acceleration_NED.x, acceleration_NED.y, acceleration_NED.z);
     }
 
     /* void PositionNEDCallback(const VehicleLocalPosition::SharedPtr msg)
@@ -235,15 +235,15 @@ private:
         }
        
         // Control loop
-        //std::vector<double> controller_output = Controller.PID_control(dt, previous_pose_error_, integral_pose_error_, NED_position, attitude, target_position);
+        std::vector<double> controller_output = Controller.PID_control(dt, previous_pose_error_, integral_pose_error_, NED_position, attitude, target_position);
 
-        std::vector<double> acceleration_controller_output = Controller.Acceleration_Controller(dt, previous_acceleration_error, attitude_data, acceleration_NED, target_acceleration_NED);
+        //std::vector<double> acceleration_controller_output = Controller.Acceleration_Controller(dt, previous_acceleration_error, attitude_data, acceleration_NED, target_acceleration_NED);
 
         // log accel 3 control input 3
-        std::cout << "Thrust control input: " << acceleration_controller_output[3] << std::endl;
+        //std::cout << "Thrust control input: " << acceleration_controller_output[3] << std::endl;
 
         // set attiude setpoint
-        return {acceleration_controller_output[0], acceleration_controller_output[1], acceleration_controller_output[2], acceleration_controller_output[3]};
+        return {controller_output[0], controller_output[1], controller_output[2], controller_output[3]};
         
     }
 

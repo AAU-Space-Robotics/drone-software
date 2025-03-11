@@ -12,20 +12,21 @@ struct PIDGains {
     double Kd;
 };
 
-struct PIDControllerGains {
-    PIDGains pitch{0.5, 0.005, 0.02};  
-    PIDGains roll{0.5, 0.005, 0.02};   
-    PIDGains yaw{0.3, 0.005, 0.02};    
-    PIDGains thrust{0.39, 0.00, 0.005};
-};
+//Test for acceleration controller
+//struct PIDControllerGains {
+//    PIDGains pitch{0.5, 0.005, 0.02};  
+//    PIDGains roll{0.5, 0.005, 0.02};   
+//    PIDGains yaw{0.3, 0.005, 0.02};    
+ //   PIDGains thrust{0.39, 0.00, 0.005};
+//};
 // 0.35, 0.02, 0.12
 
-//struct PIDControllerGains {
-//    PIDGains pitch{0.1, 0.00, 0.05};
-//    PIDGains roll{0.1, 0.00, 0.05};
-//    PIDGains yaw{0.1, 0.00, 0.05};
-//   PIDGains thrust{5.0, 0.2, 1.0};
-//};
+struct PIDControllerGains {
+   PIDGains pitch{0.1, 0.00, 0.05};
+   PIDGains roll{0.1, 0.00, 0.05};
+   PIDGains yaw{0.1, 0.00, 0.05};
+  PIDGains thrust{5.0, 0.2, 1.0};
+};
 
 
 class FCI_Controller {
