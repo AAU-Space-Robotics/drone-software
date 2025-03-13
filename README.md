@@ -18,20 +18,75 @@ Establish a serial connection between the Raspberry Pi 4 (RPi4) and the PX4 Cube
 ## Software Setup
 
 ### Raspberry Pi Configuration
-1. Ensure `serial0` is available; disable conflicting services (e.g., console).
-2. Edit `/boot/config.txt` to add:
+1. Ensure `serial0` is free; disable conflicting services (e.g., console). Edit `/boot/firmware/cmdline.txt`:  
+   ```
+   sudo nano /boot/firmware/cmdline.txt
+   ```
+   Remove any `serial0` references. Save and exit.
+
+2. Edit `/boot/firmware/config.txt` and add:  
    ```
    enable_uart=1
    ```
-3. Reboot the Raspberry Pi.
 
+3. Grant serial port access (Ubuntu restricts it by default):  
+   Add your user to the `dialout` group:  
+   ```
+   sudo usermod -a -G dialout $(whoami)
+   ```
+
+4. Reboot the Raspberry Pi:  
+   ```
+   sudo reboot
+   ```
+
+5. **Test the Serial Port:**  
+   After rebooting, verify the serial port works:  
+   - Connect pin 8 (TX) to pin 10 (RX) using a female-to-female DuPont wire to loopback the signal.  
+   - Install Minicom:  
+     ```
+     sudo apt update && sudo apt install minicom -y
+     ```
+   - Open Minicom:  
+     ```
+     minicom -b 115200 -o -D /dev/ttyS0
+     ```
+   - In Minicom, press `Ctrl + A`, then `Z`, then `E` to enable echo. Type characters—they should appear on the screen if the port is working. If not, troubleshoot the connection or configuration.
+Here's an improved version of the additional steps. I've made them concise, consistent with the previous format, and clearer while addressing technical details:
+
+6. **Install ROS 2 Humble:**  
+   Follow the [official ROS 2 Humble installation guide](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html). Select the **Base** image (not Desktop, as visualization isn’t needed and Desktop consumes more resources). Include the developer tools during installation.
+
+7. **Set Up Micro XRCE-DDS Agent:**  
+   Follow the "Setup Micro XRCE-DDS Agent & Client" section in the [PX4 ROS 2 User Guide](https://docs.px4.io/main/en/ros2/user_guide.html). Perform **only the Agent setup**—skip the Client step.
+
+8. **Clone the Repository:**  
+   Clone this repository to obtain the code for controlling the drone:  
+   ```
+   git clone git@github.com:AAU-Space-Robotics/drone-software.git
+   ```
+   `cd` into the workspace, and use `colcon build` to build the repository.
+   
+   
 ### PX4 Configuration (Cube Orange)
-1. Set telemetry on TELEM2:
-   ```
-   SER_TEL2_BAUD = 921600
-   ```
-2. Configure UXRCE-DDS on TELEM2:
-   ```
-   UXRCE_DDS_CFG = TELEM2
-   ```
-3. Save and restart PX4.
+To configure the flight controller (Cube Orange) with PX4, follow these steps:
+
+1. **Download QGroundControl:**  
+   Install QGroundControl from the [official guide](https://docs.qgroundcontrol.com/master/en/qgc-user-guide/getting_started/download_and_install.html).
+
+2. **Connect and Check Firmware:**  
+   Connect the drone to your computer via micro-USB. In QGroundControl, go to **Vehicle Setup > Firmware**. Verify the firmware is PX4 v1.15.2 (update if needed).
+
+3. **Configure Parameters:**  
+   In **Vehicle Setup > Parameters**, set the following:  
+   - **Telemetry on TELEM2:**  
+     ```
+     SER_TEL2_BAUD = 921600
+     ```
+   - **UXRCE-DDS on TELEM2:**  
+     ```
+     UXRCE_DDS_CFG = TELEM2
+     ```
+
+4. **Save and Reboot:**  
+   Save the changes and restart the flight controller.
