@@ -90,3 +90,84 @@ To configure the flight controller (Cube Orange) with PX4, follow these steps:
 
 4. **Save and Reboot:**  
    Save the changes and restart the flight controller.
+
+# 2. Use of Packages
+
+Build the package in the root of the workspace (e.g., `~/drone-software`) to be able to use it. Then source it with:
+
+```bash
+source install/setup.bash
+```
+
+## fc_interface Package
+
+Currently, `fc_interface` is the only package containing nodes that must be run directly on the onboard computer. This package includes a set of custom software stacks that enable drone control using the methods described below.
+
+### 1. Establish Connection with the Flight Controller
+
+For the `fc_interface` package to function, it requires the ROS 2 communication channel established by the `MicroXRCEAgent`. If the setup steps in Section 1 have not been performed, return and complete them. If setup is complete, use the following command to open the node, which publishes and subscribes to a specific set of ROS 2 topics:
+
+```bash
+MicroXRCEAgent serial --dev /dev/serial0 -b 921600
+```
+
+#### 1.1 (Optional) Establish Connection with a Simulation
+
+To support drone stack development, a Gazebo simulation is available from the PX4 community. Read more here: [link placeholder]. If the simulation is built correctly, navigate to its root directory (likely `PX4-Autopilot`) and run:
+
+```bash
+cd PX4-Autopilot/ && make px4_sitl gz_x500
+```
+
+As with the real flight controller, the `MicroXRCEAgent` is required. Start it with:
+
+```bash
+MicroXRCEAgent udp4 -p 8888
+```
+
+### 2. Ground Control Station
+
+To operate either the real or simulated drone, a ground control station must communicate with it. This is where QGroundControl comes in. If the application is not installed, follow the setup guide in Section 1 to install it. Start it once installed.
+
+### 3. Flight Control Interface Node (Custom Node from This Package)
+
+With the preliminary setup complete, the interface node can be called. This allows the drone system to accept commands from the ROS 2 network based on custom modes. The drone must be armed before it can perform any actions. Use the following command to arm it:
+
+```bash
+ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'arm', target_pose: [], yaw: 0.0}"
+```
+
+Run this command from the workspace root (e.g., `~/drone-software`). Ensure the package is sourced with `source install/setup.bash` beforehand, or the ROS 2 network will not recognize the package. Once armed, send a new command within approximately 10 seconds, or the drone will disarm due to a PX4 safety feature (not implemented in this package). The following commands are currently supported:
+
+- **Takeoff:**
+  ```bash
+  ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'takeoff', target_pose: [-10], yaw: 0.0}"
+  ```
+  - Requires one argument: the z-coordinate (altitude) to reach (e.g., `-10` for 10 meters upward). Negative values indicate upward movement.
+
+- **Go To:**
+  ```bash
+  ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'goto', target_pose: [5,5,-10], yaw: 0.0}"
+  ```
+  - Requires an `[x, y, z]` coordinate. The command will be rejected without all three values. Altitude is specified with negative values for higher altitudes.
+
+- **Manual Mode:**
+  ```bash
+  ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'manual', target_pose: [], yaw: 0.0}"
+  ```
+  - Switches the controller to listen for manual control inputs on the `drone/in/manual_input` topic. A node in the `gcs` package can publish control values from a PS4 controller.
+
+
+### other stuff
+Information about the RTK system, such as survery time and minimum accuraccy.
+- https://hamishwillee.github.io/px4_vuepress/en/gps_compass/rtk_gps.html#rtk-connection-process
+
+Check for available devices on network
+- nmap -sP 192.168.0.1/23
+
+Issues with px4 agent:
+-https://discuss.px4.io/t/issue-with-attitude-target-thrust-and-quaternions-are-conflicting/43515/10
+
+
+
+

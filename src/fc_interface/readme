@@ -1,14 +1,1 @@
-Starting the system:
-// cd PX4-Autopilot/ && make px4_sitl gz_x500
-// MicroXRCEAgent udp4 -p 8888
-// cd drone-software && source install/setup.bash && ros2 run fc_interface fci
-// Open qGround
-
-// cd drone-software && source install/setup.bash
-//ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'arm', target_pose: [], yaw: 0.0}"
-
-
-Information about the RTK system, such as survery time and minimum accuraccy.
-https://hamishwillee.github.io/px4_vuepress/en/gps_compass/rtk_gps.html#rtk-connection-process
-
-//  nmap -sP 192.168.0.1/23
+Nothing to see here...
