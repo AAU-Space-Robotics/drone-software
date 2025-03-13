@@ -18,29 +18,56 @@ Establish a serial connection between the Raspberry Pi 4 (RPi4) and the PX4 Cube
 ## Software Setup
 
 ### Raspberry Pi Configuration
-1. Ensure `serial0` is free; disable conflicting services (e.g., console). Edit `/boot/firmware/cmdline.txt`:  
+Before using the Raspberry Pi with ROS 2, you need to flash a microSD card with an operating system (OS) that the Pi can boot from. This section outlines the steps to set up a Raspberry Pi 4 with Ubuntu 22.04 Server (64-bit).
+
+1. **Flash the MicroSD Card**
+   - Download and install the [Raspberry Pi Imager](https://www.raspberrypi.com/software/) on your computer.
+   - Insert a microSD card into your computer (via a card reader if needed).
+   - Open the Raspberry Pi Imager and select the following:
+     - **OS Category**: Choose "General-purpose OS."
+     - **Operating System**: Select "Ubuntu" > "Ubuntu Server 22.04 (64-bit)."
+       - *Important*: Use the 64-bit version. ROS 2 is not compatible with the 32-bit image.
+   - Choose your microSD card as the storage device.
+   - **Additional Configuration**: 
+     - Click the cog icon (⚙️) in the Raspberry Pi Imager to access advanced settings. On Windows, press `Ctrl+Shift+X` to open this menu.
+     - Configure the following options for convenience:
+       - **Wi-Fi**: Set up a Wi-Fi connection by entering your network’s SSID and password.
+       - **Username**: Create a user (e.g., `drone`) instead of the default.
+       - **SSH**: Enable SSH access to allow remote connections.
+     - Save these settings before proceeding.
+   - Click "Write" to flash the image to the microSD card. This process may take a few minutes.
+
+   *Why Ubuntu Server?* The server image lacks a desktop environment, which conserves resources on the Raspberry Pi. A graphical interface isn’t necessary for this ROS 2 application and can be replaced with tools like remote editors or desktops (see below).
+
+2. **Recommended Tools for Interaction**
+   - Since the server image has no GUI, use a code editor or remote desktop for a user-friendly experience:
+     - **VS Code with Remote SSH**: Install [Visual Studio Code](https://code.visualstudio.com/docs/remote/ssh) on your computer and connect to the Pi via SSH for editing and debugging.
+     - Alternatively, use a terminal-based editor (e.g., `nano` or `vim`) directly on the Pi via SSH.
+   - These tools provide all necessary functionality without consuming extra Pi resources.
+
+3. **Ensure `serial0` is free; disable conflicting services (e.g., console). Edit `/boot/firmware/cmdline.txt`:**
    ```
    sudo nano /boot/firmware/cmdline.txt
    ```
    Remove any `serial0` references. Save and exit.
 
-2. Edit `/boot/firmware/config.txt` and add:  
+4. **Edit `/boot/firmware/config.txt` and add:**  
    ```
    enable_uart=1
    ```
 
-3. Grant serial port access (Ubuntu restricts it by default):  
+5. **Grant serial port access (Ubuntu restricts it by default):**  
    Add your user to the `dialout` group:  
    ```
    sudo usermod -a -G dialout $(whoami)
    ```
 
-4. Reboot the Raspberry Pi:  
+6. **Reboot the Raspberry Pi:**  
    ```
    sudo reboot
    ```
 
-5. **Test the Serial Port:**  
+7. **Test the Serial Port:**  
    After rebooting, verify the serial port works:  
    - Connect pin 8 (TX) to pin 10 (RX) using a female-to-female DuPont wire to loopback the signal.  
    - Install Minicom:  
@@ -52,16 +79,15 @@ Establish a serial connection between the Raspberry Pi 4 (RPi4) and the PX4 Cube
      minicom -b 115200 -o -D /dev/ttyS0
      ```
    - In Minicom, press `Ctrl + A`, then `Z`, then `E` to enable echo. Type characters—they should appear on the screen if the port is working. If not, troubleshoot the connection or configuration.
-Here's an improved version of the additional steps. I've made them concise, consistent with the previous format, and clearer while addressing technical details:
 
-6. **Install ROS 2 Humble:**  
+8. **Install ROS 2 Humble:**  
    Follow the [official ROS 2 Humble installation guide](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html). Select the **Base** image (not Desktop, as visualization isn’t needed and Desktop consumes more resources). Include the developer tools during installation.
 
-7. **Set Up Micro XRCE-DDS Agent:**  
+9. **Set Up Micro XRCE-DDS Agent:**  
    Follow the "Setup Micro XRCE-DDS Agent & Client" section in the [PX4 ROS 2 User Guide](https://docs.px4.io/main/en/ros2/user_guide.html). Perform **only the Agent setup**—skip the Client step.
    *Note:* A version is specified in the download code. Consider updating to a newer version, such as the `master` branch, to avoid potential issues later.
 
-8. **Clone the Repository:**  
+10. **Clone the Repository:**  
    Clone this repository to obtain the code for controlling the drone:  
    ```
    git clone git@github.com:AAU-Space-Robotics/drone-software.git
@@ -71,6 +97,7 @@ Here's an improved version of the additional steps. I've made them concise, cons
    *Note:* Unless you want to build the not so working `ground control station code (gcs package)`, use this build command:
    ```
    colcon build --packages-skip gcs
+   ```
 
    
 ### PX4 Configuration (Cube Orange)
