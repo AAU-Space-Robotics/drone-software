@@ -78,10 +78,10 @@ install(PROGRAMS
 )
 
 # Install launch files
-install(DIRECTORY
-  launch
-  DESTINATION share/${PROJECT_NAME}/
-)
+#install(DIRECTORY
+#  launch
+#  DESTINATION share/${PROJECT_NAME}/
+#)
 
 # Mark the package as complete
 ament_package()

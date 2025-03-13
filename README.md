@@ -59,6 +59,7 @@ Here's an improved version of the additional steps. I've made them concise, cons
 
 7. **Set Up Micro XRCE-DDS Agent:**  
    Follow the "Setup Micro XRCE-DDS Agent & Client" section in the [PX4 ROS 2 User Guide](https://docs.px4.io/main/en/ros2/user_guide.html). Perform **only the Agent setup**—skip the Client step.
+   *Note:* A version is specified in the download code. Consider updating to a newer version, such as the `master` branch, to avoid potential issues later.
 
 8. **Clone the Repository:**  
    Clone this repository to obtain the code for controlling the drone:  
@@ -66,7 +67,11 @@ Here's an improved version of the additional steps. I've made them concise, cons
    git clone git@github.com:AAU-Space-Robotics/drone-software.git
    ```
    `cd` into the workspace, and use `colcon build` to build the repository.
-   
+
+   *Note:* Unless you want to build the not so working `ground control station code (gcs package)`, use this build command:
+   ```
+   colcon build --packages-skip gcs
+
    
 ### PX4 Configuration (Cube Orange)
 To configure the flight controller (Cube Orange) with PX4, follow these steps:
@@ -113,7 +118,7 @@ MicroXRCEAgent serial --dev /dev/serial0 -b 921600
 
 #### 1.1 (Optional) Establish Connection with a Simulation
 
-To support drone stack development, a Gazebo simulation is available from the PX4 community. Read more here: [link placeholder]. If the simulation is built correctly, navigate to its root directory (likely `PX4-Autopilot`) and run:
+To support drone stack development, a Gazebo simulation is available from the PX4 community. Read more here: [PX4](https://docs.px4.io/main/en/ros2/user_guide.html#install-px4). If the simulation is built correctly, navigate to its root directory (likely `PX4-Autopilot`) and run:
 
 ```bash
 cd PX4-Autopilot/ && make px4_sitl gz_x500
