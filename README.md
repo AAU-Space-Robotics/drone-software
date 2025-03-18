@@ -97,7 +97,13 @@ To configure the flight controller (Cube Orange) with PX4, follow these steps:
    Connect the drone to your computer via micro-USB. In QGroundControl, go to **Vehicle Setup > Firmware**. Verify the firmware is PX4 v1.15.2 (update if needed).
 
 3. **Configure Parameters:**  
-   In **Vehicle Setup > Parameters**, set the following:  
+   In **Vehicle Setup > Parameters**, set the following:
+  - **Enable TELEM2:**
+     ```
+     MAV_1_CONFIG = TELEM 2
+     ```
+    Reboot the flight controller, and then proceed with the following steps:
+   
    - **Telemetry on TELEM2:**  
      ```
      SER_TEL2_BAUD = 921600
@@ -107,7 +113,7 @@ To configure the flight controller (Cube Orange) with PX4, follow these steps:
      UXRCE_DDS_CFG = TELEM2
      ```
 
-4. **Save and Reboot:**  
+5. **Save and Reboot:**  
    Save the changes and restart the flight controller.
 
 # 2. Using Packages in the Drone Software Workspace
