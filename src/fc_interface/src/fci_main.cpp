@@ -37,6 +37,8 @@ using namespace px4_msgs::msg;
 
 std::vector<std::string> allowed_commands = {"arm", "disarm","takeoff", "goto", "land", "estop", "manual", "manual_aided"};
 
+float yaw_sensitivity = 1.0/20.0;
+
 
 class FlightControllerInterface : public rclcpp::Node
 {
@@ -151,7 +153,7 @@ private:
         ManualControlInput manual_control_input = StateManager.getManualControlInput();
 
         // Update the received data
-        manual_control_input = {this->now(), static_cast<float>(Controller.map_norm_to_angle(msg->roll)), static_cast<float>(Controller.map_norm_to_angle(msg->pitch)), manual_control_input.yaw + static_cast<float>(Controller.map_norm_to_angle(msg->yaw_velocity)), msg->thrust};
+        manual_control_input = {this->now(), static_cast<float>(Controller.map_norm_to_angle(msg->roll)), static_cast<float>(Controller.map_norm_to_angle(msg->pitch)), manual_control_input.yaw + static_cast<float>(Controller.map_norm_to_angle((msg->yaw_velocity)* yaw_sensitivity)), msg->thrust};
 
         // Update global data with the latest manual control input
         StateManager.setManualControlInput(manual_control_input);
