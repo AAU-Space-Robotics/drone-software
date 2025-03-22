@@ -39,12 +39,22 @@ class ManualController(Node):
             return
         
         pygame.event.pump()  # Process pygame events
+        #axis 2 is the left trigger
+        #axis 5 is the right trigger
+        
+        left_trigger = ((self.joystick.get_axis(2) + 1.0)/2.0)
+        right_trigger = (self.joystick.get_axis(5) + 1.0)/2.0
+        yaw_value = right_trigger - left_trigger
         
         # Read joystick axes (values range from -1 to 1)
-        self.drone_cmd.roll = -self.joystick.get_axis(0) if abs(self.joystick.get_axis(0)) > 0.05 else 0.0  # Left stick X-axis
-        self.drone_cmd.pitch = -self.joystick.get_axis(1) if abs(self.joystick.get_axis(1)) > 0.05 else 0.0  # Left stick Y-axis (inverted for correct mapping)
-        self.drone_cmd.yaw_velocity = -self.joystick.get_axis(3) if abs(self.joystick.get_axis(3)) > 0.05 else 0.0  # Right stick X-axis
+        self.drone_cmd.roll = self.joystick.get_axis(0) if abs(self.joystick.get_axis(0)) > 0.05 else 0.0  # Left stick X-axis
+        self.drone_cmd.pitch = self.joystick.get_axis(1) if abs(self.joystick.get_axis(1)) > 0.05 else 0.0  # Left stick Y-axis (inverted for correct mapping)
+        #self.drone_cmd.yaw_velocity =self.joystick.get_axis(3) if abs(self.joystick.get_axis(3)) > 0.05 else 0.0  # Right stick X-axis
+        self.drone_cmd.yaw_velocity =yaw_value if abs(yaw_value) > 0.02 else 0.0  # Right stick X-axis
         self.drone_cmd.thrust = self.joystick.get_axis(4) if abs(self.joystick.get_axis(4)) > 0.05 else 0.0  # Right stick Y-axis, mapped from [-1,1] to [0,-1]
+ 
+        
+        
         
     def publish_control(self):
         self.read_controller_input()

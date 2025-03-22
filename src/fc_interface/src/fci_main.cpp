@@ -104,14 +104,16 @@ private:
         //Convert FRD accel to ENU
         AccelerationNED acceleration_NED = Transform.AccelFRDToNED(this->now(), StateManager.getAttitude(), msg->accelerometer_m_s2[0], msg->accelerometer_m_s2[1], msg->accelerometer_m_s2[2]);
 
+        RCLCPP_INFO(this->get_logger(), "Received acceleration data: x=%.2f, y=%.2f, z=%.2f", acceleration_NED.x, acceleration_NED.y, acceleration_NED.z);
+
         // Remove the gravity component
         acceleration_NED.z += 9.81;
+
+        RCLCPP_INFO(this->get_logger(), "Transformed received acceleration data: x=%.2f, y=%.2f, z=%.2f", acceleration_NED.x, acceleration_NED.y, acceleration_NED.z);
 
         // Update global data with the latest acceleration data
         StateManager.setAccelerationNED(acceleration_NED);
 
-        // print the acceleration data
-        //RCLCPP_INFO(this->get_logger(), "Received acceleration data: x=%.2f, y=%.2f, z=%.2f", acceleration_NED.x, acceleration_NED.y, acceleration_NED.z);
     }
 
     /* void PositionNEDCallback(const VehicleLocalPosition::SharedPtr msg)

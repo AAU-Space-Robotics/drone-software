@@ -9,6 +9,10 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <algorithm>
+#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/Geometry>
+#include <eigen3/Eigen/StdVector>
 #include <rclcpp/rclcpp.hpp>
 
 enum class Command {
