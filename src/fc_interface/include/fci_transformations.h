@@ -1,43 +1,45 @@
 #ifndef FCI_TRANSFORMATIONS_H
 #define FCI_TRANSFORMATIONS_H
 
-#include <atomic>
-#include <stdint.h>
-#include <cmath>
-#include <vector>
 #include <mutex>
-#include <stdexcept>
-#include <unordered_map>
-#include <algorithm>
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/Geometry>
 #include <rclcpp/rclcpp.hpp>
 #include <GeographicLib/LocalCartesian.hpp>
-#include "fci_state_manager.h"
+#include "fci_state_manager.h" 
 
-// FCI_Transformation class definition
 class FCI_Transformations {
 public:
+    FCI_Transformations() : gps_origin_set_(false) {}
 
-    // GPS functions
-    void setGPSOrigin(rclcpp::Time timestamp, double lat, double lon, double alt);
-    GPSData getGPSOrigin();
-    bool isGPSOriginSet();
-    PositionNED convertGPSToNED(rclcpp::Time timestamp, double lat, double lon, double alt);
+    // GPS Origin Management
+    void setGPSOrigin(const rclcpp::Time& timestamp, double latitude, double longitude, double altitude);
+    bool isGPSOriginSet() const;
+    Stamped3DVector getGPSOrigin() const;
 
-    static std::vector<double> euler_to_quaternion(double roll, double pitch, double yaw);
-    static std::vector<double> quaternion_to_euler(double q0, double q1, double q2, double q3);
-    static std::vector<double> geodetic_to_ECEF(double lat, double lon, double alt);
-    static std::vector<double> error_NEDEarth_to_FRD(const std::vector<double>& error_NEDEarth, const std::vector<double>& attitude_FRD_to_NED);
-    AccelerationNED AccelFRDToNED(rclcpp::Time timestamp, const Attitude& attitude, const double &x, const double &y, const double &z);
-    static double deg_to_rad(double deg);
-    static double rad_to_deg(double rad);
+    // Coordinate Transformations
+    Stamped3DVector convertGPSToGlobalPosition(const rclcpp::Time& timestamp, double latitude, double longitude, double altitude) const;
+    Stamped3DVector accelerationLocalToGlobal(const rclcpp::Time& timestamp, 
+                                             const Eigen::Quaterniond& attitude, 
+                                             const Eigen::Vector3d& acceleration_local) const;
+
+    // Attitude Conversions
+    Eigen::Quaterniond eulerToQuaternion(double roll, double pitch, double yaw) const;
+    Eigen::Vector3d quaternionToEuler(const Eigen::Quaterniond& q) const;
+
+    // Geodetic Transformations
+    Eigen::Vector3d errorGlobalToLocal(const Eigen::Vector3d& error_ned_earth, 
+                                      const Eigen::Quaterniond& attitude_frd_to_ned) const;
+
+    // Utility Functions
+    double degToRad(double degrees) const;
+    double radToDeg(double radians) const;
 
 private:
-    std::mutex gps_data_mutex_;
-    GPSData gps_origin_data_;
-    bool gps_origin_set_ = false;
-    GeographicLib::LocalCartesian geographic_converter_;
+    mutable std::mutex gps_data_mutex_;       // Thread safety for GPS data
+    Stamped3DVector gps_origin_data_;         // GPS origin in NED frame
+    bool gps_origin_set_ = false;             // Flag for GPS origin initialization
+    GeographicLib::LocalCartesian geographic_converter_; // ENU coordinate converter
 };
 
 #endif // FCI_TRANSFORMATIONS_H

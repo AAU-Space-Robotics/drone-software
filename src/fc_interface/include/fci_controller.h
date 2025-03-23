@@ -1,64 +1,54 @@
 #ifndef FCI_CONTROLLER_H
 #define FCI_CONTROLLER_H
 
-#include <vector>
-#include <stdexcept>
-#include <fci_state_manager.h>
+#include <eigen3/Eigen/Dense>
+#include "fci_state_manager.h" // For Stamped3DVector, StampedQuaternion, etc.
+#include "fci_transformations.h" // For coordinate transformations
 
-// Controller gains
+// PID gains structure
 struct PIDGains {
-    double Kp;
-    double Ki;
-    double Kd;
+    double Kp = 0.0;
+    double Ki = 0.0;
+    double Kd = 0.0;
+
+    PIDGains(double kp = 0.0, double ki = 0.0, double kd = 0.0) : Kp(kp), Ki(ki), Kd(kd) {}
 };
 
-//Test for acceleration controller
-//struct PIDControllerGains {
-//    PIDGains pitch{0.5, 0.005, 0.02};  
-//    PIDGains roll{0.5, 0.005, 0.02};   
-//    PIDGains yaw{0.3, 0.005, 0.02};    
- //   PIDGains thrust{0.39, 0.00, 0.005};
-//};
-// 0.35, 0.02, 0.12
-
+// Controller gains for attitude and thrust
 struct PIDControllerGains {
-   PIDGains pitch{0.1, 0.00, 0.05};
-   PIDGains roll{0.1, 0.00, 0.05};
-   PIDGains yaw{0.1, 0.00, 0.05};
-  PIDGains thrust{5.0, 0.2, 1.0};
+    PIDGains pitch{0.1, 0.0, 0.05};
+    PIDGains roll{0.1, 0.0, 0.05};
+    PIDGains yaw{0.1, 0.0, 0.05};
+    PIDGains thrust{5.0, 0.2, 1.0};
 };
-
 
 class FCI_Controller {
 public:
-    PIDControllerGains AttitudePIDGains;
+    explicit FCI_Controller(const FCI_Transformations& transformations);
 
-    std::vector<double> PID_control(
-        double &sample_time,
-        std::vector<double> &previous_position_NEDEarth_error,
-        std::vector<double> &integral_position_error_NEDEarth,
-        const std::vector<double> &position_NEDEarth,
-        const std::vector<double> &attitude,
-        const std::vector<double> &target_position_NEDEarth
-    );
+    // Position PID control (returns roll, pitch, yaw, thrust)
+    Eigen::Vector4d pidControl(double sample_time,
+                               PositionError& previous_position_error,
+                               const Stamped3DVector& position_ned_earth,
+                               const StampedQuaternion& attitude,
+                               const Stamped3DVector& target_position_ned_earth);
 
-    std::vector<double> Acceleration_Controller(
-        double &sample_time,
-        AccelerationError &previous_acceleration_error,
-        Attitude &attitude,
-        const std::vector<double> &acceleration_FRD,
-        const std::vector<double> &target_acceleration_FRD
-    );
+    // Acceleration PID control (returns roll, pitch, yaw, thrust)
+    Eigen::Vector4d accelerationControl(double sample_time,
+                                        AccelerationError& previous_acceleration_error,
+                                        const Stamped3DVector& acceleration_frd,
+                                        const Stamped3DVector& target_acceleration_frd);
 
-
-
-    double map_norm_to_angle(double norm) const;
+    // Utility function to map normalized values to angles
+    double mapNormToAngle(double norm) const;
 
 private:
-    double constrain_angle(double angle) const;
-    double constrain_thrust(double thrust) const;
-    
-    std::vector<double> error_NEDEarth_to_FRD(const std::vector<double> &error_NEDEarth, const std::vector<double> &attitude_FRD_to_NED) const;
+    const FCI_Transformations& transformations_; // Reference to transformations utility
+    PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust
+
+    // Constrain control outputs
+    double constrainAngle(double angle) const;
+    double constrainThrust(double thrust) const;
 };
 
 #endif // FCI_CONTROLLER_H
