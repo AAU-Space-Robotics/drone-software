@@ -45,6 +45,13 @@ struct Stamped3DVector {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
     Eigen::Vector3d data = Eigen::Vector3d::Zero();
 
+    // Default constructor
+    Stamped3DVector() = default;
+
+    // Constructor with timestamp and components (added for controlMode and manualAidedMode)
+    Stamped3DVector(const rclcpp::Time& ts, double x, double y, double z)
+        : timestamp(ts), data(x, y, z) {}
+
     // Get individual components
     double x() const { return data.x(); }
     double y() const { return data.y(); }
@@ -67,6 +74,13 @@ struct Stamped3DVector {
 struct Stamped4DVector {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
     Eigen::Vector4d data = Eigen::Vector4d::Zero();
+
+    // Default constructor
+    Stamped4DVector() = default;
+
+    // Constructor with timestamp and components (added for execute function)
+    Stamped4DVector(const rclcpp::Time& ts, double x, double y, double z, double w)
+        : timestamp(ts), data(x, y, z, w) {}
 
     // Get individual components
     double x() const { return data.x(); }
@@ -92,6 +106,13 @@ struct Stamped4DVector {
 struct StampedQuaternion {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
     Eigen::Quaterniond data = Eigen::Quaterniond::Identity();
+
+    // Default constructor
+    StampedQuaternion() = default;
+
+    // Constructor with timestamp and quaternion (added for attitudeCallback)
+    StampedQuaternion(const rclcpp::Time& ts, const Eigen::Quaterniond& quat)
+        : timestamp(ts), data(quat) {}
 
     // Get individual components
     double x() const { return data.x(); }

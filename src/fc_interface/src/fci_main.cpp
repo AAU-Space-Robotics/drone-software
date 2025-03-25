@@ -32,16 +32,19 @@ public:
           offboard_setpoint_counter_(0),
           offboard_mode_set_(false),
           timeout_threshold_(0.2) {
+        // ROS 2 QoS settings
         rclcpp::QoS qos(10);
         qos.reliability(rclcpp::ReliabilityPolicy::BestEffort);
         qos.durability(rclcpp::DurabilityPolicy::TransientLocal);
 
+        // Publishers
         offboard_control_mode_pub_ = create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
         trajectory_setpoint_pub_ = create_publisher<TrajectorySetpoint>("/fmu/in/trajectory_setpoint", 10);
         bodyrate_setpoint_pub_ = create_publisher<VehicleRatesSetpoint>("/fmu/in/vehicle_rates_setpoint", 10);
         attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
 
+        // Subscribers
         gps_sub_ = create_subscription<VehicleGlobalPosition>(
             "/fmu/out/vehicle_global_position", qos,
             [this](const VehicleGlobalPosition::SharedPtr msg) { gpsCallback(msg); });
@@ -58,6 +61,7 @@ public:
             "/fmu/out/sensor_combined", qos,
             [this](const SensorCombined::SharedPtr msg) { sensorCombinedCallback(msg); });
 
+        // Action server
         drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
             this, "/fmu/in/drone_command",
             [this](const rclcpp_action::GoalUUID& uuid, std::shared_ptr<const DroneCommand::Goal> goal) {
@@ -70,12 +74,14 @@ public:
                 handleAccepted(goal_handle);
             });
 
+        // Timers
         offboard_timer_ = create_wall_timer(200ms, [this]() { setOffboardMode(); });
 
         RCLCPP_INFO(get_logger(), "FlightControllerInterface initialized.");
     }
 
 private:
+    // Callback functions
     void gpsCallback(const VehicleGlobalPosition::SharedPtr msg) {
         if (!transformations_.isGPSOriginSet()) {
             transformations_.setGPSOrigin(now(), msg->lat, msg->lon, msg->alt);
@@ -91,9 +97,7 @@ private:
     }
 
     void attitudeCallback(const VehicleAttitude::SharedPtr msg) {
-        StampedQuaternion attitude;
-        attitude.setTime(now());
-        attitude.quaternion() = Eigen::Quaterniond(msg->q[0], msg->q[1], msg->q[2], msg->q[3]);
+        StampedQuaternion attitude(now(), Eigen::Quaterniond(msg->q[0], msg->q[1], msg->q[2], msg->q[3]));
         state_manager_.setAttitude(attitude);
     }
 
@@ -114,6 +118,7 @@ private:
         state_manager_.setManualControlInput(manual_input);
     }
 
+    // Offboard mode handling
     void setOffboardMode() {
         publishOffboardControlMode();
         if (!offboard_mode_set_ && offboard_setpoint_counter_ < 11) {
@@ -136,6 +141,7 @@ private:
         offboard_control_mode_pub_->publish(msg);
     }
 
+    // Control modes
     Eigen::Vector4d manualMode() {
         Stamped4DVector manual_input = state_manager_.getManualControlInput();
         return {manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w()};
@@ -145,9 +151,18 @@ private:
         Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
         Stamped3DVector position = state_manager_.getGlobalPosition();
         StampedQuaternion attitude = state_manager_.getAttitude();
-        Stamped3DVector target_position_3d;
-        target_position_3d.setTime(target_profile.getTime());
-        target_position_3d.vector() = target_profile.vector().head<3>(); // Extract x, y, z
+        Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
+
+        // Calculate global position error in NED frame
+        Eigen::Vector3d global_error_ned = target_position_3d.vector() - position.vector();
+
+        // Transform global error to local FRD frame using attitude
+        Eigen::Vector3d local_error_frd = transformations_.errorGlobalToLocal(global_error_ned, attitude.quaternion());
+        
+        // Log local error (FRD)
+        RCLCPP_INFO(get_logger(), "Local Error (FRD): x=%.2f, y=%.2f, z=%.2f",
+        local_error_frd.x(), local_error_frd.y(), local_error_frd.z());
+
 
         double dt = (now() - position.getTime()).seconds();
         if (dt > timeout_threshold_) {
@@ -164,12 +179,9 @@ private:
         Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
         target_profile.setZ(target_profile.z() + manual_input.w() / 10.0);
         state_manager_.setTargetPositionProfile(target_profile);
-
         Stamped3DVector position = state_manager_.getGlobalPosition();
         StampedQuaternion attitude = state_manager_.getAttitude();
-        Stamped3DVector target_position_3d;
-        target_position_3d.setTime(target_profile.getTime());
-        target_position_3d.vector() = target_profile.vector().head<3>(); // Extract x, y, z
+        Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
 
         double dt = (now() - position.getTime()).seconds();
         if (dt > timeout_threshold_) {
@@ -219,6 +231,7 @@ private:
         }
     }
 
+    // Command functions
     void arm() {
         RCLCPP_INFO(get_logger(), "Sending arm command...");
         publishVehicleCommand(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0, 0.0);
@@ -253,6 +266,7 @@ private:
         vehicle_command_pub_->publish(msg);
     }
 
+    // Action server handlers
     rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID& /*uuid*/,
                                                    std::shared_ptr<const DroneCommand::Goal> goal) {
         static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "manual", "manual_aided"};
@@ -318,23 +332,13 @@ private:
                 result->message = "Drone disarmed.";
             } else if (goal->command_type == "takeoff") {
                 ensureControlLoopRunning(2);
-                Stamped4DVector target;
-                target.setTime(now());
-                target.setX(0.0);
-                target.setY(0.0);
-                target.setZ(std::max(goal->target_pose[0], -1.5));
-                target.setW(goal->yaw);
+                Stamped4DVector target(now(), 0.0, 0.0, std::max(goal->target_pose[0], -1.5), goal->yaw);
                 state_manager_.setTargetPositionProfile(target);
                 result->success = true;
                 result->message = "Drone taking off.";
             } else if (goal->command_type == "goto") {
                 ensureControlLoopRunning(2);
-                Stamped4DVector target;
-                target.setTime(now());
-                target.setX(goal->target_pose[0]);
-                target.setY(goal->target_pose[1]);
-                target.setZ(goal->target_pose[2]);
-                target.setW(goal->yaw);
+                Stamped4DVector target(now(), goal->target_pose[0], goal->target_pose[1], goal->target_pose[2], goal->yaw);
                 state_manager_.setTargetPositionProfile(target);
                 result->success = true;
                 result->message = "Drone moving to target position.";
@@ -363,6 +367,7 @@ private:
         }
     }
 
+    // Member variables
     rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_pub_;
     rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_pub_;
     rclcpp::Publisher<VehicleRatesSetpoint>::SharedPtr bodyrate_setpoint_pub_;
