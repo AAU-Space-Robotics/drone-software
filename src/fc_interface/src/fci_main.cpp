@@ -92,7 +92,9 @@ private:
     void sensorCombinedCallback(const SensorCombined::SharedPtr msg) {
         Eigen::Vector3d acceleration_local{msg->accelerometer_m_s2[0], msg->accelerometer_m_s2[1], msg->accelerometer_m_s2[2]};
         Stamped3DVector acceleration_global = transformations_.accelerationLocalToGlobal(now(), state_manager_.getAttitude().quaternion(), acceleration_local);
+        
         acceleration_global.vector().z() += 9.81; // Remove gravity
+
         state_manager_.setGlobalAcceleration(acceleration_global);
     }
 

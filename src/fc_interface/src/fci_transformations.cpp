@@ -36,7 +36,7 @@ Stamped3DVector FCI_Transformations::convertGPSToGlobalPosition(const rclcpp::Ti
 Stamped3DVector FCI_Transformations::accelerationLocalToGlobal(const rclcpp::Time& timestamp, 
                                                               const Eigen::Quaterniond& attitude, 
                                                               const Eigen::Vector3d& acceleration_local) const {
-    Eigen::Vector3d acceleration_global = attitude.conjugate() * acceleration_local;
+    Eigen::Vector3d acceleration_global = attitude * acceleration_local;
 
     Stamped3DVector result;
     result.setTime(timestamp);
