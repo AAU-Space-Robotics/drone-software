@@ -55,7 +55,7 @@ Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
     previous_position_error.Z.error = position_error_ned.z();
 
     // Return control outputs (roll, pitch, yaw, thrust)
-    return {roll, pitch, 0.0, thrust};
+    return {roll, -pitch, 0.0, thrust};
 }
 
 Eigen::Vector4d FCI_Controller::accelerationControl(double sample_time,

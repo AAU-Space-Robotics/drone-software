@@ -8,6 +8,7 @@
 #include <px4_msgs/msg/vehicle_attitude_setpoint.hpp>
 #include <px4_msgs/msg/vehicle_attitude.hpp>
 #include <px4_msgs/msg/vehicle_global_position.hpp>
+#include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
 #include <px4_msgs/msg/sensor_combined.hpp>
 
@@ -45,9 +46,14 @@ public:
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
 
         // Subscribers
-        gps_sub_ = create_subscription<VehicleGlobalPosition>(
-            "/fmu/out/vehicle_global_position", qos,
-            [this](const VehicleGlobalPosition::SharedPtr msg) { gpsCallback(msg); });
+        // gps_sub_ = create_subscription<VehicleGlobalPosition>(
+        //     "/fmu/out/vehicle_global_position", qos,
+        //     [this](const VehicleGlobalPosition::SharedPtr msg) { gpsCallback(msg); });
+
+        local_position_sub_ = create_subscription<VehicleLocalPosition>(
+            "/fmu/out/vehicle_local_position", qos,
+            [this](const VehicleLocalPosition::SharedPtr msg) { localPositionCallback(msg); });
+        
         attitude_sub_ = create_subscription<VehicleAttitude>(
             "/fmu/out/vehicle_attitude", qos,
             [this](const VehicleAttitude::SharedPtr msg) { attitudeCallback(msg); });
@@ -82,12 +88,19 @@ public:
 
 private:
     // Callback functions
-    void gpsCallback(const VehicleGlobalPosition::SharedPtr msg) {
-        if (!transformations_.isGPSOriginSet()) {
-            transformations_.setGPSOrigin(now(), msg->lat, msg->lon, msg->alt);
-        }
-        state_manager_.setGlobalPosition(transformations_.convertGPSToGlobalPosition(now(), msg->lat, msg->lon, msg->alt));
-    }
+    // void gpsCallback(const VehicleGlobalPosition::SharedPtr msg) {
+    //     if (!transformations_.isGPSOriginSet()) {
+    //         transformations_.setGPSOrigin(now(), msg->lat, msg->lon, msg->alt);
+    //     }
+    //     state_manager_.setGlobalPosition(transformations_.convertGPSToGlobalPosition(now(), msg->lat, msg->lon, msg->alt));
+    // }
+
+    void localPositionCallback(const VehicleLocalPosition::SharedPtr msg)
+    {   
+        //Note that local position refers to coordinates being expressed in cartesian coordinates
+        Stamped3DVector local_position(now(), msg->x, msg->y, msg->z);
+        state_manager_.setGlobalPosition(local_position);        
+    } 
 
     void sensorCombinedCallback(const SensorCombined::SharedPtr msg) {
         Eigen::Vector3d acceleration_local{msg->accelerometer_m_s2[0], msg->accelerometer_m_s2[1], msg->accelerometer_m_s2[2]};
@@ -162,8 +175,8 @@ private:
         Eigen::Vector3d local_error_frd = transformations_.errorGlobalToLocal(global_error_ned, attitude.quaternion());
         
         // Log local error (FRD)
-        RCLCPP_INFO(get_logger(), "Local Error (FRD): x=%.2f, y=%.2f, z=%.2f",
-        local_error_frd.x(), local_error_frd.y(), local_error_frd.z());
+        // RCLCPP_INFO(get_logger(), "Local Error (FRD): x=%.2f, y=%.2f, z=%.2f",
+        // local_error_frd.x(), local_error_frd.y(), local_error_frd.z());
 
 
         double dt = (now() - position.getTime()).seconds();
@@ -206,8 +219,8 @@ private:
                 control_input = Eigen::Vector4d::Zero();
                 break;
         }
-        RCLCPP_INFO(get_logger(), "Control input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
-                    control_input.x(), control_input.y(), control_input.z(), control_input.w());
+        // RCLCPP_INFO(get_logger(), "Control input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
+        //             control_input.x(), control_input.y(), control_input.z(), control_input.w());
         publishAttitudeSetpoint(control_input);
     }
 
@@ -334,7 +347,7 @@ private:
                 result->message = "Drone disarmed.";
             } else if (goal->command_type == "takeoff") {
                 ensureControlLoopRunning(2);
-                Stamped4DVector target(now(), 0.0, 0.0, std::max(goal->target_pose[0], -1.5), goal->yaw);
+                Stamped4DVector target(now(), 0.0, 0.0, std::min(goal->target_pose[0], -1.5), goal->yaw);
                 state_manager_.setTargetPositionProfile(target);
                 result->success = true;
                 result->message = "Drone taking off.";
@@ -376,7 +389,8 @@ private:
     rclcpp::Publisher<VehicleAttitudeSetpoint>::SharedPtr attitude_setpoint_pub_;
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_pub_;
 
-    rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr gps_sub_;
+    //rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr gps_sub_;
+    rclcpp::Subscription<VehicleLocalPosition>::SharedPtr local_position_sub_;
     rclcpp::Subscription<VehicleAttitude>::SharedPtr attitude_sub_;
     rclcpp::Subscription<VehicleStatus>::SharedPtr status_sub_;
     rclcpp::Subscription<interfaces::msg::ManualControlInput>::SharedPtr manual_input_sub_;
