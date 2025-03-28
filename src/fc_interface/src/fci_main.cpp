@@ -1,5 +1,5 @@
 #include <rclcpp/rclcpp.hpp>
-#include "rclcpp_action/rclcpp_action.hpp"
+#include <rclcpp_action/rclcpp_action.hpp>
 
 #include <px4_msgs/msg/offboard_control_mode.hpp>
 #include <px4_msgs/msg/trajectory_setpoint.hpp>
@@ -9,381 +9,265 @@
 #include <px4_msgs/msg/vehicle_attitude.hpp>
 #include <px4_msgs/msg/vehicle_global_position.hpp>
 #include <px4_msgs/msg/vehicle_local_position.hpp>
-#include <px4_msgs/msg/vehicle_command_ack.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
 #include <px4_msgs/msg/sensor_combined.hpp>
+
+#include <interfaces/action/drone_command.hpp>
+#include <interfaces/msg/manual_control_input.hpp>
 
 #include "fci_controller.h"
 #include "fci_state_manager.h"
 #include "fci_transformations.h"
 
-#include <interfaces/action/drone_command.hpp>
-#include <interfaces/msg/manual_control_input.hpp>
-
-
-//https://docs.px4.io/main/en/gps_compass/rtk_gps.html#tuning
-
-
-// cd PX4-Autopilot/ && make px4_sitl gz_x500
-// MicroXRCEAgent udp4 -p 8888
-// cd drone-software && source install/setup.bash && ros2 run fc_interface fci
-// Open qGroundControl
-
-// cd drone-software && source install/setup.bash
-    // ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'arm', target_pose: [0,0,-30], yaw: 0.0}"
-
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
 
-std::vector<std::string> allowed_commands = {"arm", "disarm","takeoff", "goto", "land", "estop", "manual", "manual_aided"};
-
-
-class FlightControllerInterface : public rclcpp::Node
-{
+class FlightControllerInterface : public rclcpp::Node {
 public:
     using DroneCommand = interfaces::action::DroneCommand;
     using GoalHandleDroneCommand = rclcpp_action::ServerGoalHandle<DroneCommand>;
 
+    FlightControllerInterface()
+        : Node("flight_controller_interface"),
+          controller_(transformations_),
+          offboard_setpoint_counter_(0),
+          offboard_mode_set_(false),
+          timeout_threshold_(0.2) {
+        // ROS 2 QoS settings
+        rclcpp::QoS qos(10);
+        qos.reliability(rclcpp::ReliabilityPolicy::BestEffort);
+        qos.durability(rclcpp::DurabilityPolicy::TransientLocal);
 
-    FlightControllerInterface() : Node("flight_controller_interface")
-    {
+        // Publishers
+        offboard_control_mode_pub_ = create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
+        trajectory_setpoint_pub_ = create_publisher<TrajectorySetpoint>("/fmu/in/trajectory_setpoint", 10);
+        bodyrate_setpoint_pub_ = create_publisher<VehicleRatesSetpoint>("/fmu/in/vehicle_rates_setpoint", 10);
+        attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
+        vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
+
+        // Subscribers
+        // gps_sub_ = create_subscription<VehicleGlobalPosition>(
+        //     "/fmu/out/vehicle_global_position", qos,
+        //     [this](const VehicleGlobalPosition::SharedPtr msg) { gpsCallback(msg); });
+
+        local_position_sub_ = create_subscription<VehicleLocalPosition>(
+            "/fmu/out/vehicle_local_position", qos,
+            [this](const VehicleLocalPosition::SharedPtr msg) { localPositionCallback(msg); });
         
-        // ROS2 QoS settings
-        rclcpp::QoS qos_settings(10);
-        qos_settings.reliability(rclcpp::ReliabilityPolicy::BestEffort);
-        qos_settings.durability(rclcpp::DurabilityPolicy::TransientLocal);
+        attitude_sub_ = create_subscription<VehicleAttitude>(
+            "/fmu/out/vehicle_attitude", qos,
+            [this](const VehicleAttitude::SharedPtr msg) { attitudeCallback(msg); });
+        status_sub_ = create_subscription<VehicleStatus>(
+            "/fmu/out/vehicle_status", qos,
+            [this](const VehicleStatus::SharedPtr msg) { vehicleStatusCallback(msg); });
+        manual_input_sub_ = create_subscription<interfaces::msg::ManualControlInput>(
+            "drone/in/manual_input", qos,
+            [this](const interfaces::msg::ManualControlInput::SharedPtr msg) { manualControlInputCallback(msg); });
+        sensor_combined_sub_ = create_subscription<SensorCombined>(
+            "/fmu/out/sensor_combined", qos,
+            [this](const SensorCombined::SharedPtr msg) { sensorCombinedCallback(msg); });
 
-        // Create Publisher
-        offboard_control_mode_publisher_ = this->create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
-        trajectory_setpoint_publisher_ = this->create_publisher<TrajectorySetpoint>("/fmu/in/trajectory_setpoint", 10);
-        bodyrate_setpoint_publisher_ = this->create_publisher<VehicleRatesSetpoint>("/fmu/in/vehicle_rates_setpoint", 10);
-        attitude_setpoint_publisher_ = this->create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
-        vehicle_command_publisher_ = this->create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
-
-        // Create Subscribers
-        drone_state_subscriber_ = this->create_subscription<VehicleGlobalPosition>("/fmu/out/vehicle_global_position", qos_settings, std::bind(&FlightControllerInterface::GPSCallback, this, std::placeholders::_1));
-        drone_attitude_subscriber_ = this->create_subscription<VehicleAttitude>("/fmu/out/vehicle_attitude", qos_settings, std::bind(&FlightControllerInterface::AttitudeCallback, this, std::placeholders::_1));
-        drone_status_subscriber_ = this->create_subscription<VehicleStatus>("/fmu/out/vehicle_status", qos_settings, std::bind(&FlightControllerInterface::VehicleStatusCallback, this, std::placeholders::_1));
-        drone_manual_input_subscriber_ = this->create_subscription<interfaces::msg::ManualControlInput>("drone/in/manual_input", qos_settings, std::bind(&FlightControllerInterface::ManualControlInputCallback, this, std::placeholders::_1));
-        drone_sensor_combined_subscriber_ = this->create_subscription<SensorCombined>("/fmu/out/sensor_combined", qos_settings, std::bind(&FlightControllerInterface::SensorCombinedCallback, this, std::placeholders::_1));
-
-        //drone_local_position_subscriber_ = this->create_subscription<VehicleLocalPosition>("/fmu/out/vehicle_local_position", qos_settings, std::bind(&FlightControllerInterface::PositionNEDCallback, this, std::placeholders::_1)); Removed, as the cube orange does not provide local position data. Only the simulation
-    
         // Action server
-        drone_command_action_server_ = rclcpp_action::create_server<interfaces::action::DroneCommand>(this,"/fmu/in/drone_command",
-        std::bind(&FlightControllerInterface::handle_drone_cmd, this, std::placeholders::_1, std::placeholders::_2),
-        std::bind(&FlightControllerInterface::handle_cancel, this, std::placeholders::_1),
-        std::bind(&FlightControllerInterface::handle_accepted, this, std::placeholders::_1));
+        drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
+            this, "/fmu/in/drone_command",
+            [this](const rclcpp_action::GoalUUID& uuid, std::shared_ptr<const DroneCommand::Goal> goal) {
+                return handleDroneCommand(uuid, goal);
+            },
+            [this](const std::shared_ptr<GoalHandleDroneCommand> goal_handle) {
+                return handleCancel(goal_handle);
+            },
+            [this](const std::shared_ptr<GoalHandleDroneCommand> goal_handle) {
+                handleAccepted(goal_handle);
+            });
 
         // Timers
-        offboard_timer_ = this->create_wall_timer(200ms, std::bind(&FlightControllerInterface::set_Offboardmode, this));
+        offboard_timer_ = create_wall_timer(200ms, [this]() { setOffboardMode(); });
 
-        // Parameters
-        timeout_threshold_ = 0.2; // seconds
-        offboard_mode_set_ = false;
-        offboard_setpoint_counter_ = 0;
-
-        // Node is now initialized
-        RCLCPP_INFO(this->get_logger(), "ControlNode initialized.");
+        RCLCPP_INFO(get_logger(), "FlightControllerInterface initialized.");
     }
 
 private:
     // Callback functions
-    void GPSCallback(const VehicleGlobalPosition::SharedPtr msg)
-    {
-        // Check if origin is set
-        if (!Transform.isGPSOriginSet()) Transform.setGPSOrigin(this->now(), msg->lat, msg->lon, msg->alt);
+    // void gpsCallback(const VehicleGlobalPosition::SharedPtr msg) {
+    //     if (!transformations_.isGPSOriginSet()) {
+    //         transformations_.setGPSOrigin(now(), msg->lat, msg->lon, msg->alt);
+    //     }
+    //     state_manager_.setGlobalPosition(transformations_.convertGPSToGlobalPosition(now(), msg->lat, msg->lon, msg->alt));
+    // }
 
-        //Convert GPS to NED, then update global data with the latest NED position
-        StateManager.setPositionNED(Transform.convertGPSToNED(this->now(),msg->lat, msg->lon, msg->alt));
+    void localPositionCallback(const VehicleLocalPosition::SharedPtr msg)
+    {   
+        //Note that local position refers to coordinates being expressed in cartesian coordinates
+        Stamped3DVector local_position(now(), msg->x, msg->y, msg->z);
+        state_manager_.setGlobalPosition(local_position);        
+    } 
 
+    void sensorCombinedCallback(const SensorCombined::SharedPtr msg) {
+        Eigen::Vector3d acceleration_local{msg->accelerometer_m_s2[0], msg->accelerometer_m_s2[1], msg->accelerometer_m_s2[2]};
+        Stamped3DVector acceleration_global = transformations_.accelerationLocalToGlobal(now(), state_manager_.getAttitude().quaternion(), acceleration_local);
+        
+        acceleration_global.vector().z() += 9.81; // Remove gravity
+
+        state_manager_.setGlobalAcceleration(acceleration_global);
     }
 
-    void SensorCombinedCallback(const SensorCombined::SharedPtr msg)
-    {
-        //Convert FRD accel to ENU
-        AccelerationNED acceleration_NED = Transform.AccelFRDToNED(this->now(), StateManager.getAttitude(), msg->accelerometer_m_s2[0], msg->accelerometer_m_s2[1], msg->accelerometer_m_s2[2]);
-
-        // Remove the gravity component
-        acceleration_NED.z += 9.81;
-
-        // Update global data with the latest acceleration data
-        StateManager.setAccelerationNED(acceleration_NED);
-
-        // print the acceleration data
-        //RCLCPP_INFO(this->get_logger(), "Received acceleration data: x=%.2f, y=%.2f, z=%.2f", acceleration_NED.x, acceleration_NED.y, acceleration_NED.z);
+    void attitudeCallback(const VehicleAttitude::SharedPtr msg) {
+        StampedQuaternion attitude(now(), Eigen::Quaterniond(msg->q[0], msg->q[1], msg->q[2], msg->q[3]));
+        state_manager_.setAttitude(attitude);
     }
 
-    /* void PositionNEDCallback(const VehicleLocalPosition::SharedPtr msg)
-    {
-        // Make a thread-safe copy of the data
-        //PositionNED position_data = {this->now(), msg->x, msg->y, msg->z};
-
-        // Update global data with the latest local position
-        //StateManager.setPositionNED(position_data); It should not be used
-        //RCLCPP_INFO(this->get_logger(), "Received local position data: x=%.2f, y=%.2f, z=%.2f", msg->x, msg->y, msg->z);
-    } */
-
-    void AttitudeCallback(const VehicleAttitude::SharedPtr msg)
-    {
-        // Update global data with the latest attitude
-        StateManager.setAttitude({this->now(), msg->q[0], msg->q[1], msg->q[2], msg->q[3]});
-    }
-
-    void VehicleStatusCallback(const VehicleStatus::SharedPtr msg)
-    {
-        // Get a copy of the current drone state
-        DroneState drone_state = StateManager.getDroneState();
-
-        // Rewrite the received data
-        drone_state.timestamp = this->now();
+    void vehicleStatusCallback(const VehicleStatus::SharedPtr msg) {
+        DroneState drone_state = state_manager_.getDroneState();
+        drone_state.timestamp = now();
         drone_state.arming_state = (msg->arming_state == 2) ? ArmingState::ARMED : ArmingState::DISARMED;
-
-        // Update global data with the latest drone state
-        StateManager.setDroneState(drone_state);
+        state_manager_.setDroneState(drone_state);
     }
 
-    void ManualControlInputCallback(const interfaces::msg::ManualControlInput::SharedPtr msg)
-    {
-        //Read the manual control input
-        ManualControlInput manual_control_input = StateManager.getManualControlInput();
-
-        // Update the received data
-        manual_control_input = {this->now(), static_cast<float>(Controller.map_norm_to_angle(msg->roll)), static_cast<float>(Controller.map_norm_to_angle(msg->pitch)), manual_control_input.yaw + static_cast<float>(Controller.map_norm_to_angle(msg->yaw_velocity)), msg->thrust};
-
-        // Update global data with the latest manual control input
-        StateManager.setManualControlInput(manual_control_input);
-
+    void manualControlInputCallback(const interfaces::msg::ManualControlInput::SharedPtr msg) {
+        Stamped4DVector manual_input = state_manager_.getManualControlInput();
+        manual_input.setTime(now());
+        manual_input.setX(controller_.mapNormToAngle(msg->roll));
+        manual_input.setY(controller_.mapNormToAngle(msg->pitch));
+        manual_input.setZ(manual_input.z() + controller_.mapNormToAngle(msg->yaw_velocity * yaw_sensitivity_));
+        manual_input.setW(msg->thrust);
+        state_manager_.setManualControlInput(manual_input);
     }
 
-    // Control loop and other control logic
-    void set_Offboardmode(){
-
-        publish_offboard_control_mode();
-
-        if(!offboard_mode_set_){
-
+    // Offboard mode handling
+    void setOffboardMode() {
+        publishOffboardControlMode();
+        if (!offboard_mode_set_ && offboard_setpoint_counter_ < 11) {
             if (offboard_setpoint_counter_ == 10) {
-                this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
+                publishVehicleCommand(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
                 offboard_mode_set_ = true;
             }
-            
-            if (offboard_setpoint_counter_ < 11) {
-                offboard_setpoint_counter_++;
-            }
+            offboard_setpoint_counter_++;
         }
     }
 
-    void publish_offboard_control_mode()
-    {
+    void publishOffboardControlMode() {
         OffboardControlMode msg{};
         msg.position = false;
         msg.velocity = false;
         msg.acceleration = false;
         msg.attitude = true;
         msg.body_rate = false;
-        msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
-        offboard_control_mode_publisher_->publish(msg);
+        msg.timestamp = get_clock()->now().nanoseconds() / 1000;
+        offboard_control_mode_pub_->publish(msg);
     }
 
-    ControlInput manualMode()
-    {
-        // Check for connection to the manual control input
-
-        // read the manual control input
-        ManualControlInput manual_control_input = StateManager.getManualControlInput();
-
-
-        RCLCPP_INFO(this->get_logger(), "Control input: thrust=%.2f",  manual_control_input.thrust);
-        
-        
-        // Set the manual control input as the control input
-        return {manual_control_input.roll, manual_control_input.pitch, manual_control_input.yaw, manual_control_input.thrust};
+    // Control modes
+    Eigen::Vector4d manualMode() {
+        Stamped4DVector manual_input = state_manager_.getManualControlInput();
+        return {manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w()};
     }
 
-    ControlInput controlMode()
-    {
-        // Target position
-        TargetPositionProfile target_position_profile = StateManager.getTargetPositionProfile();
-        std::vector<double> target_position = {target_position_profile.x, target_position_profile.y, target_position_profile.z};
+    Eigen::Vector4d controlMode() {
+        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+        Stamped3DVector position = state_manager_.getGlobalPosition();
+        StampedQuaternion attitude = state_manager_.getAttitude();
+        Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
 
-        // Get the current position and attitude data
-        PositionNED position_data = StateManager.getPositionNED();
-        std::vector<double> NED_position = {position_data.x, position_data.y, position_data.z};
+        // Calculate global position error in NED frame
+        Eigen::Vector3d global_error_ned = target_position_3d.vector() - position.vector();
 
-        AccelerationNED accelerationNED = StateManager.getAccelerationNED();
-        std::vector<double> acceleration_NED = {accelerationNED.x, accelerationNED.y, -accelerationNED.z};
+        // Transform global error to local FRD frame using attitude
+        Eigen::Vector3d local_error_frd = transformations_.errorGlobalToLocal(global_error_ned, attitude.quaternion());
+        
+        // Log local error (FRD)
+        // RCLCPP_INFO(get_logger(), "Local Error (FRD): x=%.2f, y=%.2f, z=%.2f",
+        // local_error_frd.x(), local_error_frd.y(), local_error_frd.z());
 
-        std::vector<double> target_acceleration_NED = {0.0, 0.0, -1.5};
 
-        Attitude attitude_data = StateManager.getAttitude();
-        std::vector<double> attitude = {attitude_data.qw, attitude_data.qx, attitude_data.qy, attitude_data.qz};
-
-        // Callculate the time since the last GPS message
-        auto now = this->now();
-        double dt = (now -  position_data.timestamp).seconds();
-
-        // Check for timeout --Remove position_data.received_local_position_data_
-        if ( dt > timeout_threshold_)
-        {
-            //Implement logic to handle missing data
-
-            RCLCPP_WARN(this->get_logger(), "No data received in the last %.2f seconds!", timeout_threshold_);
-            //received_local_position_data_ = false; // Reset flag to avoid repeated warnings
-
-            return {0.0, 0.0, 0.0, 0.0}; //! Handle at some point...
+        double dt = (now() - position.getTime()).seconds();
+        if (dt > timeout_threshold_) {
+            RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", timeout_threshold_);
+            return Eigen::Vector4d::Zero();
         }
-       
-        // Control loop
-        std::vector<double> controller_output = Controller.PID_control(dt, previous_pose_error_, integral_pose_error_, NED_position, attitude, target_position);
 
-        //std::vector<double> acceleration_controller_output = Controller.Acceleration_Controller(dt, previous_acceleration_error, attitude_data, acceleration_NED, target_acceleration_NED);
-
-        // log accel 3 control input 3
-        //std::cout << "Thrust control input: " << acceleration_controller_output[3] << std::endl;
-
-        // set attiude setpoint
-        return {controller_output[0], controller_output[1], controller_output[2], controller_output[3]};
-        
+        Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
+        return output;
     }
 
-    ControlInput manualAidedMode()
-    {
-        // Get user input
-        ManualControlInput manual_control_input = StateManager.getManualControlInput();
+    Eigen::Vector4d manualAidedMode() {
+        Stamped4DVector manual_input = state_manager_.getManualControlInput();
+        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+        target_profile.setZ(target_profile.z() + manual_input.w() / 10.0);
+        state_manager_.setTargetPositionProfile(target_profile);
+        Stamped3DVector position = state_manager_.getGlobalPosition();
+        StampedQuaternion attitude = state_manager_.getAttitude();
+        Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
 
-        // Target position
-        TargetPositionProfile target_position_profile = StateManager.getTargetPositionProfile();
-        target_position_profile.z += manual_control_input.thrust/10.0;
-        StateManager.setTargetPositionProfile(target_position_profile);
-        std::vector<double> target_position = {target_position_profile.x, target_position_profile.y, target_position_profile.z};
-        
-        // Get the current position and attitude data
-        PositionNED position_data = StateManager.getPositionNED();
-        std::vector<double> NED_position = {position_data.x, position_data.y, position_data.z};
-
-        Attitude attitude_data = StateManager.getAttitude();
-        std::vector<double> attitude = {attitude_data.qw, attitude_data.qx, attitude_data.qy, attitude_data.qz};
-
-        // Callculate the time since the last GPS message
-        auto now = this->now();
-        double dt = (now -  position_data.timestamp).seconds();
-
-        // Check for timeout --Remove position_data.received_local_position_data_
-        if ( dt > timeout_threshold_)
-        {
-            //Implement logic to handle missing data
-
-            RCLCPP_WARN(this->get_logger(), "No data received in the last %.2f seconds!", timeout_threshold_);
-            //received_local_position_data_ = false; // Reset flag to avoid repeated warnings
-
-            return {0.0, 0.0, 0.0, 0.0}; //! Handle at some point...
+        double dt = (now() - position.getTime()).seconds();
+        if (dt > timeout_threshold_) {
+            RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", timeout_threshold_);
+            return Eigen::Vector4d::Zero();
         }
-       
-        // Control loop
-        std::vector<double> controller_output = Controller.PID_control(dt, previous_pose_error_, integral_pose_error_, NED_position, attitude, target_position);
 
-        return {manual_control_input.roll, manual_control_input.pitch, manual_control_input.yaw, controller_output[3]};
+        Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
+        return {manual_input.x(), manual_input.y(), manual_input.z(), output.w()};
     }
 
-    void controlLoop(int mode){
-        
-        ControlInput control_input;
-
+    void controlLoop(int mode) {
+        Eigen::Vector4d control_input;
         switch (mode) {
-            case 0:
-                // Manual mode
-                control_input = manualMode();
-                break;
-            case 1:
-                // Manual aided mode
-                control_input = manualAidedMode();
-                break;
-            case 2:
-                // Control mode
-                control_input = controlMode();
-                break;
+            case 0: control_input = manualMode(); break;
+            case 1: control_input = manualAidedMode(); break;
+            case 2: control_input = controlMode(); break;
             default:
-                RCLCPP_WARN(this->get_logger(), "Unknown control mode: %d", mode);
+                RCLCPP_WARN(get_logger(), "Unknown control mode: %d", mode);
+                control_input = Eigen::Vector4d::Zero();
                 break;
         }
-
-        //print the control input
-        RCLCPP_INFO(this->get_logger(), "Control input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f", control_input.roll, control_input.pitch, control_input.yaw, control_input.thrust);
-        publish_attitude_setpoint(control_input.roll, control_input.pitch, control_input.yaw, control_input.thrust);
+        // RCLCPP_INFO(get_logger(), "Control input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
+        //             control_input.x(), control_input.y(), control_input.z(), control_input.w());
+        publishAttitudeSetpoint(control_input);
     }
 
-
-    void cleanUpControlLoop()
-    {
-       // Try to stop all control loops
+    void cleanupControlLoop() {
         if (control_timer_) {
             try {
                 control_timer_->cancel();
-                RCLCPP_INFO(this->get_logger(), "Control loop successfully stopped.");
-            } catch (const rclcpp::exceptions::RCLError &e) {
-                RCLCPP_ERROR(this->get_logger(), "Error while stopping control loop: %s", e.what());
+                RCLCPP_INFO(get_logger(), "Control loop stopped.");
+            } catch (const rclcpp::exceptions::RCLError& e) {
+                RCLCPP_ERROR(get_logger(), "Error stopping control loop: %s", e.what());
             }
-        }
-
-    }
-
-    // Helper functions 
-    void ensureControlLoopRunning(int mode)
-    {
-        // Get the current state of the drone
-        DroneState drone_state = StateManager.getDroneState();
-
-       //Check if the control loop is running
-        if (!control_timer_ && drone_state.arming_state == ArmingState::ARMED)
-        {
-            // Start the control loop
-            control_timer_ = this->create_wall_timer(10ms, [this, mode]() { this->controlLoop(mode); });
-        }
-        else {
-            RCLCPP_WARN(this->get_logger(), "Control loop is already running or the drone is not armed.");
+            control_timer_.reset();
         }
     }
 
-    // Commander functions
-    void arm()
-    {
-        // Publish the arm command
-        RCLCPP_INFO(this->get_logger(), "Sending arm command...");
-        publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0, 0.0);
+    void ensureControlLoopRunning(int mode) {
+        DroneState drone_state = state_manager_.getDroneState();
+        if (!control_timer_ && drone_state.arming_state == ArmingState::ARMED) {
+            control_timer_ = create_wall_timer(10ms, [this, mode]() { controlLoop(mode); });
+            RCLCPP_INFO(get_logger(), "Control loop started with mode: %d", mode);
+        } else if (!control_timer_) {
+            RCLCPP_WARN(get_logger(), "Cannot start control loop: drone not armed.");
+        }
     }
 
-    void disarm(int command = 0)
-    {
-        // Publish the disarm command, command = 0 for disarm and 1 for kill
-        double param2 = command == 1 ? 21196.0 : 0.0; 
-
-        RCLCPP_INFO(this->get_logger(), "Sending disarm command...");
-        publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0, param2);
-
+    // Command functions
+    void arm() {
+        RCLCPP_INFO(get_logger(), "Sending arm command...");
+        publishVehicleCommand(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0, 0.0);
     }
 
-    void publish_attitude_setpoint(double roll, double pitch, double yaw, double thrust)
-    {
-        //Source: https://docs.px4.io/main/en/msg_docs/VehicleAttitudeSetpoint.html
+    void disarm(bool kill = false) {
+        float param2 = kill ? 21196.0 : 0.0;
+        RCLCPP_INFO(get_logger(), "Sending disarm command (kill=%d)...", kill);
+        publishVehicleCommand(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0, param2);
+    }
 
-        // Convert the Euler angles to quaternions
-        std::vector<double> q = Transform.euler_to_quaternion(roll, pitch, yaw);
-
+    void publishAttitudeSetpoint(const Eigen::Vector4d& input) {
+        Eigen::Quaterniond q = transformations_.eulerToQuaternion(input.x(), input.y(), input.z());
         VehicleAttitudeSetpoint msg{};
-        msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
-        msg.q_d = {static_cast<float>(q[0]), static_cast<float>(q[1]), static_cast<float>(q[2]), static_cast<float>(q[3])};
-        msg.thrust_body = {0.0, 0.0, static_cast<float>(thrust)};
-
-        //msg.yaw_sp_move_rate = 0.0;
-        //msg.reset_integral = false;
-        //msg.fw_control_yaw_wheel = false;
-        
-        attitude_setpoint_publisher_->publish(msg);
+        msg.timestamp = get_clock()->now().nanoseconds() / 1000;
+        msg.q_d = {static_cast<float>(q.w()), static_cast<float>(q.x()), static_cast<float>(q.y()), static_cast<float>(q.z())};
+        msg.thrust_body = {0.0f, 0.0f, static_cast<float>(input.w())};
+        attitude_setpoint_pub_->publish(msg);
     }
 
-    void publish_vehicle_command(uint16_t command, float param1, float param2)
-    {
+    void publishVehicleCommand(uint16_t command, float param1, float param2) {
         VehicleCommand msg{};
         msg.param1 = param1;
         msg.param2 = param2;
@@ -393,283 +277,145 @@ private:
         msg.source_system = 1;
         msg.source_component = 1;
         msg.from_external = true;
-        msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
-        vehicle_command_publisher_->publish(msg);
+        msg.timestamp = get_clock()->now().nanoseconds() / 1000;
+        vehicle_command_pub_->publish(msg);
     }
 
-    // Action server functions - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-    rclcpp_action::GoalResponse handle_drone_cmd(
-        [[maybe_unused]] const rclcpp_action::GoalUUID &uuid,
-        std::shared_ptr<const DroneCommand::Goal> goal)
-    {
-        RCLCPP_INFO(this->get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
+    // Action server handlers
+    rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID& /*uuid*/,
+                                                   std::shared_ptr<const DroneCommand::Goal> goal) {
+        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "manual", "manual_aided"};
+        RCLCPP_INFO(get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
 
-        // Read state of the drone
-        DroneState drone_state = StateManager.getDroneState();
-
-        // Validate command_type by checking if it is in the allowed_commands list
-        if (std::find(allowed_commands.begin(), allowed_commands.end(), goal->command_type) == allowed_commands.end())
-        {
-            RCLCPP_WARN(this->get_logger(), "Rejected invalid command_type: %s", goal->command_type.c_str());
+        DroneState drone_state = state_manager_.getDroneState();
+        if (std::find(allowed_commands.begin(), allowed_commands.end(), goal->command_type) == allowed_commands.end()) {
+            RCLCPP_WARN(get_logger(), "Rejected invalid command_type: %s", goal->command_type.c_str());
             return rclcpp_action::GoalResponse::REJECT;
         }
 
-        // Validate if the drone is already armed
-        if (goal->command_type == "arm")
-        {
-            if (drone_state.arming_state == ArmingState::ARMED)
-            {
-                RCLCPP_WARN(this->get_logger(), "Rejected goal: drone is already armed.");
-                return rclcpp_action::GoalResponse::REJECT;
-            }
+        if (goal->command_type == "arm" && drone_state.arming_state == ArmingState::ARMED) {
+            RCLCPP_WARN(get_logger(), "Rejected: drone already armed.");
+            return rclcpp_action::GoalResponse::REJECT;
         }
-        else if (goal->command_type == "disarm")
-        {
-            if (drone_state.arming_state == ArmingState::DISARMED)
-            {
-                RCLCPP_WARN(this->get_logger(), "Rejected goal: drone is already disarmed.");
-                return rclcpp_action::GoalResponse::REJECT;
-            }
+        if (goal->command_type == "disarm" && drone_state.arming_state == ArmingState::DISARMED) {
+            RCLCPP_WARN(get_logger(), "Rejected: drone already disarmed.");
+            return rclcpp_action::GoalResponse::REJECT;
         }
-
-        // If "takeoff", validate the pose and yaw
-        if (goal->command_type == "takeoff")
-        {
-            if (goal->target_pose.size() != 1)
-            {
-                RCLCPP_WARN(this->get_logger(), "Rejected goal: target_pose must have exactly 1 element.");
-                return rclcpp_action::GoalResponse::REJECT;
-            }
-            else if (drone_state.arming_state != ArmingState::ARMED) // Drone is only armed when armed state = 2
-            {
-                RCLCPP_WARN(this->get_logger(), "Rejected goal: drone must be armed.");
-                return rclcpp_action::GoalResponse::REJECT;
-            }
+        if (goal->command_type == "takeoff" && (goal->target_pose.size() != 1 || drone_state.arming_state != ArmingState::ARMED)) {
+            RCLCPP_WARN(get_logger(), "Rejected: invalid takeoff parameters or drone not armed.");
+            return rclcpp_action::GoalResponse::REJECT;
         }
-
-        // If "goto", validate the pose and yaw
-        if (goal->command_type == "goto")
-        {
-            if (goal->target_pose.size() != 3)
-            {
-                RCLCPP_WARN(this->get_logger(), "Rejected goal: target_pose must have exactly 3 elements.");
-                return rclcpp_action::GoalResponse::REJECT;
-            }
-            else if (drone_state.arming_state != ArmingState::ARMED) // Drone is only armed when armed state = 2
-            {
-                RCLCPP_WARN(this->get_logger(), "Rejected goal: drone must be armed.");
-                return rclcpp_action::GoalResponse::REJECT;
-            }
+        if (goal->command_type == "goto" && (goal->target_pose.size() != 3 || drone_state.arming_state != ArmingState::ARMED)) {
+            RCLCPP_WARN(get_logger(), "Rejected: invalid goto parameters or drone not armed.");
+            return rclcpp_action::GoalResponse::REJECT;
         }
-
-        // If "manual"
-        if (goal->command_type == "manual")
-        {
-            if (drone_state.flight_mode == FlightMode::MANUAL)
-            {
-                RCLCPP_WARN(this->get_logger(), "Rejected goal: drone is already in manual mode.");
-                return rclcpp_action::GoalResponse::REJECT;
-            }
-            else if (drone_state.arming_state != ArmingState::ARMED) // Drone is only armed when armed state = 2
-            {   
-
-                RCLCPP_WARN(this->get_logger(), "Rejected goal: drone must be armed. DO you get that.");
-                return rclcpp_action::GoalResponse::REJECT;
-            }
-
+        if (goal->command_type == "manual" && (drone_state.flight_mode == FlightMode::MANUAL || drone_state.arming_state != ArmingState::ARMED)) {
+            RCLCPP_WARN(get_logger(), "Rejected: already in manual mode or drone not armed.");
+            return rclcpp_action::GoalResponse::REJECT;
         }
 
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     }
 
-    rclcpp_action::CancelResponse handle_cancel(
-        [[maybe_unused]] const std::shared_ptr<GoalHandleDroneCommand> goal_handle)
-    {
-        RCLCPP_INFO(this->get_logger(), "Received request to cancel goal");
+    rclcpp_action::CancelResponse handleCancel(const std::shared_ptr<GoalHandleDroneCommand> /*goal_handle*/) {
+        RCLCPP_INFO(get_logger(), "Received request to cancel goal");
         return rclcpp_action::CancelResponse::ACCEPT;
     }
 
-    void handle_accepted(const std::shared_ptr<GoalHandleDroneCommand> goal_handle)
-    {
-        // Use a separate thread to execute the goal
-        std::thread{std::bind(&FlightControllerInterface::execute, this, std::placeholders::_1), goal_handle}.detach();
+    void handleAccepted(const std::shared_ptr<GoalHandleDroneCommand> goal_handle) {
+        std::thread([this, goal_handle]() { execute(goal_handle); }).detach();
     }
 
-    void execute(const std::shared_ptr<GoalHandleDroneCommand> goal_handle)
-    {
-        RCLCPP_INFO(this->get_logger(), "Executing command");
-
+    void execute(const std::shared_ptr<GoalHandleDroneCommand> goal_handle) {
         const auto goal = goal_handle->get_goal();
-        auto feedback = std::make_shared<DroneCommand::Feedback>();
         auto result = std::make_shared<DroneCommand::Result>();
 
-        // Get state of the drone
-        DroneState drone_state = StateManager.getDroneState();
-
-        try
-        {
-            if (goal->command_type == "estop")
-            {
-                // disarm the drone
-                disarm(1);
-
-                // Ensure the control loop is stopped
-                cleanUpControlLoop();
-
+        try {
+            if (goal->command_type == "estop") {
+                disarm(true);
+                cleanupControlLoop();
                 result->success = true;
-                result->message = "Drone disarmed successfully.";
-            }
-
-            else if (goal->command_type == "arm")
-            {
-                // arm the drone
+                result->message = "Emergency stop executed.";
+            } else if (goal->command_type == "arm") {
                 arm();
-
                 result->success = true;
-                result->message = "Drone armed successfully.";
-            }
-            else if (goal->command_type == "disarm")
-            {
-                // disarm the drone
+                result->message = "Drone armed.";
+            } else if (goal->command_type == "disarm") {
                 disarm();
-
-                // Ensure the control loop is stopped
-                cleanUpControlLoop();
-
+                cleanupControlLoop();
                 result->success = true;
-                result->message = "Drone disarmed successfully.";
-            }
-            else if (goal->command_type == "takeoff")
-            {
-                // Ensure the control loop is running
+                result->message = "Drone disarmed.";
+            } else if (goal->command_type == "takeoff") {
                 ensureControlLoopRunning(2);
-
-                // Read the target pose and yaw
-                float z = goal->target_pose[0];
-                if (z > -1.5) z = -1.5;
-
-                std::vector<double> target_pose = {0.0, 0.0, goal->target_pose[0]};
-                double target_yaw = goal->yaw;
-
-                // Set the target position profile in the global data space
-                TargetPositionProfile target_position_profile = {this->now(), target_pose[0], target_pose[1], target_pose[2], target_yaw};
-                StateManager.setTargetPositionProfile(target_position_profile);
-
+                Stamped4DVector target(now(), 0.0, 0.0, std::min(goal->target_pose[0], -1.5), goal->yaw);
+                state_manager_.setTargetPositionProfile(target);
                 result->success = true;
-                result->message = "Drone is taking off.";
-            }
-            else if (goal->command_type == "goto")
-            {
-                // Ensure the control loop is running
+                result->message = "Drone taking off.";
+            } else if (goal->command_type == "goto") {
                 ensureControlLoopRunning(2);
-
-                // Read the target pose and yaw
-                std::vector<double> target_pose = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
-                double target_yaw = goal->yaw;
-
-                // Set the target position profile in the global data space
-                TargetPositionProfile target_position_profile = {this->now(), target_pose[0], target_pose[1], target_pose[2], target_yaw};
-                StateManager.setTargetPositionProfile(target_position_profile);
-               
+                Stamped4DVector target(now(), goal->target_pose[0], goal->target_pose[1], goal->target_pose[2], goal->yaw);
+                state_manager_.setTargetPositionProfile(target);
                 result->success = true;
-                result->message = "Drone is moving to the target position.";
-            }
-            else if (goal->command_type == "manual")
-            {
-                // Ensure the control loop is stopped
-                cleanUpControlLoop();
-
-                // Listen to topic for manual control
+                result->message = "Drone moving to target position.";
+            } else if (goal->command_type == "manual") {
+                cleanupControlLoop();
                 ensureControlLoopRunning(0);
-
                 result->success = true;
-                result->message = "Drone is in manual mode.";
-            }
-            else if (goal->command_type == "manual_aided")
-            {
-                // Ensure the control loop is running
+                result->message = "Drone in manual mode.";
+            } else if (goal->command_type == "manual_aided") {
                 ensureControlLoopRunning(1);
-
                 result->success = true;
-                result->message = "Drone is in manual mode with assistance.";
-            }
-            else
-            {
+                result->message = "Drone in manual aided mode.";
+            } else {
                 result->success = false;
-                result->message = "Invalid command type.";
+                result->message = "Invalid command.";
             }
-
-
-
-        }
-        catch (const std::exception &e)
-        {
-            RCLCPP_ERROR(this->get_logger(), "Exception during goal execution: %s", e.what());
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(get_logger(), "Execution error: %s", e.what());
             result->success = false;
-            result->message = "An error occurred during execution.";
+            result->message = "Execution failed.";
         }
 
-        // Mark goal as succeeded if ROS is still running
-        if (rclcpp::ok())
-        {
+        if (rclcpp::ok()) {
             goal_handle->succeed(result);
-            RCLCPP_INFO(this->get_logger(), "Goal execution completed.");
+            RCLCPP_INFO(get_logger(), "Goal execution completed.");
         }
-
-       
     }
 
     // Member variables
-    rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
-    rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_publisher_;
-    rclcpp::Publisher<VehicleRatesSetpoint>::SharedPtr bodyrate_setpoint_publisher_;
-    rclcpp::Publisher<VehicleAttitudeSetpoint>::SharedPtr attitude_setpoint_publisher_;
-    rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
+    rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_pub_;
+    rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_pub_;
+    rclcpp::Publisher<VehicleRatesSetpoint>::SharedPtr bodyrate_setpoint_pub_;
+    rclcpp::Publisher<VehicleAttitudeSetpoint>::SharedPtr attitude_setpoint_pub_;
+    rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_pub_;
 
-    rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr drone_state_subscriber_;
-    rclcpp::Subscription<VehicleAttitude>::SharedPtr drone_attitude_subscriber_;
-    rclcpp::Subscription<VehicleLocalPosition>::SharedPtr drone_local_position_subscriber_;
-    rclcpp::Subscription<VehicleStatus>::SharedPtr drone_status_subscriber_;
-    rclcpp::Subscription<interfaces::msg::ManualControlInput>::SharedPtr drone_manual_input_subscriber_;
-    rclcpp::Subscription<SensorCombined>::SharedPtr drone_sensor_combined_subscriber_;
+    //rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr gps_sub_;
+    rclcpp::Subscription<VehicleLocalPosition>::SharedPtr local_position_sub_;
+    rclcpp::Subscription<VehicleAttitude>::SharedPtr attitude_sub_;
+    rclcpp::Subscription<VehicleStatus>::SharedPtr status_sub_;
+    rclcpp::Subscription<interfaces::msg::ManualControlInput>::SharedPtr manual_input_sub_;
+    rclcpp::Subscription<SensorCombined>::SharedPtr sensor_combined_sub_;
 
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;
-    rclcpp_action::Server<interfaces::action::DroneCommand>::SharedPtr drone_command_action_server_;
+    rclcpp_action::Server<DroneCommand>::SharedPtr drone_command_server_;
 
+    FCI_Transformations transformations_;
+    FCI_StateManager state_manager_;
+    FCI_Controller controller_;
 
-    //Class Init
-    FCI_Controller Controller;
-    FCI_StateManager StateManager;
-    FCI_Transformations Transform;
+    PositionError prev_position_error_;
+    AccelerationError prev_acceleration_error_;
+    static constexpr float yaw_sensitivity_ = 1.0f / 20.0f;
 
-    // Mutex and variables for attitude data
-    std::mutex attitude_data_mutex_;
-    VehicleAttitude::SharedPtr last_attitude_msg_;
-    rclcpp::Time last_attitude_msg_time_;
-    bool received_attitude_data_;
-
-    // Controller variables
-    std::vector<double> previous_pose_error_ = {0.0, 0.0, 0.0};
-    std::vector<double> integral_pose_error_ = {0.0, 0.0, 0.0};
-
-    AccelerationError previous_acceleration_error{};
-
-    
-
-    // Mode variables
     int offboard_setpoint_counter_;
     bool offboard_mode_set_;
-
-    // Parameters
     double timeout_threshold_;
 };
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char* argv[]) {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<FlightControllerInterface>();
-    rclcpp::spin(node);
+    rclcpp::spin(std::make_shared<FlightControllerInterface>());
     rclcpp::shutdown();
     return 0;
 }
