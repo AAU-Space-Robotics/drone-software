@@ -54,6 +54,11 @@ Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
     previous_position_error.Y.error = position_error_ned.y();
     previous_position_error.Z.error = position_error_ned.z();
 
+    // error in position
+    std::cout << "error: " << position_error_ned.transpose() << std::endl;
+    std::cout << "local error: " << position_error_frd.transpose() << std::endl;
+    std::cout << "Control: " << roll << ", " << pitch << ", " << thrust << std::endl;
+
     // Return control outputs (roll, pitch, yaw, thrust)
     return {roll, -pitch, 0.0, thrust};
 }
@@ -80,17 +85,17 @@ Eigen::Vector4d FCI_Controller::accelerationControl(double sample_time,
                                                     previous_acceleration_error.Z.error_integral);
 
     // Calculate control outputs
-    double roll = attitude_pid_gains_.roll.Kp * acceleration_error_frd.y() + 
-                  attitude_pid_gains_.roll.Ki * integral_acceleration_error_frd.y() + 
-                  attitude_pid_gains_.roll.Kd * acceleration_error_frd_d.y();
+    double roll = acceleration_pid_gains_.roll.Kp * acceleration_error_frd.y() + 
+    acceleration_pid_gains_.roll.Ki * integral_acceleration_error_frd.y() + 
+    acceleration_pid_gains_.roll.Kd * acceleration_error_frd_d.y();
 
-    double pitch = attitude_pid_gains_.pitch.Kp * acceleration_error_frd.x() + 
-                   attitude_pid_gains_.pitch.Ki * integral_acceleration_error_frd.x() + 
-                   attitude_pid_gains_.pitch.Kd * acceleration_error_frd_d.x();
+    double pitch = acceleration_pid_gains_.pitch.Kp * acceleration_error_frd.x() + 
+    acceleration_pid_gains_.pitch.Ki * integral_acceleration_error_frd.x() + 
+    acceleration_pid_gains_.pitch.Kd * acceleration_error_frd_d.x();
 
-    double thrust = attitude_pid_gains_.thrust.Kp * acceleration_error_frd.z() + 
-                    attitude_pid_gains_.thrust.Ki * integral_acceleration_error_frd.z() + 
-                    attitude_pid_gains_.thrust.Kd * acceleration_error_frd_d.z();
+    double thrust = acceleration_pid_gains_.thrust.Kp * acceleration_error_frd.z() + 
+    acceleration_pid_gains_.thrust.Ki * integral_acceleration_error_frd.z() + 
+    acceleration_pid_gains_.thrust.Kd * acceleration_error_frd_d.z();
 
     // Anti-windup for thrust
     if (thrust >= 1.0 || thrust <= -1.0) {
@@ -107,8 +112,13 @@ Eigen::Vector4d FCI_Controller::accelerationControl(double sample_time,
     previous_acceleration_error.Y.error = acceleration_error_frd.y();
     previous_acceleration_error.Z.error = acceleration_error_frd.z();
 
+    // print acceleration and thrust
+    std::cout << "Acceleration: " << acceleration_frd.vector().transpose() << std::endl;
+    std::cout << "error: " << acceleration_error_frd.transpose() << std::endl;
+    std::cout << "Thrust: " << thrust << std::endl;
+
     // Return control outputs (roll, pitch, yaw, thrust)
-    return {roll, -pitch, 0.0, thrust};
+    return {0.0, 0.0, 0.0, thrust};
 }
 
 double FCI_Controller::mapNormToAngle(double norm) const {

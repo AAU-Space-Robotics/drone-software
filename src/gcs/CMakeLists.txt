@@ -84,6 +84,7 @@ add_executable(gcs_node
 install(PROGRAMS
   script/manual_controller.py
   script/manual_arrow_controller.py
+  script/MotionCaptureReceiver.py
   DESTINATION lib/${PROJECT_NAME}/scripts
 )
 

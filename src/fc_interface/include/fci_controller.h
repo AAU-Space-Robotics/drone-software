@@ -19,7 +19,13 @@ struct PIDControllerGains {
     PIDGains pitch{0.1, 0.0, 0.05};
     PIDGains roll{0.1, 0.0, 0.05};
     PIDGains yaw{0.1, 0.0, 0.05};
-    PIDGains thrust{5.0, 0.2, 1.0};
+    PIDGains thrust{1.5, 0.0, 0.06};
+};
+
+struct AccelerationControllerGains {
+    PIDGains roll{0.1, 0.0, 0.05};
+    PIDGains pitch{0.1, 0.0, 0.05};
+    PIDGains thrust{0.4, 0.0, 0.0};
 };
 
 class FCI_Controller {
@@ -45,6 +51,7 @@ public:
 private:
     const FCI_Transformations& transformations_; // Reference to transformations utility
     PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust
+    AccelerationControllerGains acceleration_pid_gains_; // PID gains for acceleration
 
     // Constrain control outputs
     double constrainAngle(double angle) const;

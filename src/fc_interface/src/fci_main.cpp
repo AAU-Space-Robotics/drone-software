@@ -14,6 +14,7 @@
 
 #include <interfaces/action/drone_command.hpp>
 #include <interfaces/msg/manual_control_input.hpp>
+#include <interfaces/msg/motion_capture_pose.hpp>
 
 #include "fci_controller.h"
 #include "fci_state_manager.h"
@@ -50,10 +51,14 @@ public:
         //     "/fmu/out/vehicle_global_position", qos,
         //     [this](const VehicleGlobalPosition::SharedPtr msg) { gpsCallback(msg); });
 
-        local_position_sub_ = create_subscription<VehicleLocalPosition>(
-            "/fmu/out/vehicle_local_position", qos,
-            [this](const VehicleLocalPosition::SharedPtr msg) { localPositionCallback(msg); });
-        
+        // local_position_sub_ = create_subscription<VehicleLocalPosition>(
+        //     "/fmu/out/vehicle_local_position", qos,
+        //     [this](const VehicleLocalPosition::SharedPtr msg) { localPositionCallback(msg); });
+        motion_capture_local_position_sub_ = create_subscription<interfaces::msg::MotionCapturePose>(
+            "drone/in/motion_capture_pose", qos,
+            [this](const interfaces::msg::MotionCapturePose::SharedPtr msg) { motionCaptureLocalPositionCallback(msg); });
+
+
         attitude_sub_ = create_subscription<VehicleAttitude>(
             "/fmu/out/vehicle_attitude", qos,
             [this](const VehicleAttitude::SharedPtr msg) { attitudeCallback(msg); });
@@ -101,6 +106,14 @@ private:
         Stamped3DVector local_position(now(), msg->x, msg->y, msg->z);
         state_manager_.setGlobalPosition(local_position);        
     } 
+
+    void motionCaptureLocalPositionCallback(const interfaces::msg::MotionCapturePose::SharedPtr msg) {
+        Stamped3DVector local_position(now(), msg->x, msg->y, msg->z);
+        
+        RCLCPP_INFO(get_logger(), "Motion capture position: x=%.2f, y=%.2f, z=%.2f", local_position.x(), local_position.y(), local_position.z());
+
+        state_manager_.setGlobalPosition(local_position);
+    }
 
     void sensorCombinedCallback(const SensorCombined::SharedPtr msg) {
         Eigen::Vector3d acceleration_local{msg->accelerometer_m_s2[0], msg->accelerometer_m_s2[1], msg->accelerometer_m_s2[2]};
@@ -171,14 +184,6 @@ private:
         // Calculate global position error in NED frame
         Eigen::Vector3d global_error_ned = target_position_3d.vector() - position.vector();
 
-        // Transform global error to local FRD frame using attitude
-        Eigen::Vector3d local_error_frd = transformations_.errorGlobalToLocal(global_error_ned, attitude.quaternion());
-        
-        // Log local error (FRD)
-        // RCLCPP_INFO(get_logger(), "Local Error (FRD): x=%.2f, y=%.2f, z=%.2f",
-        // local_error_frd.x(), local_error_frd.y(), local_error_frd.z());
-
-
         double dt = (now() - position.getTime()).seconds();
         if (dt > timeout_threshold_) {
             RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", timeout_threshold_);
@@ -188,6 +193,26 @@ private:
         Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
         return output;
     }
+
+    Eigen::Vector4d controlModeACCELTEST() {
+        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+        Stamped3DVector acceleration = state_manager_.getGlobalAcceleration();
+        StampedQuaternion attitude = state_manager_.getAttitude();
+        Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
+
+        // Calculate global position error in NED frame
+        Eigen::Vector3d global_error_ned = target_position_3d.vector() - acceleration.vector();
+
+        double dt = (now() - acceleration.getTime()).seconds();
+        if (dt > timeout_threshold_) {
+            RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", timeout_threshold_);
+            return Eigen::Vector4d::Zero();
+        }
+
+        Eigen::Vector4d output = controller_.accelerationControl(dt, prev_acceleration_error_, acceleration, target_position_3d);
+        return output;
+    }
+
 
     Eigen::Vector4d manualAidedMode() {
         Stamped4DVector manual_input = state_manager_.getManualControlInput();
@@ -219,8 +244,9 @@ private:
                 control_input = Eigen::Vector4d::Zero();
                 break;
         }
-        // RCLCPP_INFO(get_logger(), "Control input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
-        //             control_input.x(), control_input.y(), control_input.z(), control_input.w());
+        RCLCPP_INFO(get_logger(), "Control input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
+                     control_input.x(), control_input.y(), control_input.z(), control_input.w());
+
         publishAttitudeSetpoint(control_input);
     }
 
@@ -351,6 +377,7 @@ private:
                 state_manager_.setTargetPositionProfile(target);
                 result->success = true;
                 result->message = "Drone taking off.";
+                std::cout << "Takeoff target: " << state_manager_.getTargetPositionProfile().vector().transpose() << std::endl;
             } else if (goal->command_type == "goto") {
                 ensureControlLoopRunning(2);
                 Stamped4DVector target(now(), goal->target_pose[0], goal->target_pose[1], goal->target_pose[2], goal->yaw);
@@ -390,6 +417,7 @@ private:
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_pub_;
 
     //rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr gps_sub_;
+    rclcpp::Subscription<interfaces::msg::MotionCapturePose>::SharedPtr motion_capture_local_position_sub_;
     rclcpp::Subscription<VehicleLocalPosition>::SharedPtr local_position_sub_;
     rclcpp::Subscription<VehicleAttitude>::SharedPtr attitude_sub_;
     rclcpp::Subscription<VehicleStatus>::SharedPtr status_sub_;
