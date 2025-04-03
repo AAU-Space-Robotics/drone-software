@@ -1,45 +1,79 @@
-#ifndef FCI_TRANSFORMATIONS_H
-#define FCI_TRANSFORMATIONS_H
+#ifndef FCI_PATHPLANNER_H
+#define FCI_PATHPLANNER_H
 
-#include <mutex>
 #include <eigen3/Eigen/Dense>
-#include <eigen3/Eigen/Geometry>
-#include <rclcpp/rclcpp.hpp>
-#include <GeographicLib/LocalCartesian.hpp>
-#include "fci_state_manager.h" 
+#include <vector>
 
-class FCI_Transformations {
+class Vector3d {
 public:
-    FCI_Transformations() : gps_origin_set_(false) {}
+    Eigen::Vector3d data = Eigen::Vector3d::Zero();
 
-    // GPS Origin Management
-    void setGPSOrigin(const rclcpp::Time& timestamp, double latitude, double longitude, double altitude);
-    bool isGPSOriginSet() const;
-    Stamped3DVector getGPSOrigin() const;
+    Vector3d() = default;
+    Vector3d(double x, double y, double z) : data(x, y, z) {}
 
-    // Coordinate Transformations
-    Stamped3DVector convertGPSToGlobalPosition(const rclcpp::Time& timestamp, double latitude, double longitude, double altitude) const;
-    Stamped3DVector accelerationLocalToGlobal(const rclcpp::Time& timestamp, 
-                                             const Eigen::Quaterniond& attitude, 
-                                             const Eigen::Vector3d& acceleration_local) const;
+    double x() const { return data.x(); }
+    double y() const { return data.y(); }
+    double z() const { return data.z(); }
 
-    // Attitude Conversions
-    Eigen::Quaterniond eulerToQuaternion(double roll, double pitch, double yaw) const;
-    Eigen::Vector3d quaternionToEuler(const Eigen::Quaterniond& q) const;
+    void setX(double value) { data.x() = value; }
+    void setY(double value) { data.y() = value; }
+    void setZ(double value) { data.z() = value; }
 
-    // Geodetic Transformations
-    Eigen::Vector3d errorGlobalToLocal(const Eigen::Vector3d& error_ned_earth, 
-                                      const Eigen::Quaterniond& attitude_frd_to_ned) const;
-
-    // Utility Functions
-    double degToRad(double degrees) const;
-    double radToDeg(double radians) const;
-
-private:
-    mutable std::mutex gps_data_mutex_;       // Thread safety for GPS data
-    Stamped3DVector gps_origin_data_;         // GPS origin in NED frame
-    bool gps_origin_set_ = false;             // Flag for GPS origin initialization
-    GeographicLib::LocalCartesian geographic_converter_; // ENU coordinate converter
+    const Eigen::Vector3d& vector() const { return data; }
+    Eigen::Vector3d& vector() { return data; }
 };
 
-#endif // FCI_TRANSFORMATIONS_H
+struct TrajectoryPoint {
+    double position;
+    double velocity;
+    double acceleration;
+};
+
+struct trajectorySegment {
+    std::vector<double> coefficient;
+};
+
+enum trajectoryMethod {
+    MIN_SNAP
+};
+
+class FCI_PathPlanner {
+public:
+    FCI_PathPlanner();
+
+    bool GenerateTrajectory(
+        const Vector3d& start,
+        const Vector3d& end,
+        const Vector3d& vel,
+        const Vector3d& acc,
+        double time,
+        trajectoryMethod method
+    );
+
+    TrajectoryPoint evaluatePolynomial(
+        const std::vector<double>& coefficients,
+        double t
+    );
+
+    std::vector<Vector3d> getTrajectoryPoints(  // Changed to Vector3d
+        double dt,
+        trajectoryMethod method
+    );
+
+private:
+    double total_time;
+    Vector3d start_vel;
+    Vector3d start_acc;
+    trajectorySegment segments[3];
+
+    std::vector<double> generatePolynomialCoefficients(
+        double start,
+        double end,
+        double start_vel,
+        double start_acc,
+        double time,
+        trajectoryMethod method
+    );
+};
+
+#endif // FCI_PATHPLANNER_H
