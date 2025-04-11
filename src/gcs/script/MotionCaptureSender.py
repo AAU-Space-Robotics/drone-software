@@ -49,7 +49,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
                      #extract data to np.array, seperated by commas
                      x,y,z,_= dataXYZ.split(",")
                      roll,pitch,yaw,_= dataEuler.split(",")
-                     dataSend = x+","+y+","+z+","+roll+","+pitch+","+yaw
+                     dataSend = x+","+y+","+z+","+roll+","+pitch+","+yaw + "\n"
                      dataSend = dataSend.replace("(","")
                      dataSend = dataSend.replace(")","")
                      dataSend = dataSend.replace(" ","")

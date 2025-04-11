@@ -55,9 +55,9 @@ Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
     previous_position_error.Z.error = position_error_ned.z();
 
     // error in position
-    std::cout << "error: " << position_error_ned.transpose() << std::endl;
-    std::cout << "local error: " << position_error_frd.transpose() << std::endl;
-    std::cout << "Control: " << roll << ", " << pitch << ", " << thrust << std::endl;
+    //std::cout << "error: " << position_error_ned.transpose() << std::endl;
+    //std::cout << "local error: " << position_error_frd.transpose() << std::endl;
+    //std::cout << "Control: " << roll << ", " << pitch << ", " << thrust << std::endl;
 
     // Return control outputs (roll, pitch, yaw, thrust)
     return {roll, -pitch, 0.0, thrust};

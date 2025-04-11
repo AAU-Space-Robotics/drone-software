@@ -19,6 +19,7 @@
 #include "fci_controller.h"
 #include "fci_state_manager.h"
 #include "fci_transformations.h"
+#include "fci_path_planner.h"
 
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
@@ -110,7 +111,7 @@ private:
     void motionCaptureLocalPositionCallback(const interfaces::msg::MotionCapturePose::SharedPtr msg) {
         Stamped3DVector local_position(now(), msg->x, msg->y, msg->z);
         
-        RCLCPP_INFO(get_logger(), "Motion capture position: x=%.2f, y=%.2f, z=%.2f", local_position.x(), local_position.y(), local_position.z());
+        //RCLCPP_INFO(get_logger(), "Motion capture position: x=%.2f, y=%.2f, z=%.2f", local_position.x(), local_position.y(), local_position.z());
 
         state_manager_.setGlobalPosition(local_position);
     }
@@ -176,6 +177,21 @@ private:
     }
 
     Eigen::Vector4d controlMode() {
+        
+        if (is_trajectory_active_) {
+            double dt = (now() - trajectory_start_time_).seconds();
+            if (dt > path_planner_.getTotalTime()) {
+                is_trajectory_active_ = false;
+            }
+            Vector3d target_position = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP);
+
+            //print 
+            RCLCPP_INFO(get_logger(), "Target position now: x=%.2f, y=%.2f, z=%.2f", target_position.x(), target_position.y(), target_position.z());
+
+            Stamped4DVector target_profile(now(), target_position.x(), target_position.y(), target_position.z(), 0.0);
+            state_manager_.setTargetPositionProfile(target_profile);
+        }
+
         Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
         Stamped3DVector position = state_manager_.getGlobalPosition();
         StampedQuaternion attitude = state_manager_.getAttitude();
@@ -244,8 +260,8 @@ private:
                 control_input = Eigen::Vector4d::Zero();
                 break;
         }
-        RCLCPP_INFO(get_logger(), "Control input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
-                     control_input.x(), control_input.y(), control_input.z(), control_input.w());
+        //RCLCPP_INFO(get_logger(), "Control input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
+        //             control_input.x(), control_input.y(), control_input.z(), control_input.w());
 
         publishAttitudeSetpoint(control_input);
     }
@@ -373,8 +389,21 @@ private:
                 result->message = "Drone disarmed.";
             } else if (goal->command_type == "takeoff") {
                 ensureControlLoopRunning(2);
-                Stamped4DVector target(now(), 0.0, 0.0, std::min(goal->target_pose[0], -1.5), goal->yaw);
-                state_manager_.setTargetPositionProfile(target);
+                Eigen::Vector3d global_pos = state_manager_.getGlobalPosition().vector();
+                Vector3d takeoff_position(global_pos.x(), global_pos.y(), global_pos.z());
+                // Set the target takeoff goal, based on the current position. Should at least be 1.5m above the current position
+                Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], -1.5)};
+                Vector3d current_velocity = {0.0, 0.0, 0.0};
+                Vector3d current_acceleration = {0.0, 0.0, 0.0};
+                float takeoff_time = 5.0;
+
+                // Generate takeoff trajectory
+                path_planner_.GenerateTrajectory(takeoff_position, target_position, current_velocity, current_acceleration, takeoff_time, trajectoryMethod::MIN_SNAP);
+                
+                //set trajectory start time
+                trajectory_start_time_ = now();
+                is_trajectory_active_ = true;
+
                 result->success = true;
                 result->message = "Drone taking off.";
                 std::cout << "Takeoff target: " << state_manager_.getTargetPositionProfile().vector().transpose() << std::endl;
@@ -431,6 +460,7 @@ private:
     FCI_Transformations transformations_;
     FCI_StateManager state_manager_;
     FCI_Controller controller_;
+    FCI_PathPlanner path_planner_;
 
     PositionError prev_position_error_;
     AccelerationError prev_acceleration_error_;
@@ -439,6 +469,9 @@ private:
     int offboard_setpoint_counter_;
     bool offboard_mode_set_;
     double timeout_threshold_;
+
+    bool is_trajectory_active_ = false;
+    rclcpp::Time trajectory_start_time_;
 };
 
 int main(int argc, char* argv[]) {

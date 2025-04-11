@@ -23,7 +23,7 @@ class MotionCaptureNode(Node):
         self.timer = self.create_timer(1/110, self.publish_message)
         
         # Socket configuration
-        self.HOST = '192.168.0.100'  # Motion capture system IP
+        self.HOST = '192.168.0.101'  # Motion capture system IP
         self.PORT = 12345           # Port number
         
         # Initialize socket connection
@@ -40,41 +40,59 @@ class MotionCaptureNode(Node):
             self.get_logger().error(f"Socket initialization failed: {str(e)}")
             raise
 
+    
     def publish_message(self):
         msg = MotionCapturePose()
         
         try:
-            # Receive data from motion capture system
-            data = self.conn.recv(1024)
-            if not data:
-                self.get_logger().warn("No data received from socket")
-                return
-            
-            # Decode and split the received data
-            received_data = data.decode().split(',')
-            
-            if len(received_data) == 6:
-                x, y, z, roll, pitch, yaw = map(float, received_data)
+            # Buffer to store incoming data
+            buffer = ""
+            while True:
+                # Receive data from motion capture system
+                data = self.conn.recv(1024).decode()
+                if not data:
+                    self.get_logger().warn("No data received from socket")
+                    return
                 
-                # Populate message fields
-                msg.timestamp = time.time()
-                msg.y = x / 1000.0
-                msg.x = y / 1000.0
-                msg.z = -(z / 1000.0)
-                msg.roll = roll
-                msg.pitch = pitch
-                msg.yaw = yaw
+                # Append received data to buffer
+                buffer += data
                 
-                # Publish the message
-                self.publisher_.publish(msg)
-                self.get_logger().info(f"Published: x={x:.3f}, y={y:.3f}, z={z:.3f}, "
-                                     f"roll={roll:.3f}, pitch={pitch:.3f}, yaw={yaw:.3f}")
-            else:
-                self.get_logger().warning(f"Received unexpected data format: {received_data}")
-                
+                # Check if we have a complete message (ends with newline)
+                if '\n' in buffer:
+                    # Split buffer by newline to get complete messages
+                    messages = buffer.split('\n')
+                    # The last element might be incomplete; save it for the next iteration
+                    buffer = messages[-1]
+                    
+                    # Process all complete messages
+                    for message in messages[:-1]:
+                        if not message:
+                            continue
+                        received_data = message.split(',')
+                        
+                        if len(received_data) == 6:
+                            x, y, z, roll, pitch, yaw = map(float, received_data)
+                            
+                            # Populate message fields
+                            msg.timestamp = time.time()
+                            msg.y = x / 1000.0
+                            msg.x = y / 1000.0
+                            msg.z = -(z / 1000.0)
+                            msg.roll = roll
+                            msg.pitch = pitch
+                            msg.yaw = yaw
+                            
+                            # Publish the message
+                            self.publisher_.publish(msg)
+                            self.get_logger().info(f"Published: x={x:.3f}, y={y:.3f}, z={z:.3f}, "
+                                                f"roll={roll:.3f}, pitch={pitch:.3f}, yaw={yaw:.3f}")
+                        else:
+                            self.get_logger().warning(f"Received unexpected data format: {received_data}")
+                    break  # Exit after processing complete messages
+                    
         except Exception as e:
             self.get_logger().error(f"Error in publish_message: {str(e)}")
-
+        
     def destroy_node(self):
         """Clean up resources when shutting down"""
         if hasattr(self, 'conn'):

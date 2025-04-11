@@ -5,6 +5,10 @@ FCI_PathPlanner::FCI_PathPlanner() : total_time(0.0) {
     // start_vel and start_acc are initialized to zero by Vector3d's default constructor
 }
 
+float FCI_PathPlanner::getTotalTime() const {
+    return total_time;
+}
+
 bool FCI_PathPlanner::GenerateTrajectory(
     const Vector3d& start,
     const Vector3d& end,
@@ -52,6 +56,16 @@ std::vector<Vector3d> FCI_PathPlanner::getTrajectoryPoints(double dt, trajectory
         points.push_back(point);
     }
     return points;
+}
+
+Vector3d FCI_PathPlanner::getTrajectoryPoint(double t, trajectoryMethod method) {
+    Vector3d point;
+    if (method == MIN_SNAP) {
+        point.setX(evaluatePolynomial(segments[0].coefficient, t).position);
+        point.setY(evaluatePolynomial(segments[1].coefficient, t).position);
+        point.setZ(evaluatePolynomial(segments[2].coefficient, t).position);
+    }
+    return point;
 }
 
 std::vector<double> FCI_PathPlanner::generatePolynomialCoefficients(

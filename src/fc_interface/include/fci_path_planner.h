@@ -41,6 +41,8 @@ class FCI_PathPlanner {
 public:
     FCI_PathPlanner();
 
+    float getTotalTime() const;
+
     bool GenerateTrajectory(
         const Vector3d& start,
         const Vector3d& end,
@@ -57,6 +59,11 @@ public:
 
     std::vector<Vector3d> getTrajectoryPoints(  // Changed to Vector3d
         double dt,
+        trajectoryMethod method
+    );
+
+    Vector3d getTrajectoryPoint(
+        double t,
         trajectoryMethod method
     );
 
