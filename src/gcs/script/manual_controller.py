@@ -18,7 +18,7 @@ class ManualController(Node):
         self.publisher_ = self.create_publisher(ManualControlInput, 'drone/in/manual_input', qos_settings)
         self.timer = self.create_timer(0.01, self.publish_control)  # 100Hz
         self.drone_cmd = ManualControlInput()
-
+        
 
        
         # Initialize pygame for joystick input
@@ -31,7 +31,8 @@ class ManualController(Node):
             self.get_logger().info(f'Connected to joystick: {self.joystick.get_name()}')
         else:
             self.joystick = None
-            self.get_logger().warn('No joystick detected!')
+            self.get_logger().warn('No joystick '
+            'detected!')
     
     def read_controller_input(self):
         """Reads input from the PS4 controller and updates the drone_cmd."""
@@ -46,22 +47,32 @@ class ManualController(Node):
         right_trigger = (self.joystick.get_axis(5) + 1.0)/2.0
         yaw_value = right_trigger - left_trigger
         
-        # Read joystick axes (values range from -1 to 1)
-        self.drone_cmd.roll = self.joystick.get_axis(0) if abs(self.joystick.get_axis(0)) > 0.05 else 0.0  # Left stick X-axis
-        self.drone_cmd.pitch = self.joystick.get_axis(1) if abs(self.joystick.get_axis(1)) > 0.05 else 0.0  # Left stick Y-axis (inverted for correct mapping)
-        #self.drone_cmd.yaw_velocity =self.joystick.get_axis(3) if abs(self.joystick.get_axis(3)) > 0.05 else 0.0  # Right stick X-axis
-        self.drone_cmd.yaw_velocity =yaw_value if abs(yaw_value) > 0.02 else 0.0  # Right stick X-axis
-        self.drone_cmd.thrust = self.joystick.get_axis(4) if abs(self.joystick.get_axis(4)) > 0.05 else 0.0  # Right stick Y-axis, mapped from [-1,1] to [0,-1]
- 
+        self.drone_cmd.roll = self.joystick.get_axis(0) if abs(self.joystick.get_axis(0)) > 0.05 else 0.0 # Left stick X-axis
+        self.drone_cmd.pitch = self.joystick.get_axis(1) if abs(self.joystick.get_axis(1)) > 0.05 else 0.0 # Left stick Y-axis (inverted for correct mapping)
+        self.drone_cmd.yaw_velocity =self.joystick.get_axis(3) if abs(self.joystick.get_axis(3)) > 0.05 else 0.0 # Right stick X-axis
+        #self.drone_cmd.yaw_velocity =yaw_value if abs(yaw_value) > 0.02 else 0.0 # Right stick X-axis
+        self.drone_cmd.thrust = self.joystick.get_axis(2) if abs(self.joystick.get_axis(2)) > 0.05 else 0.0 # Right stick Y-axis, mapped from [-1,1] to [0,-1]
         
+
+        if(int(abs(self.joystick.get_axis(4)))):
+            self.drone_cmd.arm = 0
+        else:
+            self.drone_cmd.arm = 1
+        #self.drone_cmd.arm = int(abs(self.joystick.get_axis(4)))
+     
+        self.drone_cmd.estop = self.joystick.get_button(3)
         
+        #self.hello = self.joystick.get_button()
+        self.drone_cmd.selfdestruct = self.joystick.get_button(2)
         
     def publish_control(self):
         self.read_controller_input()
         self.publisher_.publish(self.drone_cmd)
         self.get_logger().info(
-            f'Publishing: Roll={self.drone_cmd.roll:.2f}, Pitch={self.drone_cmd.pitch:.2f}, '
-            f'Yaw={self.drone_cmd.yaw_velocity:.2f}, Thrust={self.drone_cmd.thrust:.2f}'
+            #f'Publishing: Roll={self.drone_cmd.roll:.2f}, Pitch={self.drone_cmd.pitch:.2f}, '
+            #f'Yaw={self.drone_cmd.yaw_velocity:.2f}, Thrust={self.drone_cmd.thrust:.2f}, '
+            f'Arm={self.drone_cmd.arm}, Estop={self.drone_cmd.estop}'
+            
         )
 
 def main(args=None):
