@@ -43,6 +43,7 @@ class MotionCaptureNode(Node):
     
     def publish_message(self):
         msg = MotionCapturePose()
+        skip_next = False  # Toggle to skip every other message
         
         try:
             # Buffer to store incoming data
@@ -71,6 +72,10 @@ class MotionCaptureNode(Node):
                         received_data = message.split(',')
                         
                         if len(received_data) == 6:
+                            if skip_next:
+                                skip_next = False
+                                continue  # Skip this message
+                            
                             x, y, z, roll, pitch, yaw = map(float, received_data)
                             
                             # Populate message fields
@@ -86,13 +91,15 @@ class MotionCaptureNode(Node):
                             self.publisher_.publish(msg)
                             self.get_logger().info(f"Published: x={x:.3f}, y={y:.3f}, z={z:.3f}, "
                                                 f"roll={roll:.3f}, pitch={pitch:.3f}, yaw={yaw:.3f}")
+                            
+                            skip_next = True  # Skip the next valid message
                         else:
                             self.get_logger().warning(f"Received unexpected data format: {received_data}")
                     break  # Exit after processing complete messages
                     
         except Exception as e:
             self.get_logger().error(f"Error in publish_message: {str(e)}")
-        
+            
     def destroy_node(self):
         """Clean up resources when shutting down"""
         if hasattr(self, 'conn'):
