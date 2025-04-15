@@ -15,6 +15,7 @@
 #include <interfaces/action/drone_command.hpp>
 #include <interfaces/msg/manual_control_input.hpp>
 #include <interfaces/msg/motion_capture_pose.hpp>
+#include <interfaces/msg/drone_state.hpp>
 
 #include "fci_controller.h"
 #include "fci_state_manager.h"
@@ -60,10 +61,9 @@ public:
 
         // Publishers
         offboard_control_mode_pub_ = create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
-        trajectory_setpoint_pub_ = create_publisher<TrajectorySetpoint>("/fmu/in/trajectory_setpoint", 10);
-        bodyrate_setpoint_pub_ = create_publisher<VehicleRatesSetpoint>("/fmu/in/vehicle_rates_setpoint", 10);
         attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
+        drone_state_pub_ = create_publisher<interfaces::msg::DroneState>("drone/out/drone_state", 10);
 
 
         // Subscribers
@@ -117,6 +117,9 @@ public:
                                             { setOffboardMode(); });
 
         RCLCPP_INFO(get_logger(), "FlightControllerInterface initialized.");
+
+        drone_state_timer = create_wall_timer(100ms, [this]()
+                                            { publish_drone_state(); });
     }
 
     rclcpp::Time get_time() const {
@@ -174,6 +177,32 @@ private:
         manual_input.setZ(manual_input.z() + controller_.mapNormToAngle(msg->yaw_velocity * yaw_sensitivity_));
         manual_input.setW(msg->thrust);
         state_manager_.setManualControlInput(manual_input);
+    }
+
+    // Drone state publisher
+    void publish_drone_state()
+    {
+        interfaces::msg::DroneState msg{};
+
+        //msg.timestamp = get_time();
+        //int8 id
+        //int8 mode
+
+        //Get drone state
+        //Stamped3DVector position = state_manager_.getGlobalPosition();
+        //msg.position[0] = position.x();
+        //msg.position[1] = position.y();
+        //msg.position[2] = position.z();
+        //float32[] velocity #x, y, z
+        //float32[] orientation  #roll, pitch, yaw
+        //float32[] target_position #x, y, z
+        //float32[] acceleration
+        //float32 battery_voltage     # in volts
+        //float32 battery_percentage  # 0.0 to 100.0
+        //uint8 arming_state           
+        //uint8 estop     
+
+        drone_state_pub_->publish(msg);
     }
 
     // Offboard mode handling
@@ -551,10 +580,9 @@ private:
     std::shared_ptr<rclcpp::Clock> clock_;
 
     rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_pub_;
-    rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_pub_;
-    rclcpp::Publisher<VehicleRatesSetpoint>::SharedPtr bodyrate_setpoint_pub_;
     rclcpp::Publisher<VehicleAttitudeSetpoint>::SharedPtr attitude_setpoint_pub_;
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_pub_;
+    rclcpp::Publisher<interfaces::msg::DroneState>::SharedPtr drone_state_pub_;
 
     // rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr gps_sub_;
     rclcpp::Subscription<interfaces::msg::MotionCapturePose>::SharedPtr motion_capture_local_position_sub_;
@@ -566,6 +594,7 @@ private:
 
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;
+    rclcpp::TimerBase::SharedPtr drone_state_timer;
     rclcpp_action::Server<DroneCommand>::SharedPtr drone_command_server_;
 
     FCI_Transformations transformations_;
