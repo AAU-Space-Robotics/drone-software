@@ -26,6 +26,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/ManualControlInput.msg"
 "msg/DroneCommand.msg"
 "action/DroneCommand.action"
+"msg/DroneState.msg"
 DEPENDENCIES builtin_interfaces geometry_msgs std_msgs sensor_msgs action_msgs)
 
 
