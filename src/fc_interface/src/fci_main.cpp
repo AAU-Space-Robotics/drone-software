@@ -10,7 +10,8 @@
 #include <px4_msgs/msg/vehicle_global_position.hpp>
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
-#include <px4_msgs/msg/sensor_combined.hpp>
+#include <px4_msgs/msg/battery_status.hpp>
+
 
 #include <interfaces/action/drone_command.hpp>
 #include <interfaces/msg/manual_control_input.hpp>
@@ -58,6 +59,7 @@ public:
 
         // Set initial state
         state_manager_.setGlobalPosition(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
+        state_manager_.setGlobalVelocity(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setTargetPositionProfile(Stamped4DVector(get_time(), 0.0, 0.0, 0.0, 0.0));
 
         // Publishers
@@ -91,10 +93,11 @@ public:
             "drone/in/manual_input", qos,
             [this](const interfaces::msg::ManualControlInput::SharedPtr msg)
             { manualControlInputCallback(msg); });
-        sensor_combined_sub_ = create_subscription<SensorCombined>(
-            "/fmu/out/sensor_combined", qos,
-            [this](const SensorCombined::SharedPtr msg)
-            { sensorCombinedCallback(msg); });
+        battery_status_sub_ = create_subscription<BatteryStatus>(
+            "/fmu/out/battery_status", qos,
+            [this](const BatteryStatus::SharedPtr msg)
+            { batteryStatusCallback(msg); });
+
 
         // Action server
         drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
@@ -133,6 +136,17 @@ private:
         // Note that local position refers to coordinates being expressed in cartesian coordinates
         Stamped3DVector local_position(get_time(), msg->x, msg->y, msg->z);
         state_manager_.setGlobalPosition(local_position);
+
+        // Set the velocity in the state manager
+        Stamped3DVector local_velocity(get_time(), msg->vx, msg->vy, msg->vz);
+        state_manager_.setGlobalVelocity(local_velocity);
+
+        // set the acceleration in the state manager
+        Stamped3DVector local_acceleration(get_time(), msg->ax, msg->ay, msg->az);
+        //Stamped3DVector local_acceleration_global = transformations_.accelerationLocalToGlobal(get_time(), state_manager_.getAttitude().quaternion(), local_acceleration);
+        //local_acceleration_global.vector().z() += 9.81; // Remove gravity
+        state_manager_.setGlobalAcceleration(local_acceleration);
+        
     }
 
     void motionCaptureLocalPositionCallback(const interfaces::msg::MotionCapturePose::SharedPtr msg)
@@ -144,14 +158,17 @@ private:
         state_manager_.setGlobalPosition(local_position);
     }
 
-    void sensorCombinedCallback(const SensorCombined::SharedPtr msg)
+    void batteryStatusCallback(const BatteryStatus::SharedPtr msg)
     {
-        Eigen::Vector3d acceleration_local{msg->accelerometer_m_s2[0], msg->accelerometer_m_s2[1], msg->accelerometer_m_s2[2]};
-        Stamped3DVector acceleration_global = transformations_.accelerationLocalToGlobal(get_time(), state_manager_.getAttitude().quaternion(), acceleration_local);
-
-        acceleration_global.vector().z() += 9.81; // Remove gravity
-
-        state_manager_.setGlobalAcceleration(acceleration_global);
+        BatteryState battery_state;
+        battery_state.timestamp = get_time();
+        battery_state.cell_count = msg->cell_count;
+        battery_state.voltage = msg->voltage_v;
+        battery_state.charge_remaining = msg->remaining;
+        battery_state.discharged_mah = msg->discharged_mah;
+        battery_state.average_current = msg->current_a;
+        
+        state_manager_.setBatteryState(battery_state);
     }
 
     void attitudeCallback(const VehicleAttitude::SharedPtr msg)
@@ -271,6 +288,14 @@ private:
         }
 
         Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
+
+        // Get velocity from state manager and print it 
+        Stamped3DVector velocity = state_manager_.getGlobalVelocity();
+        RCLCPP_INFO(get_logger(), "Velocity: x=%.2f, y=%.2f, z=%.2f", velocity.x(), velocity.y(), velocity.z());
+        // Get acceleration from state manager and print it
+        Stamped3DVector acceleration = state_manager_.getGlobalAcceleration();
+        RCLCPP_INFO(get_logger(), "Acceleration: x=%.2f, y=%.2f, z=%.2f", acceleration.x(), acceleration.y(), acceleration.z());
+
         return output;
     }
 
@@ -602,7 +627,7 @@ private:
     rclcpp::Subscription<VehicleAttitude>::SharedPtr attitude_sub_;
     rclcpp::Subscription<VehicleStatus>::SharedPtr status_sub_;
     rclcpp::Subscription<interfaces::msg::ManualControlInput>::SharedPtr manual_input_sub_;
-    rclcpp::Subscription<SensorCombined>::SharedPtr sensor_combined_sub_;
+    rclcpp::Subscription<BatteryStatus>::SharedPtr battery_status_sub_;
 
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;

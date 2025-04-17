@@ -15,7 +15,7 @@ Stamped3DVector FCI_StateManager::getGlobalPosition() {
 
 void FCI_StateManager::setGlobalVelocity(const Stamped3DVector& new_data) {
     std::lock_guard<std::mutex> lock(velocity_global_mutex_);
-    velocity_global_;
+    velocity_global_ = new_data;
 }
 
 Stamped3DVector FCI_StateManager::getGlobalVelocity() {
@@ -81,6 +81,18 @@ void FCI_StateManager::setDroneState(const DroneState& new_data) {
 DroneState FCI_StateManager::getDroneState() {
     std::lock_guard<std::mutex> lock(drone_state_mutex_);
     return drone_state_;   
+}
+
+// ---
+
+void FCI_StateManager::setBatteryState(const BatteryState& new_data) {
+    std::lock_guard<std::mutex> lock(battery_state_mutex_);
+    battery_state_ = new_data;   
+}
+
+BatteryState FCI_StateManager::getBatteryState() {
+    std::lock_guard<std::mutex> lock(battery_state_mutex_);
+    return battery_state_;   
 }
 
 // ---

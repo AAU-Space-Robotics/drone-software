@@ -154,6 +154,18 @@ struct DroneState {
     FlightMode flight_mode = FlightMode::STANDBY;
 };
 
+// Battery state
+struct BatteryState {
+    rclcpp::Time timestamp = rclcpp::Time(0, 0);
+    
+    //Battery state data
+    int cell_count = 0;
+    float voltage = 0.0f;
+    float charge_remaining = 0.0f;
+    float discharged_mah = 0.0f;
+    float average_current = 0.0f;
+};
+
 // Controller errors
 struct PIDError {
     double error;
@@ -199,6 +211,9 @@ public:
     void setDroneState(const DroneState& new_data);
     DroneState getDroneState();
 
+    void setBatteryState(const BatteryState& new_data);
+    BatteryState getBatteryState();
+
     void setManualControlInput(const Stamped4DVector& new_data);
     Stamped4DVector getManualControlInput();
 
@@ -223,6 +238,8 @@ private:
     std::mutex acceleration_error_mutex_;
     std::mutex position_error_mutex_;
 
+    std::mutex battery_state_mutex_;
+
     // Data structures to store state information
     Stamped3DVector position_global_;
     Stamped3DVector velocity_global_;
@@ -232,6 +249,7 @@ private:
     Stamped4DVector target_position_profile_;
     DroneCmdAck drone_cmd_ack_;
     DroneState drone_state_;
+    BatteryState battery_state_;
     Stamped4DVector manual_control_input_;
     AccelerationError acceleration_error_;
     PositionError position_error_;
