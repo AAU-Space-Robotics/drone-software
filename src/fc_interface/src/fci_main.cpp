@@ -16,6 +16,7 @@
 #include <interfaces/msg/manual_control_input.hpp>
 #include <interfaces/msg/motion_capture_pose.hpp>
 #include <interfaces/msg/drone_state.hpp>
+#include <interfaces/msg/drone_scope.hpp>
 
 #include "fci_controller.h"
 #include "fci_state_manager.h"
@@ -64,7 +65,6 @@ public:
         attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
         drone_state_pub_ = create_publisher<interfaces::msg::DroneState>("drone/out/drone_state", 10);
-
 
         // Subscribers
         if (position_source == "px4"){
@@ -251,8 +251,6 @@ private:
                 state_manager_.setTargetPositionProfile(target_profile);
             }
             Vector3d target_position = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP);
-            RCLCPP_INFO(get_logger(), "Target position now: x=%.2f, y=%.2f, z=%.2f", target_position.x(), target_position.y(), target_position.z());
-
             Stamped4DVector target_profile(get_time(), target_position.x(), target_position.y(), target_position.z(), 0.0);
             state_manager_.setTargetPositionProfile(target_profile);
         }
@@ -486,6 +484,16 @@ private:
             }
             else if (goal->command_type == "arm")
             {
+
+                // Set the current target_position, to the current position
+                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+                Stamped3DVector global_pos = state_manager_.getGlobalPosition();
+                target_profile.setTime(get_time());
+                target_profile.setX(global_pos.x());
+                target_profile.setY(global_pos.y());
+                target_profile.setZ(global_pos.z());
+                target_profile.setW(0.0);
+                state_manager_.setTargetPositionProfile(target_profile);
                 arm();
                 result->success = true;
                 result->message = "Drone armed.";
@@ -500,8 +508,10 @@ private:
             else if (goal->command_type == "takeoff")
             {
                 ensureControlLoopRunning(2);
-                Eigen::Vector3d global_pos = state_manager_.getGlobalPosition().vector();
-                Vector3d takeoff_position(global_pos.x(), global_pos.y(), global_pos.z());
+                
+                // Set the takeoff position, to the current target to handle ssteady state errors by mitigating, free fall
+                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+                Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 // Set the target takeoff goal, based on the current position. Should at least be 1.5m above the current position
                 Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], -1.5)};
                 Vector3d current_velocity = {0.0, 0.0, 0.0};
@@ -522,8 +532,10 @@ private:
             else if (goal->command_type == "goto")
             {
                 ensureControlLoopRunning(2);
-                Eigen::Vector3d global_pos = state_manager_.getGlobalPosition().vector();
-                Vector3d takeoff_position(global_pos.x(), global_pos.y(), global_pos.z());
+                // Set the takeoff position, to the current target to handle ssteady state errors by mitigating, free fall
+
+                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+                Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 
                 Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
                 Vector3d current_velocity = {0.0, 0.0, 0.0};

@@ -181,6 +181,9 @@ public:
     void setGlobalPosition(const Stamped3DVector& new_data);
     Stamped3DVector getGlobalPosition();
 
+    void setGlobalVelocity(const Stamped3DVector& new_data);
+    Stamped3DVector getGlobalVelocity();
+
     void setGlobalAcceleration(const Stamped3DVector& new_data);
     Stamped3DVector getGlobalAcceleration();
 
@@ -209,6 +212,7 @@ private:
     
     // Mutexes for thread safety
     std::mutex position_global_mutex_;
+    std::mutex velocity_global_mutex_;
     std::mutex acceleration_global_mutex_;
     
     std::mutex attitude_data_mutex_;
@@ -221,6 +225,7 @@ private:
 
     // Data structures to store state information
     Stamped3DVector position_global_;
+    Stamped3DVector velocity_global_;
     Stamped3DVector acceleration_global_;
     
     StampedQuaternion attitude_;

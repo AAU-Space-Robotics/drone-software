@@ -13,6 +13,18 @@ Stamped3DVector FCI_StateManager::getGlobalPosition() {
 
 // ---
 
+void FCI_StateManager::setGlobalVelocity(const Stamped3DVector& new_data) {
+    std::lock_guard<std::mutex> lock(velocity_global_mutex_);
+    velocity_global_;
+}
+
+Stamped3DVector FCI_StateManager::getGlobalVelocity() {
+    std::lock_guard<std::mutex> lock(velocity_global_mutex_);
+    return velocity_global_;  
+}
+
+// ---
+
 void FCI_StateManager::setGlobalAcceleration(const Stamped3DVector& new_data) {
     std::lock_guard<std::mutex> lock(acceleration_global_mutex_);
     acceleration_global_ = new_data;   
