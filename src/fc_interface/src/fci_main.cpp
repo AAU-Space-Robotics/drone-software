@@ -184,15 +184,16 @@ private:
     {
         interfaces::msg::DroneState msg{};
 
-        //msg.timestamp = get_time();
+        msg.timestamp = get_time()
         //int8 id
         //int8 mode
 
         //Get drone state
-        //Stamped3DVector position = state_manager_.getGlobalPosition();
-        //msg.position[0] = position.x();
-        //msg.position[1] = position.y();
-        //msg.position[2] = position.z();
+        Stamped3DVector position = state_manager_.getGlobalPosition();
+        msg.position.resize(3);
+        msg.position[0] = position.x();
+        msg.position[1] = position.y();
+        msg.position[2] = position.z();
         //float32[] velocity #x, y, z
         //float32[] orientation  #roll, pitch, yaw
         //float32[] target_position #x, y, z

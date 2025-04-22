@@ -4,6 +4,8 @@ import glfw
 import imgui
 from imgui.integrations.glfw import GlfwRenderer
 import OpenGL.GL as gl
+from PIL import Image
+
 
 import rclpy
 from rclpy.node import Node
@@ -38,7 +40,7 @@ class DroneGuiNode(Node):
         super().__init__('thyra_gui_node')
         self.subscription = self.create_subscription(
             DroneState,
-            '/drone/out/state',
+            "drone/out/state",
             self.state_callback,
             10
         )
@@ -48,7 +50,6 @@ class DroneGuiNode(Node):
         global roll, pitch, yaw
         global velocity_x, velocity_y, velocity_z
         global battery_voltage
-        global 
         if len(msg.position) >= 3:
             position_x = msg.position[0]
             position_y = msg.position[1]
@@ -159,6 +160,17 @@ def Text_field():
     imgui.set_cursor_pos((20,750))
     with imgui.font(font):
         imgui.text(f"You typed: {text_buffer}")
+
+    imgui.set_cursor_pos((330,705))
+    imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+    imgui.push_style_color(imgui.COLOR_BUTTON, *killbutton_color)
+    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(1.0,0.0,0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.2,0.0,0.0)) 
+    with imgui.font(font_small):
+        if imgui.button("Add",width=70, height=50):
+            drone_kill = True
+    imgui.pop_style_color(3)
+    imgui.pop_style_var()
  
 
 
@@ -186,18 +198,18 @@ def XYZ_Text_Field(msg):
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
                                                                 #flags is for rounding different corners
-    draw_list.add_rect_filled(20,40, 430,150,color,rounding =10.0, flags=10)
+    draw_list.add_rect_filled(20,90, 250,235,color,rounding =10.0, flags=10)
     
     with imgui.font(font_small):
-        imgui.set_cursor_pos((23,100)); imgui.text("Positon")
+        imgui.set_cursor_pos((23,50)); imgui.text("Positon")
     with imgui.font(font):
-        imgui.set_cursor_pos((170,90)); imgui.text("X")
-        imgui.set_cursor_pos((270,90)); imgui.text("Y")
-        imgui.set_cursor_pos((370,90)); imgui.text("Z")
+        imgui.set_cursor_pos((30,90)); imgui.text("X = ")
+        imgui.set_cursor_pos((30,140)); imgui.text("Y = ")
+        imgui.set_cursor_pos((30,190)); imgui.text("Z = ")
     with imgui.font(font_large):
-        imgui.set_cursor_pos((160,45)); imgui.text(f"{int(position_x)}")
-        imgui.set_cursor_pos((260,45)); imgui.text(f"{int(position_y)}")
-        imgui.set_cursor_pos((360,45)); imgui.text(f"{int(position_z)}")
+        imgui.set_cursor_pos((120,83)); imgui.text(f"{int(position_x)}")
+        imgui.set_cursor_pos((120,133)); imgui.text(f"{int(position_y)}")
+        imgui.set_cursor_pos((120,183)); imgui.text(f"{int(position_z)}")
 
     
 def RPY_Text_Field():
@@ -205,44 +217,46 @@ def RPY_Text_Field():
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
                                                                 #flags is for rounding different corners
-    draw_list.add_rect_filled(20,190, 430,300,color,rounding =10.0, flags=10)
+    draw_list.add_rect_filled(20,305, 250,430,color,rounding =10.0, flags=10)
     thrust = -(int(test_slider))
-    
+
     with imgui.font(font_small):
-        imgui.set_cursor_pos((30,250)); imgui.text("Thrust")
-        imgui.set_cursor_pos((150,250)); imgui.text("Roll")
-        imgui.set_cursor_pos((242,250)); imgui.text("Pitch")
-        imgui.set_cursor_pos((357,250)); imgui.text("Yaw")
+        imgui.set_cursor_pos((23,265)); imgui.text("Orientation")
     with imgui.font(font_small):
-        imgui.set_cursor_pos((65,200)); imgui.text(str(thrust))
-        imgui.set_cursor_pos((167,200)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((267,200)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((370,200)); imgui.text(f"{Decimal(yaw).quantize(Decimal('0.00'))}")
+        # imgui.set_cursor_pos((30,255)); imgui.text("Thrust = ")
+        imgui.set_cursor_pos((30,305)); imgui.text("Roll  = ")
+        imgui.set_cursor_pos((30,355)); imgui.text("Pitch = ")
+        imgui.set_cursor_pos((30,395)); imgui.text("Yaw   = ")
+    with imgui.font(font_small):
+        #imgui.set_cursor_pos((150,255)); imgui.text(str(thrust))
+        imgui.set_cursor_pos((150,305)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((150,355)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((150,395)); imgui.text(f"{Decimal(yaw).quantize(Decimal('0.00'))}")
 
 
 
     
     
 def XYZVelocity_Text_Field():
-    #Drawing a square kek
+    
     global position_x, position_y, position_z
     
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
                                                                 #flags is for rounding different corners
-    draw_list.add_rect_filled(20,340, 430,450,color,rounding =10.0, flags=10)
+    draw_list.add_rect_filled(20,500, 250,645,color,rounding =10.0, flags=10)
 
     with imgui.font(font_small):
-        imgui.set_cursor_pos((23,395)); imgui.text("Velosity")
+        imgui.set_cursor_pos((23,460)); imgui.text("Velosity")
     with imgui.font(font):
-        imgui.set_cursor_pos((170,390)); imgui.text("X")
-        imgui.set_cursor_pos((270,390)); imgui.text("Y")
-        imgui.set_cursor_pos((370,390)); imgui.text("Z")
+        imgui.set_cursor_pos((30,500)); imgui.text("X = ")
+        imgui.set_cursor_pos((30,550)); imgui.text("Y = ")
+        imgui.set_cursor_pos((30,600)); imgui.text("Z = ")
 
     with imgui.font(font_large):
-        imgui.set_cursor_pos((160,345)); imgui.text(f"{int(velocity_x)}")
-        imgui.set_cursor_pos((260,345)); imgui.text(f"{int(velocity_y)}")
-        imgui.set_cursor_pos((360,345)); imgui.text(f"{int(velocity_z)}")
+        imgui.set_cursor_pos((120,493)); imgui.text(f"{int(velocity_x)}")
+        imgui.set_cursor_pos((120,543)); imgui.text(f"{int(velocity_y)}")
+        imgui.set_cursor_pos((120,593)); imgui.text(f"{int(velocity_z)}")
     
 
 
@@ -270,6 +284,34 @@ def batteryGraph():
 
 def map_value(value, in_min, in_max, out_min, out_max):
     return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+def drone_visualization(path):
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
+                                                                #flags is for rounding different corners
+    draw_list.add_rect(490,150, 1200,600,color,rounding =10.0, flags=15,thickness=6)
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
+                                                                #flags is for rounding different corners
+    draw_list.add_rect_filled(493,153, 1197,597,color,rounding =10.0, flags=15)
+
+    image = Image.open(path).convert("RGBA")
+    image_data = image.tobytes()
+
+    width, height = image.size
+    texture_id = gl.glGenTextures(1)
+    gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
+
+    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
+    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+
+    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, image_data)
+    
+
+    return texture_id, width, height
+
+
+
 
 def start_ros():
     rclpy.init()
@@ -336,7 +378,7 @@ def main():
         imgui.begin("wtf", flags=imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_RESIZE | imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_BACKGROUND)
         imgui.set_cursor_pos((20,10))
         with imgui.font(font_small):
-            imgui.text("Hello there General Kenobi")
+            imgui.text("THYRA state monitor")
         #Creating a line for seperation
         draw_list = imgui.get_window_draw_list()
         start_x, start_y = 460, 0  # Starting point of the line (x, y)
@@ -344,6 +386,7 @@ def main():
         color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
         #Running different widgets
+        texture_id, w, h = drone_visualization("droneImage.png")
         
         Arm_Button()
         Text_field()
@@ -351,7 +394,7 @@ def main():
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
         XYZVelocity_Text_Field()
-        Test_slider()
+        imgui.set_cursor_pos((700, 230)); imgui.image(texture_id, 300, 300)
         batteryGraph()
         imgui.end()
 
