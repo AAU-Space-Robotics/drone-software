@@ -19,7 +19,7 @@ struct PIDControllerGains {
     PIDGains pitch{0.1, 0.0, 0.05};
     PIDGains roll{0.1, 0.0, 0.05};
     PIDGains yaw{0.1, 0.0, 0.05};
-    PIDGains thrust{1.5, 0.0, 0.06};
+    PIDGains thrust{0.8, 0.0, 0.1};
 };
 
 struct AccelerationControllerGains {
@@ -31,6 +31,9 @@ struct AccelerationControllerGains {
 class FCI_Controller {
 public:
     explicit FCI_Controller(const FCI_Transformations& transformations);
+
+    // Set PID gains for attitude and thrust
+    void setPIDGains(const PIDControllerGains& gains);
 
     // Position PID control (returns roll, pitch, yaw, thrust)
     Eigen::Vector4d pidControl(double sample_time,

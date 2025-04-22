@@ -5,6 +5,10 @@
 FCI_Controller::FCI_Controller(const FCI_Transformations& transformations) 
     : transformations_(transformations), attitude_pid_gains_() {}
 
+void FCI_Controller::setPIDGains(const PIDControllerGains& gains) {
+    attitude_pid_gains_ = gains;
+}
+
 Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
                                            PositionError& previous_position_error,
                                            const Stamped3DVector& position_ned_earth,
