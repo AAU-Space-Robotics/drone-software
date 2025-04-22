@@ -40,7 +40,7 @@ class DroneGuiNode(Node):
         super().__init__('thyra_gui_node')
         self.subscription = self.create_subscription(
             DroneState,
-            "drone/out/state",
+            "drone/out/drone_state",
             self.state_callback,
             10
         )
@@ -50,10 +50,6 @@ class DroneGuiNode(Node):
         global roll, pitch, yaw
         global velocity_x, velocity_y, velocity_z
         global battery_voltage
-<<<<<<< HEAD
-=======
-
->>>>>>> a353069c8be575b08014caf1b3fab1c7a2232294
         if len(msg.position) >= 3:
             position_x = msg.position[0]
             position_y = msg.position[1]
@@ -69,7 +65,7 @@ class DroneGuiNode(Node):
             velocity_y = msg.velocity[1]
             velocity_z = msg.velocity[2]
         battery_voltage = msg.battery_voltage
-        #print(f"Battery Voltage: {battery_voltage}")
+        
 
 def Arm_Button():
         global button_color, drone_kill
@@ -167,9 +163,9 @@ def Text_field():
 
     imgui.set_cursor_pos((330,705))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
-    imgui.push_style_color(imgui.COLOR_BUTTON, *killbutton_color)
-    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(1.0,0.0,0.0))
-    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.2,0.0,0.0)) 
+    imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0,0.8,0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0,0.2,0.0)) 
     with imgui.font(font_small):
         if imgui.button("Add",width=70, height=50):
             drone_kill = True

@@ -201,21 +201,22 @@ private:
     {
         interfaces::msg::DroneState msg{};
 
-        msg.timestamp = get_time()
+        msg.timestamp = get_time().seconds();
         //int8 id
         //int8 mode
 
         //Get drone state
         Stamped3DVector position = state_manager_.getGlobalPosition();
         msg.position.resize(3);
-        msg.position[0] = position.x();
-        msg.position[1] = position.y();
+        msg.position[0] = position.x(); 
+        msg.position[1] = position.y(); 
         msg.position[2] = position.z();
         //float32[] velocity #x, y, z
         //float32[] orientation  #roll, pitch, yaw
         //float32[] target_position #x, y, z
         //float32[] acceleration
-        //float32 battery_voltage     # in volts
+        msg.battery_voltage = state_manager_.getBatteryState().voltage;
+        
         //float32 battery_percentage  # 0.0 to 100.0
         //uint8 arming_state           
         //uint8 estop     
