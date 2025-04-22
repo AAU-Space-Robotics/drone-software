@@ -9,6 +9,18 @@ float FCI_PathPlanner::getTotalTime() const {
     return total_time;
 }
 
+float FCI_PathPlanner::calculateDuration(float distance, float velocity) const {
+    const float MAX_VELOCITY = 1.5f; // Maximum allowed velocity (m/s)
+    const float MIN_VELOCITY = 0.1f;  // Minimum allowed velocity (m/s)
+
+    // Clamp velocity to valid range
+    float safe_velocity = std::clamp(velocity, MIN_VELOCITY, MAX_VELOCITY);
+
+    // Calculate and return duration
+    return distance / safe_velocity;
+}
+
+
 bool FCI_PathPlanner::GenerateTrajectory(
     const Vector3d& start,
     const Vector3d& end,

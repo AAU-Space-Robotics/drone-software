@@ -57,6 +57,14 @@ public:
         this->get_parameter("position_source", position_source);
         RCLCPP_INFO(get_logger(), "Using %s position source", position_source.c_str());
 
+        // Declare PID gains parameters, and get them
+        PIDControllerGains pid_gains;
+        this->get_parameter_or("pid_gains/thrust/Kp", pid_gains.thrust.Kp, pid_gains.thrust.Kp);
+        this->get_parameter_or("pid_gains/thrust/Ki", pid_gains.thrust.Ki, pid_gains.thrust.Ki);
+        this->get_parameter_or("pid_gains/thrust/Kd", pid_gains.thrust.Kd, pid_gains.thrust.Kd);
+        controller_.setPIDGains(pid_gains);
+        RCLCPP_INFO(get_logger(), "Thrust PID gains: Kp=%.2f, Ki=%.2f, Kd=%.2f", pid_gains.thrust.Kp, pid_gains.thrust.Ki, pid_gains.thrust.Kd);
+
         // Set initial state
         state_manager_.setGlobalPosition(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setGlobalVelocity(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
@@ -153,7 +161,7 @@ private:
     {
         Stamped3DVector local_position(get_time(), msg->x, msg->y, msg->z);
 
-        // RCLCPP_INFO(get_logger(), "Motion capture position: x=%.2f, y=%.2f, z=%.2f", local_position.x(), local_position.y(), local_position.z());
+        //RCLCPP_INFO(get_logger(), "Motion capture position: x=%.2f, y=%.2f, z=%.2f", local_position.x(), local_position.y(), local_position.z());
 
         state_manager_.setGlobalPosition(local_position);
     }
@@ -288,13 +296,8 @@ private:
         }
 
         Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
-
-        // Get velocity from state manager and print it 
-        Stamped3DVector velocity = state_manager_.getGlobalVelocity();
-        RCLCPP_INFO(get_logger(), "Velocity: x=%.2f, y=%.2f, z=%.2f", velocity.x(), velocity.y(), velocity.z());
-        // Get acceleration from state manager and print it
-        Stamped3DVector acceleration = state_manager_.getGlobalAcceleration();
-        RCLCPP_INFO(get_logger(), "Acceleration: x=%.2f, y=%.2f, z=%.2f", acceleration.x(), acceleration.y(), acceleration.z());
+        //print error
+        RCLCPP_INFO(get_logger(), "Position error: x=%.2f, y=%.2f, z=%.2f", global_error_ned.x(), global_error_ned.y(), global_error_ned.z());
 
         return output;
     }
@@ -374,6 +377,9 @@ private:
             {
                 control_timer_->cancel();
                 RCLCPP_INFO(get_logger(), "Control loop stopped.");
+                Stamped4DVector target_profile(get_time(), 0.0, 0.0, 0.0, 0.0);
+                state_manager_.setTargetPositionProfile(target_profile);
+                publishAttitudeSetpoint(Eigen::Vector4d(0.0, 0.0, 0.0, 0.0));
             }
             catch (const rclcpp::exceptions::RCLError &e)
             {
@@ -466,6 +472,11 @@ private:
             RCLCPP_WARN(get_logger(), "Rejected: invalid takeoff parameters or drone not armed.");
             return rclcpp_action::GoalResponse::REJECT;
         }
+        if (goal->command_type == "land")
+        {
+            RCLCPP_WARN(get_logger(), "Rejected: invalid land parameters or drone not armed.");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
         if (goal->command_type == "goto" && (goal->target_pose.size() != 3 || drone_state.arming_state != ArmingState::ARMED))
         {
             RCLCPP_WARN(get_logger(), "Rejected: invalid goto parameters or drone not armed.");
@@ -541,7 +552,9 @@ private:
                 Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], -1.5)};
                 Vector3d current_velocity = {0.0, 0.0, 0.0};
                 Vector3d current_acceleration = {0.0, 0.0, 0.0};
-                float takeoff_time = 5.0;
+
+                float distance = std::abs(target_position.z() - takeoff_position.z());
+                float takeoff_time = path_planner_.calculateDuration(distance, 0.2);
 
                 // Generate takeoff trajectory
                 path_planner_.GenerateTrajectory(takeoff_position, target_position, current_velocity, current_acceleration, takeoff_time, trajectoryMethod::MIN_SNAP);
@@ -565,7 +578,13 @@ private:
                 Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
                 Vector3d current_velocity = {0.0, 0.0, 0.0};
                 Vector3d current_acceleration = {0.0, 0.0, 0.0};
-                float takeoff_time = 5.0;
+
+                Eigen::Vector3d target_position_3d(target_position.x(), target_position.y(), target_position.z());
+                Eigen::Vector3d takeoff_position_3d(takeoff_position.x(), takeoff_position.y(), takeoff_position.z());
+
+                float distance = (target_position_3d - takeoff_position_3d).norm();
+                float takeoff_time = path_planner_.calculateDuration(distance, 0.2);
+
 
                 // Generate trajectory
                 path_planner_.GenerateTrajectory(takeoff_position, target_position, current_velocity, current_acceleration, takeoff_time, trajectoryMethod::MIN_SNAP);

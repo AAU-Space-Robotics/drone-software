@@ -43,6 +43,8 @@ public:
 
     float getTotalTime() const;
 
+    float calculateDuration(float distance, float velocity) const;
+
     bool GenerateTrajectory(
         const Vector3d& start,
         const Vector3d& end,
