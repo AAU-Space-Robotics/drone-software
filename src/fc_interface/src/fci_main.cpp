@@ -10,12 +10,14 @@
 #include <px4_msgs/msg/vehicle_global_position.hpp>
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
-#include <px4_msgs/msg/sensor_combined.hpp>
+#include <px4_msgs/msg/battery_status.hpp>
+
 
 #include <interfaces/action/drone_command.hpp>
 #include <interfaces/msg/manual_control_input.hpp>
 #include <interfaces/msg/motion_capture_pose.hpp>
 #include <interfaces/msg/drone_state.hpp>
+#include <interfaces/msg/drone_scope.hpp>
 
 #include "fci_controller.h"
 #include "fci_state_manager.h"
@@ -57,6 +59,7 @@ public:
 
         // Set initial state
         state_manager_.setGlobalPosition(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
+        state_manager_.setGlobalVelocity(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setTargetPositionProfile(Stamped4DVector(get_time(), 0.0, 0.0, 0.0, 0.0));
 
         // Publishers
@@ -64,7 +67,6 @@ public:
         attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
         drone_state_pub_ = create_publisher<interfaces::msg::DroneState>("drone/out/drone_state", 10);
-
 
         // Subscribers
         if (position_source == "px4"){
@@ -91,10 +93,11 @@ public:
             "drone/in/manual_input", qos,
             [this](const interfaces::msg::ManualControlInput::SharedPtr msg)
             { manualControlInputCallback(msg); });
-        sensor_combined_sub_ = create_subscription<SensorCombined>(
-            "/fmu/out/sensor_combined", qos,
-            [this](const SensorCombined::SharedPtr msg)
-            { sensorCombinedCallback(msg); });
+        battery_status_sub_ = create_subscription<BatteryStatus>(
+            "/fmu/out/battery_status", qos,
+            [this](const BatteryStatus::SharedPtr msg)
+            { batteryStatusCallback(msg); });
+
 
         // Action server
         drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
@@ -133,6 +136,17 @@ private:
         // Note that local position refers to coordinates being expressed in cartesian coordinates
         Stamped3DVector local_position(get_time(), msg->x, msg->y, msg->z);
         state_manager_.setGlobalPosition(local_position);
+
+        // Set the velocity in the state manager
+        Stamped3DVector local_velocity(get_time(), msg->vx, msg->vy, msg->vz);
+        state_manager_.setGlobalVelocity(local_velocity);
+
+        // set the acceleration in the state manager
+        Stamped3DVector local_acceleration(get_time(), msg->ax, msg->ay, msg->az);
+        //Stamped3DVector local_acceleration_global = transformations_.accelerationLocalToGlobal(get_time(), state_manager_.getAttitude().quaternion(), local_acceleration);
+        //local_acceleration_global.vector().z() += 9.81; // Remove gravity
+        state_manager_.setGlobalAcceleration(local_acceleration);
+        
     }
 
     void motionCaptureLocalPositionCallback(const interfaces::msg::MotionCapturePose::SharedPtr msg)
@@ -144,14 +158,17 @@ private:
         state_manager_.setGlobalPosition(local_position);
     }
 
-    void sensorCombinedCallback(const SensorCombined::SharedPtr msg)
+    void batteryStatusCallback(const BatteryStatus::SharedPtr msg)
     {
-        Eigen::Vector3d acceleration_local{msg->accelerometer_m_s2[0], msg->accelerometer_m_s2[1], msg->accelerometer_m_s2[2]};
-        Stamped3DVector acceleration_global = transformations_.accelerationLocalToGlobal(get_time(), state_manager_.getAttitude().quaternion(), acceleration_local);
-
-        acceleration_global.vector().z() += 9.81; // Remove gravity
-
-        state_manager_.setGlobalAcceleration(acceleration_global);
+        BatteryState battery_state;
+        battery_state.timestamp = get_time();
+        battery_state.cell_count = msg->cell_count;
+        battery_state.voltage = msg->voltage_v;
+        battery_state.charge_remaining = msg->remaining;
+        battery_state.discharged_mah = msg->discharged_mah;
+        battery_state.average_current = msg->current_a;
+        
+        state_manager_.setBatteryState(battery_state);
     }
 
     void attitudeCallback(const VehicleAttitude::SharedPtr msg)
@@ -252,8 +269,6 @@ private:
                 state_manager_.setTargetPositionProfile(target_profile);
             }
             Vector3d target_position = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP);
-            RCLCPP_INFO(get_logger(), "Target position now: x=%.2f, y=%.2f, z=%.2f", target_position.x(), target_position.y(), target_position.z());
-
             Stamped4DVector target_profile(get_time(), target_position.x(), target_position.y(), target_position.z(), 0.0);
             state_manager_.setTargetPositionProfile(target_profile);
         }
@@ -274,6 +289,14 @@ private:
         }
 
         Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
+
+        // Get velocity from state manager and print it 
+        Stamped3DVector velocity = state_manager_.getGlobalVelocity();
+        RCLCPP_INFO(get_logger(), "Velocity: x=%.2f, y=%.2f, z=%.2f", velocity.x(), velocity.y(), velocity.z());
+        // Get acceleration from state manager and print it
+        Stamped3DVector acceleration = state_manager_.getGlobalAcceleration();
+        RCLCPP_INFO(get_logger(), "Acceleration: x=%.2f, y=%.2f, z=%.2f", acceleration.x(), acceleration.y(), acceleration.z());
+
         return output;
     }
 
@@ -487,6 +510,16 @@ private:
             }
             else if (goal->command_type == "arm")
             {
+
+                // Set the current target_position, to the current position
+                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+                Stamped3DVector global_pos = state_manager_.getGlobalPosition();
+                target_profile.setTime(get_time());
+                target_profile.setX(global_pos.x());
+                target_profile.setY(global_pos.y());
+                target_profile.setZ(global_pos.z());
+                target_profile.setW(0.0);
+                state_manager_.setTargetPositionProfile(target_profile);
                 arm();
                 result->success = true;
                 result->message = "Drone armed.";
@@ -501,8 +534,10 @@ private:
             else if (goal->command_type == "takeoff")
             {
                 ensureControlLoopRunning(2);
-                Eigen::Vector3d global_pos = state_manager_.getGlobalPosition().vector();
-                Vector3d takeoff_position(global_pos.x(), global_pos.y(), global_pos.z());
+                
+                // Set the takeoff position, to the current target to handle ssteady state errors by mitigating, free fall
+                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+                Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 // Set the target takeoff goal, based on the current position. Should at least be 1.5m above the current position
                 Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], -1.5)};
                 Vector3d current_velocity = {0.0, 0.0, 0.0};
@@ -523,8 +558,10 @@ private:
             else if (goal->command_type == "goto")
             {
                 ensureControlLoopRunning(2);
-                Eigen::Vector3d global_pos = state_manager_.getGlobalPosition().vector();
-                Vector3d takeoff_position(global_pos.x(), global_pos.y(), global_pos.z());
+                // Set the takeoff position, to the current target to handle ssteady state errors by mitigating, free fall
+
+                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+                Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 
                 Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
                 Vector3d current_velocity = {0.0, 0.0, 0.0};
@@ -591,7 +628,7 @@ private:
     rclcpp::Subscription<VehicleAttitude>::SharedPtr attitude_sub_;
     rclcpp::Subscription<VehicleStatus>::SharedPtr status_sub_;
     rclcpp::Subscription<interfaces::msg::ManualControlInput>::SharedPtr manual_input_sub_;
-    rclcpp::Subscription<SensorCombined>::SharedPtr sensor_combined_sub_;
+    rclcpp::Subscription<BatteryStatus>::SharedPtr battery_status_sub_;
 
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;

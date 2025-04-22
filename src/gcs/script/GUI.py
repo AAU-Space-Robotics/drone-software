@@ -50,6 +50,10 @@ class DroneGuiNode(Node):
         global roll, pitch, yaw
         global velocity_x, velocity_y, velocity_z
         global battery_voltage
+<<<<<<< HEAD
+=======
+
+>>>>>>> a353069c8be575b08014caf1b3fab1c7a2232294
         if len(msg.position) >= 3:
             position_x = msg.position[0]
             position_y = msg.position[1]
