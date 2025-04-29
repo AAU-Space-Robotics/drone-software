@@ -288,11 +288,11 @@ private:
             double dt = (get_time() - trajectory_start_time_).seconds();
             if (dt > path_planner_.getTotalTime()) {
                 is_trajectory_active_ = false;
-                Vector3d final_position = path_planner_.getTrajectoryPoint(path_planner_.getTotalTime(), trajectoryMethod::MIN_SNAP);
+                Eigen::Vector3d final_position = path_planner_.getTrajectoryPoint(path_planner_.getTotalTime(), trajectoryMethod::MIN_SNAP);
                 Stamped4DVector target_profile(get_time(), final_position.x(), final_position.y(), final_position.z(), 0.0);
                 state_manager_.setTargetPositionProfile(target_profile);
             }
-            Vector3d target_position = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP);
+            Eigen::Vector3d target_position = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP);
             Stamped4DVector target_profile(get_time(), target_position.x(), target_position.y(), target_position.z(), 0.0);
             state_manager_.setTargetPositionProfile(target_profile);
         }
@@ -564,11 +564,11 @@ private:
                 
                 // Set the takeoff position, to the current target to handle ssteady state errors by mitigating, free fall
                 Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-                Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
+                Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 // Set the target takeoff goal, based on the current position. Should at least be 1.5m above the current position
-                Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], -1.5)};
-                Vector3d current_velocity = {0.0, 0.0, 0.0};
-                Vector3d current_acceleration = {0.0, 0.0, 0.0};
+                Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], -1.5)};
+                Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
+                Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
 
                 float distance = std::abs(target_position.z() - takeoff_position.z());
                 float takeoff_time = path_planner_.calculateDuration(distance, 0.2);
@@ -590,11 +590,11 @@ private:
                 // Set the takeoff position, to the current target to handle ssteady state errors by mitigating, free fall
 
                 Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-                Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
+                Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 
-                Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
-                Vector3d current_velocity = {0.0, 0.0, 0.0};
-                Vector3d current_acceleration = {0.0, 0.0, 0.0};
+                Eigen::Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
+                Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
+                Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
 
                 Eigen::Vector3d target_position_3d(target_position.x(), target_position.y(), target_position.z());
                 Eigen::Vector3d takeoff_position_3d(takeoff_position.x(), takeoff_position.y(), takeoff_position.z());
