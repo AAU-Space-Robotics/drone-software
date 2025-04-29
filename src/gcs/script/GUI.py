@@ -27,12 +27,17 @@ killbutton_color = (0.8,0.0,0.0)
 text_buffer = ""
 current_item = 0
 position_x, position_y, position_z = 0, 0, 0
+target_position_x, target_position_y, target_position_z = 0, 0, 0
 roll, pitch, yaw = 0, 0, 0
 velocity_x, velocity_y, velocity_z = 0, 0, 0
 thrust = 0
 drone_kill = False
 test_slider = 0
-battery_voltage = 0.0
+battery_state_timestamp = 0
+position_timestamp = 0
+battery_voltage, battery_current, battery_percentage = 0.0, 0.0, 0.0
+battery_discharge_rate, battery_average_current = 0.0, 0.0
+
 drone_state = False
 
 class DroneGuiNode(Node):
@@ -46,25 +51,45 @@ class DroneGuiNode(Node):
         )
 
     def state_callback(self, msg):
-        global position_x, position_y, position_z
+        global position_x, position_y, position_z, position_timestamp
+        global target_position_x, target_position_y, target_position_z
         global roll, pitch, yaw
         global velocity_x, velocity_y, velocity_z
-        global battery_voltage
+        global battery_voltage, battery_state_timestamp, battery_current, battery_percentage, battery_discharge_rate, battery_average_current
+        position_timestamp = msg.position_timestamp
+        #print(f"Position timestamp: {position_timestamp}")
         if len(msg.position) >= 3:
             position_x = msg.position[0]
             position_y = msg.position[1]
             position_z = msg.position[2]
             #print(f"Position: {position_x}, {position_y}, {position_z}")
             #print(Decimal(position_x).quantize(Decimal('0.00')))
-        if len(msg.orientation) >= 3:
-            roll = msg.orientation[0]
-            pitch = msg.orientation[1]
-            yaw = msg.orientation[2]
         if len(msg.velocity) >= 3:
             velocity_x = msg.velocity[0]
             velocity_y = msg.velocity[1]
             velocity_z = msg.velocity[2]
+        #print(f"Velocity: {velocity_x}, {velocity_y}, {velocity_z}")
+        if len(msg.orientation) >= 3:
+            roll = msg.orientation[0]
+            pitch = msg.orientation[1]
+            yaw = msg.orientation[2]
+        
+        if len(msg.target_position) >= 3:
+            target_position_x = msg.target_position[0]
+            target_position_y = msg.target_position[1]
+            target_position_z = msg.target_position[2]
+        #print(f"Target Position: {target_position_x}, {target_position_y}, {target_position_z}")
+        battery_state_timestamp = msg.battery_state_timestamp
+        
         battery_voltage = msg.battery_voltage
+        
+        battery_current = msg.battery_current
+        
+        battery_percentage = msg.battery_percentage
+        
+        battery_discharge_rate = msg.battery_discharged_mah
+        print(f'Battery discharge rate: {battery_discharge_rate}')
+        battery_average_current = msg.battery_average_current
         
 
 def Arm_Button():
@@ -75,7 +100,7 @@ def Arm_Button():
         drone_kill = Kill_command()
         #button_color = (0.0,0.5,0.0)   if Kill_command() else (1.0,0.0,0.0)
          
-        imgui.set_cursor_pos((500,30))
+        imgui.set_cursor_pos((450,30))
         button_color = (0.0, 0.5, 0.0) if drone_kill else (1.0, 0.0, 0.0)#here
         button_text = "Press to Arm!  "  if drone_kill else "Press to Disarm"
 
@@ -100,7 +125,7 @@ def Arm_Button():
 
         imgui.pop_style_color(3)
         imgui.pop_style_var()
-        imgui.set_cursor_pos((760, 30))
+        imgui.set_cursor_pos((710, 30))
         with imgui.font(font):
             if drone_kill:
 
@@ -108,6 +133,12 @@ def Arm_Button():
             else:
 
                     imgui.text("THYRA IS ARMED!")
+
+        draw_list = imgui.get_window_draw_list()
+        start_x, start_y = 450, 70  # Starting point of the line (x, y)
+        end_x, end_y = 1100, 70      # Ending point of the line (x, y)
+        color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
+        draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
        
    
        
@@ -118,7 +149,7 @@ def Kill_command():
     color = imgui.get_color_u32_rgba(0.8, 0.0, 0.0, 1.0) 
                                                                 #flags is for rounding different corners
     #draw_list.add_rect_filled(1200,27, 1350,80,color,rounding =10.0, flags=15)
-    imgui.set_cursor_pos((1227,30))
+    imgui.set_cursor_pos((1150,30))
 
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *killbutton_color)
@@ -146,22 +177,22 @@ def Text_field():
     global text_buffer
     text_field = ""
     #changed = False
-    imgui.set_window_font_scale(1.0) 
-    imgui.set_cursor_pos((20,670))
+    
+    imgui.set_cursor_pos((450,670))
     with imgui.font(font):
         imgui.text("Input field")
-    imgui.set_cursor_pos((20,715))
+    imgui.set_cursor_pos((450,715))
     imgui.set_next_item_width(300)
     imgui.set_window_font_scale(2.0) 
     changed, text_field= imgui.input_text("", text_buffer, 64)
     if changed:
         text_buffer = text_field
     imgui.set_window_font_scale(1.0)
-    imgui.set_cursor_pos((20,750))
+    imgui.set_cursor_pos((450,750))
     with imgui.font(font):
         imgui.text(f"You typed: {text_buffer}")
 
-    imgui.set_cursor_pos((330,705))
+    imgui.set_cursor_pos((770,705))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0,0.8,0.0))
@@ -178,7 +209,7 @@ def Dropdown_Menu():
     global current_item
 
     items = ["No Controller", "PS4", "TX16S"]
-    imgui.set_cursor_pos((500,630))
+    imgui.set_cursor_pos((450,90))
     imgui.set_next_item_width(300)
 
     with imgui.font(font_small):
@@ -191,6 +222,7 @@ def Dropdown_Menu():
 def XYZ_Text_Field(msg):
     #Drawing a square kek
     global position_x, position_y, position_z
+    global target_position_x, target_position_y, target_position_z
     #position_x, position_y, position_z = drone_data.position
     #position_x = int(msg.position[0])
     #print(f"Position: {position_x}, {position_y}, {position_z}")
@@ -198,18 +230,33 @@ def XYZ_Text_Field(msg):
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
                                                                 #flags is for rounding different corners
-    draw_list.add_rect_filled(20,90, 250,235,color,rounding =10.0, flags=10)
+    draw_list.add_rect_filled(20,90, 420,235,color,rounding =10.0, flags=10)
     
     with imgui.font(font_small):
-        imgui.set_cursor_pos((23,50)); imgui.text("Positon")
-    with imgui.font(font):
-        imgui.set_cursor_pos((30,90)); imgui.text("X = ")
-        imgui.set_cursor_pos((30,140)); imgui.text("Y = ")
-        imgui.set_cursor_pos((30,190)); imgui.text("Z = ")
-    with imgui.font(font_large):
-        imgui.set_cursor_pos((120,83)); imgui.text(f"{int(position_x)}")
-        imgui.set_cursor_pos((120,133)); imgui.text(f"{int(position_y)}")
-        imgui.set_cursor_pos((120,183)); imgui.text(f"{int(position_z)}")
+        imgui.set_cursor_pos((23,50)); imgui.text("Positon:| Current:| Target: ")
+        imgui.set_cursor_pos((60,95)); imgui.text("X = ")
+        imgui.set_cursor_pos((60,145)); imgui.text("Y = ")
+        imgui.set_cursor_pos((60,195)); imgui.text("Z = ")
+        imgui.set_cursor_pos((170,93)); imgui.text(f"{Decimal(position_x).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((170,143)); imgui.text(f"{Decimal(position_y).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((170,193)); imgui.text(f"{-(Decimal(position_z).quantize(Decimal('0.000')))}")
+
+        imgui.set_cursor_pos((313,93)); imgui.text(f"{Decimal(target_position_x).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((313,143)); imgui.text(f"{Decimal(target_position_y).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((313,193)); imgui.text(f"{-(Decimal(target_position_z).quantize(Decimal('0.000')))}")
+
+            # Ending point of the line (x, y)
+        draw_list = imgui.get_window_draw_list()
+        start_x, start_y = 145, 90  # Starting point of the line (x, y)
+        end_x, end_y = 145, 235      # Ending point of the line (x, y)
+        color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
+        draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
+
+        draw_list = imgui.get_window_draw_list()
+        start_x, start_y = 287, 90  # Starting point of the line (x, y)
+        end_x, end_y = 287, 235      # Ending point of the line (x, y)
+        color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
+        draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
 
     
 def RPY_Text_Field():
@@ -217,21 +264,20 @@ def RPY_Text_Field():
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
                                                                 #flags is for rounding different corners
-    draw_list.add_rect_filled(20,305, 250,430,color,rounding =10.0, flags=10)
+    draw_list.add_rect_filled(20,305, 250,450,color,rounding =10.0, flags=10)
     thrust = -(int(test_slider))
 
     with imgui.font(font_small):
-        imgui.set_cursor_pos((23,265)); imgui.text("Orientation")
+        imgui.set_cursor_pos((23,265)); imgui.text("Orientation:")
     with imgui.font(font_small):
         # imgui.set_cursor_pos((30,255)); imgui.text("Thrust = ")
-        imgui.set_cursor_pos((30,305)); imgui.text("Roll  = ")
-        imgui.set_cursor_pos((30,355)); imgui.text("Pitch = ")
-        imgui.set_cursor_pos((30,395)); imgui.text("Yaw   = ")
-    with imgui.font(font_small):
+        imgui.set_cursor_pos((30,310)); imgui.text("Roll  = ")
+        imgui.set_cursor_pos((30,365)); imgui.text("Pitch = ")
+        imgui.set_cursor_pos((30,415)); imgui.text("Yaw   = ")
         #imgui.set_cursor_pos((150,255)); imgui.text(str(thrust))
-        imgui.set_cursor_pos((150,305)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((150,355)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((150,395)); imgui.text(f"{Decimal(yaw).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((150,308)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((150,363)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((150,413)); imgui.text(f"{Decimal(yaw).quantize(Decimal('0.00'))}")
 
 
 
@@ -244,43 +290,64 @@ def XYZVelocity_Text_Field():
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
                                                                 #flags is for rounding different corners
-    draw_list.add_rect_filled(20,500, 250,645,color,rounding =10.0, flags=10)
+    draw_list.add_rect_filled(20,520, 250,665,color,rounding =10.0, flags=10)
 
     with imgui.font(font_small):
-        imgui.set_cursor_pos((23,460)); imgui.text("Velosity")
-    with imgui.font(font):
-        imgui.set_cursor_pos((30,500)); imgui.text("X = ")
-        imgui.set_cursor_pos((30,550)); imgui.text("Y = ")
-        imgui.set_cursor_pos((30,600)); imgui.text("Z = ")
-
-    with imgui.font(font_large):
-        imgui.set_cursor_pos((120,493)); imgui.text(f"{int(velocity_x)}")
-        imgui.set_cursor_pos((120,543)); imgui.text(f"{int(velocity_y)}")
-        imgui.set_cursor_pos((120,593)); imgui.text(f"{int(velocity_z)}")
+        imgui.set_cursor_pos((23,480)); imgui.text("Velosity:")
+        imgui.set_cursor_pos((30,525)); imgui.text("X = ")
+        imgui.set_cursor_pos((30,575)); imgui.text("Y = ")
+        imgui.set_cursor_pos((30,625)); imgui.text("Z = ")
+        imgui.set_cursor_pos((120,523)); imgui.text(f"{Decimal(velocity_x).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((120,573)); imgui.text(f"{Decimal(velocity_y).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((120,623)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
     
 
 
 
 
 def batteryGraph():
-    global battery_voltage
-    battery_procentage = battery_voltage * 100 / 12.0
-    battery_progressbar = map_value(battery_voltage, 0, 12.0, 109, 44)
+    global battery_voltage, battery_current, battery_percentage, battery_average_current
+    battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0) 
-    draw_list.add_rect(1425,40,1465,110,color, rounding=1.0,flags=15,thickness=3)   
-    draw_list.add_rect(1432,31,1457,38,color, rounding=1.0,flags=3,thickness=3)  
-    if(battery_procentage > 50):
+    draw_list.add_rect(1525,40,1565,110,color, rounding=1.0,flags=15,thickness=3)   
+    draw_list.add_rect(1532,31,1557,38,color, rounding=1.0,flags=3,thickness=3)  
+    if(battery_percentage > 0.5):
         battery_color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0)
         
-    elif(battery_procentage > 25):
+    elif(battery_percentage > 0.25):
         battery_color = imgui.get_color_u32_rgba(1.0, 1.0, 0.0, 1.0)
     else:
         battery_color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
-    imgui.set_cursor_pos((1434, 116)); imgui.text(f"{int(battery_procentage)} %")
-    #draw_list.add_rect_filled(1465,31,1432+(battery_procentage*25),38,color, rounding=1.0,flags=3)
+    imgui.set_cursor_pos((1524, 116)); imgui.text(f"{Decimal(100*battery_percentage).quantize(Decimal('0.00'))} %")
+    #draw_list.add_rect_filled(1465,31,1432+(battery_percentage*25),38,color, rounding=1.0,flags=3)
     #print(battery_voltage)
-    draw_list.add_rect_filled(1428,106,1462,(battery_progressbar),battery_color, rounding=1.0,flags=15)
+    draw_list.add_rect_filled(1528,106,1562,(battery_progressbar),battery_color, rounding=1.0,flags=15)
+
+    imgui.set_cursor_pos((1320, 30)); imgui.text(f"Voltage:          {Decimal(battery_voltage).quantize(Decimal('0.0'))} V")
+    imgui.set_cursor_pos((1320, 60)); imgui.text(f"Current:          {-(Decimal(battery_current).quantize(Decimal('0.0')))} A")
+    imgui.set_cursor_pos((1320, 90)); imgui.text(f"Discharge rate:   {Decimal(battery_discharge_rate).quantize(Decimal('0.0'))} mAh")
+    imgui.set_cursor_pos((1320, 120)); imgui.text(f"Average current:  {-(Decimal(battery_average_current).quantize(Decimal('0.0')))} A")
+
+    draw_list = imgui.get_window_draw_list()
+    start_x, start_y = 1510, 30  # Starting point of the line (x, y)
+    end_x, end_y = 1510, 132      # Ending point of the line (x, y)
+    color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
+    draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
+
+    draw_list = imgui.get_window_draw_list()
+    start_x, start_y = 1439, 30  # Starting point of the line (x, y)
+    end_x, end_y = 1439, 132      # Ending point of the line (x, y)
+    color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
+    draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
+
+    draw_list = imgui.get_window_draw_list()
+    start_x, start_y = 1310, 30  # Starting point of the line (x, y)
+    end_x, end_y = 1310, 132      # Ending point of the line (x, y)
+    color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
+    draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
+
+    imgui.set_cursor_pos((1320, 150)); imgui.text(f"Timestamp {battery_state_timestamp}")
 
 def map_value(value, in_min, in_max, out_min, out_max):
     return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -289,11 +356,11 @@ def drone_visualization(path):
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
                                                                 #flags is for rounding different corners
-    draw_list.add_rect(490,150, 1200,600,color,rounding =10.0, flags=15,thickness=6)
+    draw_list.add_rect(450,150, 1100,560,color,rounding =10.0, flags=15,thickness=6)
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
                                                                 #flags is for rounding different corners
-    draw_list.add_rect_filled(493,153, 1197,597,color,rounding =10.0, flags=15)
+    draw_list.add_rect_filled(453,153, 1097,567,color,rounding =10.0, flags=15)
 
     image = Image.open(path).convert("RGBA")
     image_data = image.tobytes()
@@ -338,7 +405,7 @@ def main():
     #width, height = mode.size.width, mode.size.height
     
     # Create borderless window
-    window = glfw.create_window(1500, 800, "THYRA", None, None)
+    window = glfw.create_window(1600, 800, "THYRA", None, None)
     if not window:
         print("Could not create GLFW window")
         glfw.terminate()
@@ -358,9 +425,9 @@ def main():
     #impl.process_inputs()
     io = imgui.get_io()
     global font,font_large, font_small
-    font = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/Fonts/source-code-pro/SourceCodePro-Black.otf", 40)  # <-- bigger font size
-    font_large = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/Fonts/source-code-pro/SourceCodePro-Black.otf", 50)  # <-- bigger font size
-    font_small = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/Fonts/source-code-pro/SourceCodePro-Black.otf", 30)  # <-- bigger font size
+    font = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/src/gcs/fonts/source-code-pro/SourceCodePro-Black.otf", 40)  # <-- bigger font size
+    font_large = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/src/gcs/fonts/source-code-pro/SourceCodePro-Black.otf", 50)  # <-- bigger font size
+    font_small = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/src/gcs/fonts/source-code-pro/SourceCodePro-Black.otf", 30)  # <-- bigger font size
     impl.refresh_font_texture()
     
     # Main loop
@@ -374,19 +441,19 @@ def main():
       
         # Create UI without windowed mode
         imgui.set_next_window_position(0, 0)
-        imgui.set_next_window_size(1500, 800)
+        imgui.set_next_window_size(1600, 800)
         imgui.begin("wtf", flags=imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_RESIZE | imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_BACKGROUND)
         imgui.set_cursor_pos((20,10))
         with imgui.font(font_small):
             imgui.text("THYRA state monitor")
         #Creating a line for seperation
         draw_list = imgui.get_window_draw_list()
-        start_x, start_y = 460, 0  # Starting point of the line (x, y)
-        end_x, end_y = 460, 800      # Ending point of the line (x, y)
+        start_x, start_y = 430, 0  # Starting point of the line (x, y)
+        end_x, end_y = 430, 800      # Ending point of the line (x, y)
         color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
         #Running different widgets
-        texture_id, w, h = drone_visualization("droneImage.png")
+        texture_id, w, h = drone_visualization("/home/dksor/drone-software/src/gcs/images/droneImage.png")
         
         Arm_Button()
         Text_field()
@@ -394,7 +461,7 @@ def main():
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
         XYZVelocity_Text_Field()
-        imgui.set_cursor_pos((700, 230)); imgui.image(texture_id, 300, 300)
+        imgui.set_cursor_pos((640, 300)); imgui.image(texture_id, 250, 250)
         batteryGraph()
         imgui.end()
 

@@ -215,15 +215,30 @@ private:
 
         //Get drone state
         Stamped3DVector position = state_manager_.getGlobalPosition();
+        msg.position_timestamp = state_manager_.getGlobalPosition().timestamp.seconds();
         msg.position.resize(3);
         msg.position[0] = position.x(); 
         msg.position[1] = position.y(); 
         msg.position[2] = position.z();
-        //float32[] velocity #x, y, z
+        Stamped3DVector velocity = state_manager_.getGlobalVelocity();
+        //msg.velocity_timestamp = state_manager_.getGlobalVelocity().timestamp.seconds();
+        msg.velocity.resize(3);
+        msg.velocity[0] = velocity.x();
+        msg.velocity[1] = velocity.y();
+        msg.velocity[2] = velocity.z();
         //float32[] orientation  #roll, pitch, yaw
-        //float32[] target_position #x, y, z
+        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+        msg.target_position.resize(3);
+        msg.target_position[0] = target_profile.x();
+        msg.target_position[1] = target_profile.y();
+        msg.target_position[2] = target_profile.z();
         //float32[] acceleration
+        msg.battery_state_timestamp = state_manager_.getBatteryState().timestamp.seconds();
         msg.battery_voltage = state_manager_.getBatteryState().voltage;
+        msg.battery_current = state_manager_.getBatteryState().average_current;
+        msg.battery_percentage = state_manager_.getBatteryState().charge_remaining;
+        msg.battery_discharged_mah = state_manager_.getBatteryState().discharged_mah;
+        msg.battery_average_current = state_manager_.getBatteryState().average_current;
         
         //float32 battery_percentage  # 0.0 to 100.0
         //uint8 arming_state           
