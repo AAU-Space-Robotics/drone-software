@@ -88,7 +88,7 @@ class DroneGuiNode(Node):
         battery_percentage = msg.battery_percentage
         
         battery_discharge_rate = msg.battery_discharged_mah
-        print(f'Battery discharge rate: {battery_discharge_rate}')
+        #print(f'Battery discharge rate: {battery_discharge_rate}')
         battery_average_current = msg.battery_average_current
         
 
@@ -285,7 +285,7 @@ def RPY_Text_Field():
     
 def XYZVelocity_Text_Field():
     
-    global position_x, position_y, position_z
+    global velocity_x, velocity_y, velocity_z  
     
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
@@ -294,12 +294,20 @@ def XYZVelocity_Text_Field():
 
     with imgui.font(font_small):
         imgui.set_cursor_pos((23,480)); imgui.text("Velosity:")
+        imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.0, 0.0, 0.9)
         imgui.set_cursor_pos((30,525)); imgui.text("X = ")
-        imgui.set_cursor_pos((30,575)); imgui.text("Y = ")
-        imgui.set_cursor_pos((30,625)); imgui.text("Z = ")
         imgui.set_cursor_pos((120,523)); imgui.text(f"{Decimal(velocity_x).quantize(Decimal('0.000'))}")
+        imgui.pop_style_color()
+        imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 1.0, 0.0, 0.9)
+        imgui.set_cursor_pos((30,575)); imgui.text("Y = ")
         imgui.set_cursor_pos((120,573)); imgui.text(f"{Decimal(velocity_y).quantize(Decimal('0.000'))}")
+        imgui.pop_style_color()
+        imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.5, 0.9)
+        imgui.set_cursor_pos((30,625)); imgui.text("Z = ")
         imgui.set_cursor_pos((120,623)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
+        imgui.pop_style_color()
+        
+        
     
 
 
@@ -377,7 +385,51 @@ def drone_visualization(path):
 
     return texture_id, width, height
 
+    
+    
+def Arrows():
+    slider_value = 0.0  # default
 
+    # Set size of the slider
+    imgui.set_cursor_pos((450, 600)); imgui.set_next_item_width(300)
+
+    # Slider with range from 0 to 10
+    changed, slider_value = imgui.slider_float("Scale Me", slider_value, 0.0, 100.0)
+
+    # Show the current value
+
+    #Arrows 90 PÅ X ASKEN
+    #z-axis
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 0.9)
+    draw_list.add_triangle_filled(660, (-velocity_z)+325, 685, (-velocity_z)+325, 672.5, (-velocity_z)+300, color)
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 0.9)
+    draw_list.add_rect_filled(670, 350, 675, (-velocity_z)+325, color, rounding=2.0)
+    #x-axis
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 0.9)
+    draw_list.add_triangle_filled((velocity_x*1.5)+830, 450, (velocity_x*1.5)+830, 475, (velocity_x*1.5)+855, 462.5, color)
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 0.9)
+    draw_list.add_rect_filled(805, 460, (velocity_x*1.5)+830, 465, color, rounding=2.0)
+    #y-axis
+    aw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 0.9)  # Green arrow
+
+    # Arrow shaft (thin diagonal rectangle or just a line)
+    start_x, start_y = 800, 350
+    end_x, end_y = 830 +(velocity_y), 320 - (velocity_y)
+    draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
+
+    # Arrowhead (triangle at the end)
+    # Position the triangle to point diagonally
+    draw_list.add_triangle_filled(
+        end_x+3, end_y-3,          # tip
+        end_x - 23, end_y + 5,  # base left
+        end_x - 5, end_y + 23,  # base right
+        color
+    )
 
 
 def start_ros():
@@ -461,8 +513,9 @@ def main():
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
         XYZVelocity_Text_Field()
-        imgui.set_cursor_pos((640, 300)); imgui.image(texture_id, 250, 250)
+        imgui.set_cursor_pos((550, 320)); imgui.image(texture_id, 250, 250)
         batteryGraph()
+        Arrows()
         imgui.end()
 
         
