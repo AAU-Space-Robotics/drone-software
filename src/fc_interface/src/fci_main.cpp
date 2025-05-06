@@ -288,11 +288,11 @@ private:
             double dt = (get_time() - trajectory_start_time_).seconds();
             if (dt > path_planner_.getTotalTime()) {
                 is_trajectory_active_ = false;
-                Eigen::Vector3d final_position = path_planner_.getTrajectoryPoint(path_planner_.getTotalTime(), trajectoryMethod::MIN_SNAP);
+                Eigen::Vector3d final_position = path_planner_.getTrajectoryPoint(path_planner_.getTotalTime(), trajectoryMethod::MIN_SNAP).position;
                 Stamped4DVector target_profile(get_time(), final_position.x(), final_position.y(), final_position.z(), 0.0);
                 state_manager_.setTargetPositionProfile(target_profile);
             }
-            Eigen::Vector3d target_position = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP);
+            Eigen::Vector3d target_position = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP).position;
             Stamped4DVector target_profile(get_time(), target_position.x(), target_position.y(), target_position.z(), 0.0);
             state_manager_.setTargetPositionProfile(target_profile);
         }

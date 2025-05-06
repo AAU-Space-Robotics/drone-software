@@ -80,8 +80,8 @@ FullTrajectoryPoint FCI_PathPlanner::getTrajectoryPoint(double t, trajectoryMeth
         TrajectoryPoint y = evaluatePolynomial(segments[1].coefficient, t);
         TrajectoryPoint z = evaluatePolynomial(segments[2].coefficient, t);
         point.position = Eigen::Vector3d(x.position, y.position, z.position);
-        point.velocity Eigen::Vector3d(x.velocity, y.velocity, z.velocity);
-        point.acceleration Eigen::Vector3d(x.acceleration, y.acceleration, z.acceleration);
+        point.velocity = Eigen::Vector3d(x.velocity, y.velocity, z.velocity);
+        point.acceleration = Eigen::Vector3d(x.acceleration, y.acceleration, z.acceleration);
     }
     return point;
 }

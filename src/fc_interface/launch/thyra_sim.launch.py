@@ -34,18 +34,13 @@ def generate_launch_description():
         ),
 
         # Start PX4 SITL with Gazebo (output suppressed)
+        # Start PX4 SITL with Gazebo
         ExecuteProcess(
-        cmd=[
-            'bash', '-c',
-            f'''
-            echo "Trying to cd into: {px4_dir}" && \
-            cd {px4_dir} && \
-            echo "Now in: $(pwd)" && \
-            make px4_sitl gz_x500 > /dev/null 2>&1
-            '''
-        ],
-        shell=True,
-        output='screen',
+            cmd=[
+                'bash', '-c',
+                f'cd {px4_dir} && echo "Now in: $(pwd)" && make px4_sitl gz_x500'
+            ],
+            output='screen',
         ),
 
         #Start MicroXRCEAgent (output suppressed)
