@@ -391,34 +391,63 @@ def Arrows():
     #z-axis
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 0.9)
-    draw_list.add_triangle_filled(660, (-velocity_z * 10)+325, 685, (-velocity_z * 10)+325, 672.5, (-velocity_z * 10)+300, color)
+    #draw_list.add_triangle_filled(660, (-velocity_z * 10)+325, 685, (-velocity_z * 10)+325, 672.5, (-velocity_z * 10)+300, color)
+    if(-velocity_z) > 0:
+        draw_list.add_triangle_filled(660, (velocity_z * 10)+325, 685, (velocity_z * 10)+325, 672.5, (velocity_z * 10)+300, color)
+        draw_list.add_rect_filled(670, 325, 675, (velocity_z * 10)+305, color, rounding=2.0)
+    else:
+        draw_list.add_triangle_filled(660, (velocity_z * 10)+325, 685, (velocity_z * 10)+325, 672.5, (velocity_z * 10)+350, color)
+        draw_list.add_rect_filled(670, 325, 675, (-velocity_z * 10)+345, color, rounding=2.0)
+
+    
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 0.9)
-    draw_list.add_rect_filled(670, 350, 675, (-velocity_z * 10)+325, color, rounding=2.0)
+    
     #x-axis
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 0.9)
-    draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+855, 462.5, color)
-    draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 0.9)
-    draw_list.add_rect_filled(805, 460, (velocity_x* 10)+830, 465, color, rounding=2.0)
+    #draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+855, 462.5, color)
+    #draw_list = imgui.get_window_draw_list()
+    #color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 0.9)
+    #draw_list.add_rect_filled(805, 460, (velocity_x* 10)+830, 465, color, rounding=2.0)
+
+    if velocity_x > 0:
+        draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+855, 462.5, color)
+        draw_list.add_rect_filled(830, 460, (velocity_x* 10)+835, 465, color, rounding=2.0)
+    else:
+        draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+805, 462.5, color)
+        draw_list.add_rect_filled(830, 460, (velocity_x* 10)+825, 465, color, rounding=2.0)
+    
+    
+    
     #y-axis
-    draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 0.9)  # Green arrow
-
     # Arrow shaft (thin diagonal rectangle or just a line)
-    start_x, start_y = 800, 350
-    end_x, end_y = 830 +(velocity_y * 10), 320 - (velocity_y * 10)
-    draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
-
     # Arrowhead (triangle at the end)
     # Position the triangle to point diagonally
-    draw_list.add_triangle_filled(
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 0.9)  # Green arrow
+    
+    if velocity_y > 0:
+        start_x, start_y = 813, 334
+        end_x, end_y = 830 +(velocity_y * 10), 320 - (velocity_y * 10)
+        draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
+        draw_list.add_triangle_filled(
         end_x+3, end_y-3,          # tip
         end_x - 23, end_y + 5,  # base left
         end_x - 5, end_y + 23,  # base right
         color
-    )
+        )
+    else:  
+        start_x, start_y = 813, 334
+        end_x, end_y = 810 -(-velocity_y * 10), 340 +(-velocity_y * 10)
+        draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
+        draw_list.add_triangle_filled(
+        end_x-3, end_y+3,          # tip
+        end_x + 23, end_y - 5,  # base left
+        end_x + 5, end_y - 23,  # base right
+        color
+        )
+    
 
 
 def start_ros():
