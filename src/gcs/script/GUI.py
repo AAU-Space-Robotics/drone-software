@@ -5,6 +5,7 @@ import imgui
 from imgui.integrations.glfw import GlfwRenderer
 import OpenGL.GL as gl
 from PIL import Image
+from OpenGL.GL import *
 
 
 import rclpy
@@ -39,6 +40,9 @@ battery_voltage, battery_current, battery_percentage = 0.0, 0.0, 0.0
 battery_discharge_rate, battery_average_current = 0.0, 0.0
 
 drone_state = False
+
+
+
 
 class DroneGuiNode(Node):
     def __init__(self):
@@ -360,7 +364,7 @@ def batteryGraph():
 def map_value(value, in_min, in_max, out_min, out_max):
     return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
-def drone_visualization(path):
+def drone_visualization():
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
                                                                 #flags is for rounding different corners
@@ -369,22 +373,7 @@ def drone_visualization(path):
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
                                                                 #flags is for rounding different corners
     draw_list.add_rect_filled(453,153, 1097,567,color,rounding =10.0, flags=15)
-
-    image = Image.open(path).convert("RGBA")
-    image_data = image.tobytes()
-
-    width, height = image.size
-    texture_id = gl.glGenTextures(1)
-    gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
-
-    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
-    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-
-    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, image_data)
-    
-
-    return texture_id, width, height
-
+        
     
     
 def Arrows():
@@ -402,24 +391,24 @@ def Arrows():
     #z-axis
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 0.9)
-    draw_list.add_triangle_filled(660, (-velocity_z)+325, 685, (-velocity_z)+325, 672.5, (-velocity_z)+300, color)
+    draw_list.add_triangle_filled(660, (-velocity_z * 10)+325, 685, (-velocity_z * 10)+325, 672.5, (-velocity_z * 10)+300, color)
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 0.9)
-    draw_list.add_rect_filled(670, 350, 675, (-velocity_z)+325, color, rounding=2.0)
+    draw_list.add_rect_filled(670, 350, 675, (-velocity_z * 10)+325, color, rounding=2.0)
     #x-axis
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 0.9)
-    draw_list.add_triangle_filled((velocity_x*1.5)+830, 450, (velocity_x*1.5)+830, 475, (velocity_x*1.5)+855, 462.5, color)
+    draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+855, 462.5, color)
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 0.9)
-    draw_list.add_rect_filled(805, 460, (velocity_x*1.5)+830, 465, color, rounding=2.0)
+    draw_list.add_rect_filled(805, 460, (velocity_x* 10)+830, 465, color, rounding=2.0)
     #y-axis
-    aw_list = imgui.get_window_draw_list()
+    draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 0.9)  # Green arrow
 
     # Arrow shaft (thin diagonal rectangle or just a line)
     start_x, start_y = 800, 350
-    end_x, end_y = 830 +(velocity_y), 320 - (velocity_y)
+    end_x, end_y = 830 +(velocity_y * 10), 320 - (velocity_y * 10)
     draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
 
     # Arrowhead (triangle at the end)
@@ -438,7 +427,8 @@ def start_ros():
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
-    
+
+
 def main():
     # Start ROS in background thread
     Thread(target=start_ros, daemon=True).start()
@@ -481,6 +471,23 @@ def main():
     font_large = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/src/gcs/fonts/source-code-pro/SourceCodePro-Black.otf", 50)  # <-- bigger font size
     font_small = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/src/gcs/fonts/source-code-pro/SourceCodePro-Black.otf", 30)  # <-- bigger font size
     impl.refresh_font_texture()
+
+
+    texture_id = glGenTextures(1)
+    glBindTexture(GL_TEXTURE_2D, texture_id)
+    
+    # Set texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    # Load image data (e.g., via PIL)
+    image = Image.open("/home/dksor/drone-software/src/gcs/images/droneImage.png").convert("RGBA")
+    image_data = image.tobytes()
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, image_data)
+    glBindTexture(GL_TEXTURE_2D, 0)
+    
     
     # Main loop
     while not glfw.window_should_close(window):
@@ -505,7 +512,8 @@ def main():
         color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
         #Running different widgets
-        texture_id, w, h = drone_visualization("/home/dksor/drone-software/src/gcs/images/droneImage.png")
+        drone_visualization()
+        imgui.set_cursor_pos((550,320));imgui.image(texture_id, 250, 250)
         
         Arm_Button()
         Text_field()
@@ -513,9 +521,10 @@ def main():
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
         XYZVelocity_Text_Field()
-        imgui.set_cursor_pos((550, 320)); imgui.image(texture_id, 250, 250)
+        
         batteryGraph()
         Arrows()
+
         imgui.end()
 
         
@@ -530,6 +539,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
 
 
     
