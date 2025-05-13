@@ -209,9 +209,10 @@ private:
     {
         interfaces::msg::DroneState msg{};
 
-        msg.timestamp = get_time().seconds();
+        //msg.timestamp = get_time().seconds();
         //int8 id
         //int8 mode
+        
 
         //Get drone state
         Stamped3DVector position = state_manager_.getGlobalPosition();
@@ -221,7 +222,7 @@ private:
         msg.position[1] = position.y(); 
         msg.position[2] = position.z();
         Stamped3DVector velocity = state_manager_.getGlobalVelocity();
-        //msg.velocity_timestamp = state_manager_.getGlobalVelocity().timestamp.seconds();
+        msg.velocity_timestamp = state_manager_.getGlobalVelocity().timestamp.seconds();
         msg.velocity.resize(3);
         msg.velocity[0] = velocity.x();
         msg.velocity[1] = velocity.y();
@@ -232,6 +233,7 @@ private:
         msg.target_position[0] = target_profile.x();
         msg.target_position[1] = target_profile.y();
         msg.target_position[2] = target_profile.z();
+       
         //float32[] acceleration
         msg.battery_state_timestamp = state_manager_.getBatteryState().timestamp.seconds();
         msg.battery_voltage = state_manager_.getBatteryState().voltage;
@@ -241,8 +243,9 @@ private:
         msg.battery_average_current = state_manager_.getBatteryState().average_current;
         
         //float32 battery_percentage  # 0.0 to 100.0
-        //uint8 arming_state           
-        //uint8 estop     
+        //uint8 arming_state  
+        //msg.arming_state = state_manager_.arming_state
+        //uint8 estop  
 
         drone_state_pub_->publish(msg);
     }
