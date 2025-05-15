@@ -22,10 +22,10 @@ float FCI_PathPlanner::calculateDuration(float distance, float velocity) const {
 
 
 bool FCI_PathPlanner::GenerateTrajectory(
-    const Vector3d& start,
-    const Vector3d& end,
-    const Vector3d& current_velocity,
-    const Vector3d& current_acceleration,
+    const Eigen::Vector3d& start,
+    const Eigen::Vector3d& end,
+    const Eigen::Vector3d& current_velocity,
+    const Eigen::Vector3d& current_acceleration,
     double time,
     trajectoryMethod method) {
 
@@ -35,9 +35,9 @@ bool FCI_PathPlanner::GenerateTrajectory(
     start_acc = current_acceleration;
 
     if (method == MIN_SNAP) {
-        segments[0].coefficient = generatePolynomialCoefficients(start.x(), end.x(), start_vel.x(), start_acc.x(), time, method);
-        segments[1].coefficient = generatePolynomialCoefficients(start.y(), end.y(), start_vel.y(), start_acc.y(), time, method);
-        segments[2].coefficient = generatePolynomialCoefficients(start.z(), end.z(), start_vel.z(), start_acc.z(), time, method);
+        segments[0].coefficient = generatePolynomialCoefficients(start(0), end(0), start_vel(0), start_acc(0), time, method);
+        segments[1].coefficient = generatePolynomialCoefficients(start(1), end(1), start_vel(1), start_acc(1), time, method);
+        segments[2].coefficient = generatePolynomialCoefficients(start(2), end(2), start_vel(2), start_acc(2), time, method);
     }
     return true;
 }
@@ -56,26 +56,32 @@ TrajectoryPoint FCI_PathPlanner::evaluatePolynomial(const std::vector<double>& c
     return point;
 }
 
-std::vector<Vector3d> FCI_PathPlanner::getTrajectoryPoints(double dt, trajectoryMethod method) {
-    std::vector<Vector3d> points;
+std::vector<FullTrajectoryPoint> FCI_PathPlanner::getTrajectoryPoints(double dt, trajectoryMethod method) {
+    std::vector<FullTrajectoryPoint> points;
     for (double t = 0; t <= total_time; t += dt) {
-        Vector3d point;
+        FullTrajectoryPoint point;
         if (method == MIN_SNAP) {
-            point.setX(evaluatePolynomial(segments[0].coefficient, t).position);
-            point.setY(evaluatePolynomial(segments[1].coefficient, t).position);
-            point.setZ(evaluatePolynomial(segments[2].coefficient, t).position);
+            TrajectoryPoint x = evaluatePolynomial(segments[0].coefficient, t);
+            TrajectoryPoint y = evaluatePolynomial(segments[1].coefficient, t);
+            TrajectoryPoint z = evaluatePolynomial(segments[2].coefficient, t);
+            point.position = Eigen::Vector3d(x.position, y.position, z.position);
+            point.velocity = Eigen::Vector3d(x.velocity, y.velocity, z.velocity);
+            point.acceleration = Eigen::Vector3d(x.acceleration, y.acceleration, z.acceleration);
         }
         points.push_back(point);
     }
     return points;
 }
 
-Vector3d FCI_PathPlanner::getTrajectoryPoint(double t, trajectoryMethod method) {
-    Vector3d point;
+FullTrajectoryPoint FCI_PathPlanner::getTrajectoryPoint(double t, trajectoryMethod method) {
+    FullTrajectoryPoint point;
     if (method == MIN_SNAP) {
-        point.setX(evaluatePolynomial(segments[0].coefficient, t).position);
-        point.setY(evaluatePolynomial(segments[1].coefficient, t).position);
-        point.setZ(evaluatePolynomial(segments[2].coefficient, t).position);
+        TrajectoryPoint x = evaluatePolynomial(segments[0].coefficient, t);
+        TrajectoryPoint y = evaluatePolynomial(segments[1].coefficient, t);
+        TrajectoryPoint z = evaluatePolynomial(segments[2].coefficient, t);
+        point.position = Eigen::Vector3d(x.position, y.position, z.position);
+        point.velocity = Eigen::Vector3d(x.velocity, y.velocity, z.velocity);
+        point.acceleration = Eigen::Vector3d(x.acceleration, y.acceleration, z.acceleration);
     }
     return point;
 }
