@@ -34,10 +34,13 @@ enum class ArmingState {
 };
 
 enum class FlightMode {
+    LANDED = -2,
     STANDBY = -1,
     MANUAL = 0,
     MANUAL_AIDED = 1,
-    POSITION = 2
+    POSITION = 2,
+    SAFETYLAND_BLIND = 3,
+    SAFETYLAND_POSITION = 4
 };
 
 // Used to define 3D(~4D), where the last dimension is time 

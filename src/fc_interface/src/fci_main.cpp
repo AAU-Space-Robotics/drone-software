@@ -34,11 +34,11 @@ public:
     using GoalHandleDroneCommand = rclcpp_action::ServerGoalHandle<DroneCommand>;
 
     FlightControllerInterface()
-        : Node("flight_controller_interface"),
-          controller_(transformations_),
-          offboard_setpoint_counter_(0),
-          offboard_mode_set_(false),
-          timeout_threshold_(0.2)
+    : Node("flight_controller_interface"),
+      controller_(transformations_),
+      offboard_setpoint_counter_(0),
+      offboard_mode_set_(false),
+      timeout_threshold_(0.2)
     {
         // ROS 2 QoS settings
         rclcpp::QoS qos(10);
@@ -47,24 +47,32 @@ public:
 
         // Determine time source at initialization
         bool use_sim_time = false;
-        this->get_parameter_or("use_sim_time", use_sim_time, false);
+        if (!this->has_parameter("use_sim_time")) {
+            this->declare_parameter("use_sim_time", false);
+        }
+        this->get_parameter("use_sim_time", use_sim_time);
         clock_ = std::make_shared<rclcpp::Clock>(use_sim_time ? RCL_ROS_TIME : RCL_SYSTEM_TIME);
         RCLCPP_INFO(get_logger(), "Using %s time source", use_sim_time ? "simulation" : "system");
 
         // Declare position source parameter
         std::string position_source = "px4";
-        this->declare_parameter("position_source", "px4");
+        if (!this->has_parameter("position_source")) {
+            this->declare_parameter("position_source", "px4");
+        }
         this->get_parameter("position_source", position_source);
         RCLCPP_INFO(get_logger(), "Using %s position source", position_source.c_str());
 
-        // Declare PID gains parameters, and get them
+        // Load PID gains
         PIDControllerGains pid_gains;
-        this->get_parameter_or("pid_gains/thrust/Kp", pid_gains.thrust.Kp, pid_gains.thrust.Kp);
-        this->get_parameter_or("pid_gains/thrust/Ki", pid_gains.thrust.Ki, pid_gains.thrust.Ki);
-        this->get_parameter_or("pid_gains/thrust/Kd", pid_gains.thrust.Kd, pid_gains.thrust.Kd);
-        controller_.setPIDGains(pid_gains);
-        RCLCPP_INFO(get_logger(), "Thrust PID gains: Kp=%.2f, Ki=%.2f, Kd=%.2f", pid_gains.thrust.Kp, pid_gains.thrust.Ki, pid_gains.thrust.Kd);
+        load_pid_gains("pitch", pid_gains.pitch, 0.1, 0.0, 0.05);
+        load_pid_gains("roll", pid_gains.roll, 0.1, 0.0, 0.05);
+        load_pid_gains("yaw", pid_gains.yaw, 0.1, 0.0, 0.05);
+        load_pid_gains("thrust", pid_gains.thrust, 0.8, 0.0, 0.1);
 
+        // Set PID gains in controller
+        controller_.setPIDGains(pid_gains);
+
+        
         // Set initial state
         state_manager_.setGlobalPosition(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setGlobalVelocity(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
@@ -138,6 +146,24 @@ public:
     }
 
 private:
+
+    void load_pid_gains(const std::string& controller, PIDGains& gains, 
+        double kp_default, double ki_default, double kd_default)
+    {
+    // Declare parameters
+    this->declare_parameter("pid_gains." + controller + ".Kp", kp_default);
+    this->declare_parameter("pid_gains." + controller + ".Ki", ki_default);
+    this->declare_parameter("pid_gains." + controller + ".Kd", kd_default);
+
+    // Get parameters
+    this->get_parameter("pid_gains." + controller + ".Kp", gains.Kp);
+    this->get_parameter("pid_gains." + controller + ".Ki", gains.Ki);
+    this->get_parameter("pid_gains." + controller + ".Kd", gains.Kd);
+
+    // Log gains
+    RCLCPP_INFO(get_logger(), "%s PID gains: Kp=%.2f, Ki=%.2f, Kd=%.2f",
+    controller.c_str(), gains.Kp, gains.Ki, gains.Kd);
+    }
     
     void localPositionCallback(const VehicleLocalPosition::SharedPtr msg)
     {
@@ -188,6 +214,15 @@ private:
     void vehicleStatusCallback(const VehicleStatus::SharedPtr msg)
     {
         DroneState drone_state = state_manager_.getDroneState();
+        
+        // Reset the control loop if the arming state changes. Only if the drone is asked to be armed, while armed, do nothing.
+        if (drone_state.arming_state == ArmingState::DISARMED && msg->arming_state == 2 || 
+            drone_state.arming_state == ArmingState::ARMED && msg->arming_state != 2)
+        {
+            cleanupControlLoop();
+        }
+
+        // Set the new drone state
         drone_state.timestamp = get_time();
         drone_state.arming_state = (msg->arming_state == 2) ? ArmingState::ARMED : ArmingState::DISARMED;
         state_manager_.setDroneState(drone_state);
@@ -299,7 +334,7 @@ private:
 
         Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
         //print error
-        RCLCPP_INFO(get_logger(), "Position error: x=%.2f, y=%.2f, z=%.2f", global_error_ned.x(), global_error_ned.y(), global_error_ned.z());
+        //RCLCPP_INFO(get_logger(), "Position error: x=%.2f, y=%.2f, z=%.2f", global_error_ned.x(), global_error_ned.y(), global_error_ned.z());
 
         return output;
     }
@@ -346,10 +381,13 @@ private:
         return {manual_input.x(), manual_input.y(), manual_input.z(), output.w()};
     }
 
-    void controlLoop(int mode)
+    void controlLoop()
     {
+        //Lock the current control mode
+        std::lock_guard<std::mutex> lock(current_control_mode_mutex_);
+        
         Eigen::Vector4d control_input;
-        switch (mode)
+        switch (current_control_mode_)
         {
         case 0:
             control_input = manualMode();
@@ -360,8 +398,11 @@ private:
         case 2:
             control_input = positionMode();
             break;
+        case 3:
+            control_input = safetyLandBlindMode();
+            break;
         default:
-            RCLCPP_WARN(get_logger(), "Unknown control mode: %d", mode);
+            RCLCPP_WARN(get_logger(), "Unknown control mode: %d", current_control_mode_);
             control_input = Eigen::Vector4d::Zero();
             break;
         }
@@ -375,6 +416,7 @@ private:
     {
         if (control_timer_)
         {
+            // Stop the control loop and reset target profile and attitude setpoint
             try
             {
                 control_timer_->cancel();
@@ -391,19 +433,60 @@ private:
         }
     }
 
-    void ensureControlLoopRunning(int mode)
-    {
+ 
+    void ensureControlLoopRunning(int mode) {
         DroneState drone_state = state_manager_.getDroneState();
-        if (!control_timer_ && drone_state.arming_state == ArmingState::ARMED)
-        {
-            control_timer_ = create_wall_timer(10ms, [this, mode]()
-                                               { controlLoop(mode); });
+        std::lock_guard<std::mutex> lock(current_control_mode_mutex_);
+
+        if (!control_timer_ && drone_state.arming_state == ArmingState::ARMED) {
+            current_control_mode_ = mode;
+            control_timer_ = create_wall_timer(10ms, [this]() { controlLoop(); });
             RCLCPP_INFO(get_logger(), "Control loop started with mode: %d", mode);
+        } else if (control_timer_ && mode != current_control_mode_) {
+            // Update mode without restarting timer
+            current_control_mode_ = mode;
+            RCLCPP_INFO(get_logger(), "Control mode updated to: %d", mode);
         }
-        else if (!control_timer_)
+    }
+
+    Eigen::Vector4d safetyLandBlindMode(){
+
+        //Scale thrust down by height
+
+        // Get current state of the drone
+        DroneState drone_state = state_manager_.getDroneState();
+        // Get current yaw of the drone
+        StampedQuaternion attitude = state_manager_.getAttitude();
+        
+        if (drone_state.flight_mode != FlightMode::SAFETYLAND_BLIND)
         {
-            RCLCPP_WARN(get_logger(), "Cannot start control loop: drone not armed.");
+            // Make the drone go into safety land mode
+            RCLCPP_INFO(get_logger(), "Safety land mode activated.");
+            drone_state.timestamp = get_time();
+            drone_state.flight_mode = FlightMode::SAFETYLAND_BLIND;
+
         }
+        else if (drone_state.flight_mode == FlightMode::SAFETYLAND_BLIND)
+        {
+            // Calculate safety thrust
+            safety_thurst = safety_thurst + safety_thurstdown_rate;
+
+            if (safety_thurst >= 0.0)
+            {
+                drone_state.timestamp = get_time();
+                drone_state.flight_mode = FlightMode::LANDED;
+
+                // Clean up control loop
+                cleanupControlLoop();
+                RCLCPP_INFO(get_logger(), "Drone landed safely, maybe?.");
+            }
+        }
+
+        return Eigen::Vector4d(0.0, 0.0, attitude.w(), safety_thurst);
+    }
+
+    void safetyLandPositionMode(){
+
     }
 
     // Command functions
@@ -474,7 +557,7 @@ private:
             RCLCPP_WARN(get_logger(), "Rejected: invalid takeoff parameters or drone not armed.");
             return rclcpp_action::GoalResponse::REJECT;
         }
-        if (goal->command_type == "land")
+        if (goal->command_type == "land" && false)
         {
             RCLCPP_WARN(get_logger(), "Rejected: invalid land parameters or drone not armed.");
             return rclcpp_action::GoalResponse::REJECT;
@@ -612,6 +695,12 @@ private:
                 result->success = true;
                 result->message = "Drone in manual aided mode.";
             }
+            else if (goal->command_type == "land")
+            {
+                ensureControlLoopRunning(3);
+                result->success = true;
+                result->message = "Drone landing.";
+            }
             else
             {
                 result->success = false;
@@ -664,9 +753,18 @@ private:
     AccelerationError prev_acceleration_error_;
     static constexpr float yaw_sensitivity_ = 1.0f / 20.0f;
 
+    //Safety variables
+    float safety_thurst = -0.5f;
+    float safety_thurstdown_rate = 0.001f;
+    
+
+
     int offboard_setpoint_counter_;
     bool offboard_mode_set_;
     double timeout_threshold_;
+    int current_control_mode_;
+    std::mutex current_control_mode_mutex_;
+
 
     bool is_trajectory_active_ = false;
     rclcpp::Time trajectory_start_time_;

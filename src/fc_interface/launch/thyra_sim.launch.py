@@ -10,15 +10,19 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     # Define workspace directory (one level up from package)
     workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+    pkg_share = FindPackageShare('fc_interface')
+
     
     # directory which workspace is located in
     general_dir = os.path.abspath(os.path.join(workspace_dir, '..', '..', '..'))
     px4_dir = os.path.join(general_dir, 'PX4-Autopilot')
     
-    print(f"px4_dir: {px4_dir}")
-
+     # Path to the simulation config file
+    config_path = PathJoinSubstitution([pkg_share, 'config', 'controller_gains_sim.yaml'])
+   
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+    position_source = LaunchConfiguration('position_source', default='px4')
 
     return LaunchDescription([
         # Declare launch arguments
@@ -47,7 +51,7 @@ def generate_launch_description():
         shell=True,
         output='screen',
         ),
-
+        
         #Start MicroXRCEAgent (output suppressed)
         ExecuteProcess(
             cmd=['MicroXRCEAgent', 'udp4', '-p', '8888'],
@@ -60,6 +64,17 @@ def generate_launch_description():
             executable='fci',
             name='flight_controller_interface',
             output='screen',
-            parameters=[{'use_sim_time': use_sim_time}],
+            parameters=[
+                config_path,
+                {'use_sim_time': use_sim_time},
+                {'position_source': position_source}
+            ]
         ),
     ])
+    
+    
+    
+    
+    
+    
+    

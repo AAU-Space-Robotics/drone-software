@@ -6,6 +6,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
+    position_source = LaunchConfiguration('position_source', default='px4')
 
     return LaunchDescription([
         # Declare launch arguments
@@ -26,6 +27,9 @@ def generate_launch_description():
             executable='fci',
             name='flight_controller_interface',
             output='screen',
-            parameters=[{'use_sim_time': use_sim_time}],
+            parameters=[
+                {'use_sim_time': use_sim_time},
+                {'position_source': position_source}
+            ],
         ),
     ])

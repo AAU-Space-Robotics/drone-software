@@ -1,0 +1,20 @@
+# config/controller_gains_sim.yaml
+flight_controller_interface:
+  ros__parameters:
+    pid_gains:
+          pitch:
+            Kp: 0.15
+            Ki: 0.0
+            Kd: 0.05
+          roll:
+            Kp: 0.15
+            Ki: 0.0
+            Kd: 0.05
+          yaw:
+            Kp: 0.15
+            Ki: 0.0
+            Kd: 0.05
+          thrust:
+            Kp: 1.2
+            Ki: 0.0
+            Kd: 0.15
