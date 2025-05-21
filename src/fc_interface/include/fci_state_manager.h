@@ -40,7 +40,7 @@ enum class FlightMode {
     MANUAL_AIDED = 1,
     POSITION = 2,
     SAFETYLAND_BLIND = 3,
-    SAFETYLAND_POSITION = 4
+    LAND_POSITION = 4
 };
 
 // Used to define 3D(~4D), where the last dimension is time 

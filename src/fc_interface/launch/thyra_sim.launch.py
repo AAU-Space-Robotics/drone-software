@@ -5,6 +5,7 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, Pyth
 from launch.conditions import IfCondition
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from launch.actions import TimerAction
 
 
 def generate_launch_description():
@@ -17,8 +18,9 @@ def generate_launch_description():
     general_dir = os.path.abspath(os.path.join(workspace_dir, '..', '..', '..'))
     px4_dir = os.path.join(general_dir, 'PX4-Autopilot')
     
-     # Path to the simulation config file
-    config_path = PathJoinSubstitution([pkg_share, 'config', 'controller_gains_sim.yaml'])
+    # Path to the simulation config file
+    controller_params_path = PathJoinSubstitution([pkg_share, 'config', 'controller_gains_sim.yaml'])
+    safety_params_path = PathJoinSubstitution([pkg_share, 'config', 'safety_params_sim.yaml'])
    
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
@@ -52,22 +54,28 @@ def generate_launch_description():
         output='screen',
         ),
         
-        #Start MicroXRCEAgent (output suppressed)
+        # Start MicroXRCEAgent (output suppressed)
         ExecuteProcess(
             cmd=['MicroXRCEAgent', 'udp4', '-p', '8888'],
             output='log',
         ),
       
-        # Launch FlightControllerInterface node
-        Node(
-            package='fc_interface',
-            executable='fci',
-            name='flight_controller_interface',
-            output='screen',
-            parameters=[
-                config_path,
-                {'use_sim_time': use_sim_time},
-                {'position_source': position_source}
+        # Delay and launch FlightControllerInterface node
+        TimerAction(
+            period=20.0,  # Delay in seconds
+            actions=[
+                Node(
+                    package='fc_interface',
+                    executable='fci',
+                    name='flight_controller_interface',
+                    output='screen',
+                    parameters=[
+                        controller_params_path,
+                        safety_params_path,
+                        {'use_sim_time': use_sim_time},
+                        {'position_source': position_source}
+                    ]
+                )
             ]
         ),
     ])

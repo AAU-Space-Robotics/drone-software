@@ -72,11 +72,32 @@ public:
         // Set PID gains in controller
         controller_.setPIDGains(pid_gains);
 
+        // Load safety parameters
+        this->declare_parameter("safety.check_gcs_timeout", true);
+        this->declare_parameter("safety.check_position_timeout", true);
+        this->declare_parameter("safety.gcs_timeout_threshold", 0.2);
+        this->declare_parameter("safety.position_timeout_threshold", 0.2);
+        this->declare_parameter("safety.safety_thrust_initial", -0.8);
+        this->declare_parameter("safety.safety_thrustdown_rate", 0.0005);
+        this->get_parameter("safety.check_gcs_timeout", check_gcs_timeout_);
+        this->get_parameter("safety.check_position_timeout", check_position_timeout_);
+        this->get_parameter("safety.gcs_timeout_threshold", gcs_timeout_threshold_);
+        this->get_parameter("safety.position_timeout_threshold", position_timeout_threshold_);
+        this->get_parameter("safety.safety_thrust_initial", safety_thrust_);
+        this->get_parameter("safety.safety_thrustdown_rate", safety_thrustdown_rate_);
+        RCLCPP_INFO(get_logger(), "Safety parameters: gcs_timeout=%.2f, position_timeout=%.2f, "
+                    "safety_thrust_initial=%.2f, safety_thrustdown_rate=%.4f",
+                    gcs_timeout_threshold_, position_timeout_threshold_,
+                    safety_thrust_, safety_thrustdown_rate_);
+  
+
         
         // Set initial state
         state_manager_.setGlobalPosition(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setGlobalVelocity(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setTargetPositionProfile(Stamped4DVector(get_time(), 0.0, 0.0, 0.0, 0.0));
+        state_manager_.setAttitude(StampedQuaternion(get_time(), Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0)));
+        state_manager_.setManualControlInput(Stamped4DVector(get_time(), 0.0, 0.0, 0.0, 0.0));
 
         // Publishers
         offboard_control_mode_pub_ = create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
@@ -132,13 +153,13 @@ public:
             });
 
         // Timers
-        offboard_timer_ = create_wall_timer(200ms, [this]()
-                                            { setOffboardMode(); });
+        offboard_timer_ = create_wall_timer(200ms, [this](){ setOffboardMode(); });
+        drone_state_timer = create_wall_timer(100ms, [this](){ publish_drone_state(); });
+        safety_timer_ = create_wall_timer(200ms, [this]() { safetyCheckCallback(); });
 
         RCLCPP_INFO(get_logger(), "FlightControllerInterface initialized.");
 
-        drone_state_timer = create_wall_timer(100ms, [this]()
-                                            { publish_drone_state(); });
+
     }
 
     rclcpp::Time get_time() const {
@@ -165,6 +186,53 @@ private:
     controller.c_str(), gains.Kp, gains.Ki, gains.Kd);
     }
     
+    void safetyCheckCallback()
+    {
+        std::lock_guard<std::mutex> lock(current_control_mode_mutex_);
+        DroneState drone_state = state_manager_.getDroneState();
+
+        // Skip checks if drone is disarmed or already in a fail-safe mode
+        if (drone_state.arming_state != ArmingState::ARMED ||
+            drone_state.flight_mode == FlightMode::SAFETYLAND_BLIND ||
+            drone_state.flight_mode == FlightMode::LANDED)
+        {
+            return;
+        }
+
+        
+        if (check_gcs_timeout_)
+        {
+            // Check GCS input freshness
+            gcs_stale_ = false;
+            Stamped4DVector manual_input = state_manager_.getManualControlInput();
+                if ((get_time() - manual_input.getTime()).seconds() > gcs_timeout_threshold_)
+                {
+                    RCLCPP_WARN(get_logger(), "No GCS input received in the last %.2f seconds!", gcs_timeout_threshold_);
+                    gcs_stale_ = true;
+                }
+        }
+
+        if (check_position_timeout_)
+        {
+            // Check position data freshness
+            position_stale_ = false;
+            Stamped3DVector position = state_manager_.getGlobalPosition();
+            if ((get_time() - position.getTime()).seconds() > position_timeout_threshold_)
+            {
+                RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", position_timeout_threshold_);
+                position_stale_ = true;
+            }
+        }
+
+        // Trigger fail-safe if needed
+        if (gcs_stale_ || position_stale_)
+        {
+            RCLCPP_ERROR(get_logger(), "Entering safety land mode due to stale data (GCS: %s, Position: %s)",
+                         gcs_stale_ ? "stale" : "fresh", position_stale_ ? "stale" : "fresh");
+            ensureControlLoopRunning(3); // Switch to safetyLandBlindMode
+        }
+    }
+
     void localPositionCallback(const VehicleLocalPosition::SharedPtr msg)
     {
         // Note that local position refers to coordinates being expressed in cartesian coordinates
@@ -401,9 +469,10 @@ private:
 
     void controlLoop()
     {
+
         //Lock the current control mode
         std::lock_guard<std::mutex> lock(current_control_mode_mutex_);
-        
+
         Eigen::Vector4d control_input;
         switch (current_control_mode_)
         {
@@ -482,14 +551,17 @@ private:
             RCLCPP_INFO(get_logger(), "Safety land mode activated.");
             drone_state.timestamp = get_time();
             drone_state.flight_mode = FlightMode::SAFETYLAND_BLIND;
+            state_manager_.setDroneState(drone_state);
 
         }
         else if (drone_state.flight_mode == FlightMode::SAFETYLAND_BLIND)
         {
             // Calculate safety thrust
-            safety_thurst = safety_thurst + safety_thurstdown_rate;
+            safety_thrust_ = safety_thrust_ + safety_thrustdown_rate_;
 
-            if (safety_thurst >= 0.0)
+            RCLCPP_INFO(get_logger(), "Safety thrust: %.2f", safety_thrust_);
+
+            if (safety_thrust_ >= -0.3)
             {
                 drone_state.timestamp = get_time();
                 drone_state.flight_mode = FlightMode::LANDED;
@@ -500,10 +572,43 @@ private:
             }
         }
 
-        return Eigen::Vector4d(0.0, 0.0, attitude.w(), safety_thurst);
+        return Eigen::Vector4d(0.0, 0.0, attitude.w(), safety_thrust_);
     }
 
-    void safetyLandPositionMode(){
+    void landPositionMode()
+    {
+        // Get current state of the drone
+        DroneState drone_state = state_manager_.getDroneState();
+        // Get current yaw of the drone
+        StampedQuaternion attitude = state_manager_.getAttitude();
+
+        if (drone_state.flight_mode != FlightMode::LAND_POSITION)
+        {
+            // Make the drone go into safety land mode
+            RCLCPP_INFO(get_logger(), "Safety land mode activated.");
+            drone_state.timestamp = get_time();
+            drone_state.flight_mode = FlightMode::LAND_POSITION;
+
+            // Set the target position to the current position
+            Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+            Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
+            
+            Eigen::Vector3d target_position = {target_profile.x(), target_profile.y(), 0.0};
+            Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
+            Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
+
+            Eigen::Vector3d target_position_3d(target_position.x(), target_position.y(), target_position.z());
+  
+            float distance = (target_position_3d - takeoff_position).norm();
+     
+            // Generate trajectory
+            path_planner_.GenerateTrajectory(takeoff_position, target_position, current_velocity, current_acceleration, path_planner_.calculateDuration(distance, 0.2), trajectoryMethod::MIN_SNAP);
+
+            // set trajectory start time
+            trajectory_start_time_ = get_time();
+            is_trajectory_active_ = true;
+
+        }
 
     }
 
@@ -550,7 +655,7 @@ private:
     rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID & /*uuid*/,
                                                    std::shared_ptr<const DroneCommand::Goal> goal)
     {
-        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "manual", "manual_aided"};
+        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided"};
         RCLCPP_INFO(get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
 
         DroneState drone_state = state_manager_.getDroneState();
@@ -620,6 +725,14 @@ private:
                 cleanupControlLoop();
                 result->success = true;
                 result->message = "Emergency stop executed.";
+            }
+            else if (goal->command_type == "eland")
+            {
+                // Begin blind descend
+                ensureControlLoopRunning(3);
+
+                result->success = true;
+                result->message = "Emergency landing executed.";
             }
             else if (goal->command_type == "arm")
             {
@@ -715,7 +828,10 @@ private:
             }
             else if (goal->command_type == "land")
             {
-                ensureControlLoopRunning(3);
+                ensureControlLoopRunning(2);
+                // Land drone
+                landPositionMode();
+
                 result->success = true;
                 result->message = "Drone landing.";
             }
@@ -760,6 +876,7 @@ private:
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;
     rclcpp::TimerBase::SharedPtr drone_state_timer;
+    rclcpp::TimerBase::SharedPtr safety_timer_;
     rclcpp_action::Server<DroneCommand>::SharedPtr drone_command_server_;
 
     FCI_Transformations transformations_;
@@ -772,11 +889,15 @@ private:
     static constexpr float yaw_sensitivity_ = 1.0f / 20.0f;
 
     //Safety variables
-    float safety_thurst = -0.5f;
-    float safety_thurstdown_rate = 0.001f;
+    bool gcs_stale_ = false;
+    bool position_stale_ = false;
+    bool check_gcs_timeout_;
+    bool check_position_timeout_;
+    float safety_thrust_;
+    float safety_thrustdown_rate_;
+    float gcs_timeout_threshold_;
+    float position_timeout_threshold_;
     
-
-
     int offboard_setpoint_counter_;
     bool offboard_mode_set_;
     double timeout_threshold_;
