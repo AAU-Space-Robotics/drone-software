@@ -543,7 +543,8 @@ private:
         // Get current state of the drone
         DroneState drone_state = state_manager_.getDroneState();
         // Get current yaw of the drone
-        StampedQuaternion attitude = state_manager_.getAttitude();
+        StampedQuaternion attitude = state_manager_.getAttitude(); 
+        Eigen::Vector3d euler = transformations_.quaternionToEuler(attitude.quaternion());
         
         if (drone_state.flight_mode != FlightMode::SAFETYLAND_BLIND)
         {
@@ -572,7 +573,7 @@ private:
             }
         }
 
-        return Eigen::Vector4d(0.0, 0.0, attitude.w(), safety_thrust_);
+        return Eigen::Vector4d(euler.x(), euler.y(), euler.z(), safety_thrust_);
     }
 
     void landPositionMode()
