@@ -69,6 +69,9 @@ public:
         load_pid_gains("yaw", pid_gains.yaw, 0.1, 0.0, 0.05);
         load_pid_gains("thrust", pid_gains.thrust, 0.8, 0.0, 0.1);
 
+        this->declare_parameter("controller_constraints.max_linear_velocity",0.2);
+        this->get_parameter("controller_constraints.max_linear_velocity", controller_.max_linear_velocity_);
+
         // Set PID gains in controller
         controller_.setPIDGains(pid_gains);
 
@@ -78,12 +81,14 @@ public:
         this->declare_parameter("safety.gcs_timeout_threshold", 0.2);
         this->declare_parameter("safety.position_timeout_threshold", 0.2);
         this->declare_parameter("safety.safety_thrust_initial", -0.8);
+        this->declare_parameter("safety.safety_thrust_final", -0.45);
         this->declare_parameter("safety.safety_thrustdown_rate", 0.0005);
         this->get_parameter("safety.check_gcs_timeout", check_gcs_timeout_);
         this->get_parameter("safety.check_position_timeout", check_position_timeout_);
         this->get_parameter("safety.gcs_timeout_threshold", gcs_timeout_threshold_);
         this->get_parameter("safety.position_timeout_threshold", position_timeout_threshold_);
-        this->get_parameter("safety.safety_thrust_initial", safety_thrust_);
+        this->get_parameter("safety.safety_thrust_initial", safety_thrust_initial_);
+        this->get_parameter("safety.safety_thrust_final", safety_thrust_final_);
         this->get_parameter("safety.safety_thrustdown_rate", safety_thrustdown_rate_);
         RCLCPP_INFO(get_logger(), "Safety parameters: gcs_timeout=%.2f, position_timeout=%.2f, "
                     "safety_thrust_initial=%.2f, safety_thrustdown_rate=%.4f",
@@ -553,21 +558,24 @@ private:
             drone_state.timestamp = get_time();
             drone_state.flight_mode = FlightMode::SAFETYLAND_BLIND;
             state_manager_.setDroneState(drone_state);
-
+            safety_land_start_time_ = get_time();
         }
         else if (drone_state.flight_mode == FlightMode::SAFETYLAND_BLIND)
         {
-            // Calculate safety thrust
-            safety_thrust_ = safety_thrust_ + safety_thrustdown_rate_;
+            double time_elapsed = (get_time() - safety_land_start_time_).seconds();
+
+            // Exponential decay: thrust = final + (initial - final) * e^(-k * t)
+            safety_thrust_ = safety_thrust_final_ + (safety_thrust_initial_ - safety_thrust_final_) * std::exp(-safety_thrustdown_rate_ * time_elapsed);
 
             RCLCPP_INFO(get_logger(), "Safety thrust: %.2f", safety_thrust_);
-
-            if (safety_thrust_ >= -0.3)
+    
+            if (safety_thrust_ >= safety_thrust_final_ - 0.02)
             {
                 drone_state.timestamp = get_time();
                 drone_state.flight_mode = FlightMode::LANDED;
 
                 // Clean up control loop
+                disarm(true);
                 cleanupControlLoop();
                 RCLCPP_INFO(get_logger(), "Drone landed safely, maybe?.");
             }
@@ -603,7 +611,7 @@ private:
             float distance = (target_position_3d - takeoff_position).norm();
      
             // Generate trajectory
-            path_planner_.GenerateTrajectory(takeoff_position, target_position, current_velocity, current_acceleration, path_planner_.calculateDuration(distance, 0.2), trajectoryMethod::MIN_SNAP);
+            path_planner_.GenerateTrajectory(takeoff_position, target_position, current_velocity, current_acceleration, path_planner_.calculateDuration(distance, controller_.max_linear_velocity_), trajectoryMethod::MIN_SNAP);
 
             // set trajectory start time
             trajectory_start_time_ = get_time();
@@ -616,6 +624,7 @@ private:
     // Command functions
     void arm()
     {
+        publishAttitudeSetpoint(Eigen::Vector4d(0.0, 0.0, 0.0, 0.0));
         RCLCPP_INFO(get_logger(), "Sending arm command...");
         publishVehicleCommand(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0, 0.0);
     }
@@ -771,7 +780,7 @@ private:
                 Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
 
                 float distance = std::abs(target_position.z() - takeoff_position.z());
-                float takeoff_time = path_planner_.calculateDuration(distance, 0.2);
+                float takeoff_time = path_planner_.calculateDuration(distance, controller_.max_linear_velocity_);
 
                 // Generate takeoff trajectory
                 path_planner_.GenerateTrajectory(takeoff_position, target_position, current_velocity, current_acceleration, takeoff_time, trajectoryMethod::MIN_SNAP);
@@ -800,7 +809,7 @@ private:
                 Eigen::Vector3d takeoff_position_3d(takeoff_position.x(), takeoff_position.y(), takeoff_position.z());
 
                 float distance = (target_position_3d - takeoff_position_3d).norm();
-                float takeoff_time = path_planner_.calculateDuration(distance, 0.2);
+                float takeoff_time = path_planner_.calculateDuration(distance, controller_.max_linear_velocity_);
 
 
                 // Generate trajectory
@@ -895,9 +904,12 @@ private:
     bool check_gcs_timeout_;
     bool check_position_timeout_;
     float safety_thrust_;
+    float safety_thrust_initial_;
+    float safety_thrust_final_;
     float safety_thrustdown_rate_;
     float gcs_timeout_threshold_;
     float position_timeout_threshold_;
+    rclcpp::Time safety_land_start_time_;
     
     int offboard_setpoint_counter_;
     bool offboard_mode_set_;
