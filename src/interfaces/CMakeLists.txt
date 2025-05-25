@@ -25,7 +25,10 @@ endif()
 rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/ManualControlInput.msg"
 "msg/DroneCommand.msg"
+"msg/MotionCapturePose.msg"
 "action/DroneCommand.action"
+"msg/DroneState.msg"
+"msg/DroneScope.msg"
 DEPENDENCIES builtin_interfaces geometry_msgs std_msgs sensor_msgs action_msgs)
 
 

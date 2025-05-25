@@ -1,0 +1,23 @@
+# config/controller_gains.yaml
+flight_controller_interface:
+  ros__parameters:
+    pid_gains:
+          pitch:
+            Kp: 0.1
+            Ki: 0.0
+            Kd: 0.05
+          roll:
+            Kp: 0.1
+            Ki: 0.0
+            Kd: 0.05
+          yaw:
+            Kp: 0.1
+            Ki: 0.0
+            Kd: 0.05
+          thrust:
+            Kp: 0.8
+            Ki: 0.0
+            Kd: 0.1
+
+    controller_constraints:
+      max_linear_velocity:   0.4 # Maximum linear velocity (m/s)

@@ -19,12 +19,21 @@ struct PIDControllerGains {
     PIDGains pitch{0.1, 0.0, 0.05};
     PIDGains roll{0.1, 0.0, 0.05};
     PIDGains yaw{0.1, 0.0, 0.05};
-    PIDGains thrust{5.0, 0.2, 1.0};
+    PIDGains thrust{0.8, 0.0, 0.1};
+};
+
+struct AccelerationControllerGains {
+    PIDGains roll{0.1, 0.0, 0.05};
+    PIDGains pitch{0.1, 0.0, 0.05};
+    PIDGains thrust{0.4, 0.0, 0.0};
 };
 
 class FCI_Controller {
 public:
     explicit FCI_Controller(const FCI_Transformations& transformations);
+
+    // Set PID gains for attitude and thrust
+    void setPIDGains(const PIDControllerGains& gains);
 
     // Position PID control (returns roll, pitch, yaw, thrust)
     Eigen::Vector4d pidControl(double sample_time,
@@ -42,9 +51,12 @@ public:
     // Utility function to map normalized values to angles
     double mapNormToAngle(double norm) const;
 
+    float max_linear_velocity_ = 0.2; // Maximum linear velocity constraint
+
 private:
     const FCI_Transformations& transformations_; // Reference to transformations utility
     PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust
+    AccelerationControllerGains acceleration_pid_gains_; // PID gains for acceleration
 
     // Constrain control outputs
     double constrainAngle(double angle) const;

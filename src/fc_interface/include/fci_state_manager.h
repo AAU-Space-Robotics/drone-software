@@ -34,10 +34,13 @@ enum class ArmingState {
 };
 
 enum class FlightMode {
+    LANDED = -2,
     STANDBY = -1,
     MANUAL = 0,
     MANUAL_AIDED = 1,
-    POSITION = 2
+    POSITION = 2,
+    SAFETYLAND_BLIND = 3,
+    LAND_POSITION = 4
 };
 
 // Used to define 3D(~4D), where the last dimension is time 
@@ -154,6 +157,18 @@ struct DroneState {
     FlightMode flight_mode = FlightMode::STANDBY;
 };
 
+// Battery state
+struct BatteryState {
+    rclcpp::Time timestamp = rclcpp::Time(0, 0);
+    
+    //Battery state data
+    int cell_count = 0;
+    float voltage = 0.0f;
+    float charge_remaining = 0.0f;
+    float discharged_mah = 0.0f;
+    float average_current = 0.0f;
+};
+
 // Controller errors
 struct PIDError {
     double error;
@@ -181,6 +196,9 @@ public:
     void setGlobalPosition(const Stamped3DVector& new_data);
     Stamped3DVector getGlobalPosition();
 
+    void setGlobalVelocity(const Stamped3DVector& new_data);
+    Stamped3DVector getGlobalVelocity();
+
     void setGlobalAcceleration(const Stamped3DVector& new_data);
     Stamped3DVector getGlobalAcceleration();
 
@@ -196,6 +214,9 @@ public:
     void setDroneState(const DroneState& new_data);
     DroneState getDroneState();
 
+    void setBatteryState(const BatteryState& new_data);
+    BatteryState getBatteryState();
+
     void setManualControlInput(const Stamped4DVector& new_data);
     Stamped4DVector getManualControlInput();
 
@@ -209,6 +230,7 @@ private:
     
     // Mutexes for thread safety
     std::mutex position_global_mutex_;
+    std::mutex velocity_global_mutex_;
     std::mutex acceleration_global_mutex_;
     
     std::mutex attitude_data_mutex_;
@@ -219,14 +241,18 @@ private:
     std::mutex acceleration_error_mutex_;
     std::mutex position_error_mutex_;
 
+    std::mutex battery_state_mutex_;
+
     // Data structures to store state information
     Stamped3DVector position_global_;
+    Stamped3DVector velocity_global_;
     Stamped3DVector acceleration_global_;
     
     StampedQuaternion attitude_;
     Stamped4DVector target_position_profile_;
     DroneCmdAck drone_cmd_ack_;
     DroneState drone_state_;
+    BatteryState battery_state_;
     Stamped4DVector manual_control_input_;
     AccelerationError acceleration_error_;
     PositionError position_error_;

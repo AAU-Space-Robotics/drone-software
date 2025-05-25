@@ -4,6 +4,7 @@
 #include <mutex>
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/Geometry>
+#include <cmath>
 #include <rclcpp/rclcpp.hpp>
 #include <GeographicLib/LocalCartesian.hpp>
 #include "fci_state_manager.h" 

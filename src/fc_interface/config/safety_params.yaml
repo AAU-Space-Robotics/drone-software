@@ -1,0 +1,11 @@
+# config/safety_config.yaml
+flight_controller_interface:
+  ros__parameters:
+    safety:
+      check_gcs_timeout: false          # Check for ground control station timeout
+      check_position_timeout: false     # Check for position data timeout
+      gcs_timeout_threshold: 0.2       # Timeout for ground control station input (seconds)
+      position_timeout_threshold: 0.2  # Timeout for position data (seconds)
+      safety_thrust_initial: -0.72      # Initial thrust for safety landing (negative for downward)
+      safety_thrust_final: -0.65        # Final thrust for safety landing (negative for downward)
+      safety_thrustdown_rate: 0.4   # Rate of thrust decrease during safety landing
