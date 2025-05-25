@@ -189,6 +189,12 @@ struct PositionError {
     PIDError Yaw;
 };
 
+struct VelocityError {
+    PIDError X;
+    PIDError Y;
+    PIDError Z;
+};
+
 // FCI_StateManager class definition
 class FCI_StateManager {
 public:

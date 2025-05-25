@@ -1,23 +1,31 @@
-# config/controller_gains_sim.yaml
 flight_controller_interface:
   ros__parameters:
     pid_gains:
-          pitch:
-            Kp: 0.15
-            Ki: 0.0
-            Kd: 0.05
-          roll:
-            Kp: 0.15
-            Ki: 0.0
-            Kd: 0.05
-          yaw:
-            Kp: 0.15
-            Ki: 0.0
-            Kd: 0.05
-          thrust:
-            Kp: 1.2
-            Ki: 0.0
-            Kd: 0.15
-    
+      position:
+        x:
+          Kp: 0.15
+          Ki: 0.0
+          Kd: 0.0
+        y:
+          Kp: 0.15
+          Ki: 0.0
+          Kd: 0.0
+        z:
+          Kp: 1.2
+          Ki: 0.0
+          Kd: 0.0
+      velocity:
+        vel_x:
+          Kp: 0.5
+          Ki: 0.05
+          Kd: 0.2
+        vel_y:
+          Kp: 0.5
+          Ki: 0.05
+          Kd: 0.2
+        vel_z:
+          Kp: 1.0
+          Ki: 0.1
+          Kd: 0.4
     controller_constraints:
-      max_linear_velocity:   0.4 # Maximum linear velocity (m/s)
+      max_linear_velocity: 0.4  # Maximum linear velocity (m/s)

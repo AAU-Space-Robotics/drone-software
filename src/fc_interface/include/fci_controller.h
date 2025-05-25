@@ -2,7 +2,7 @@
 #define FCI_CONTROLLER_H
 
 #include <eigen3/Eigen/Dense>
-#include "fci_state_manager.h" // For Stamped3DVector, StampedQuaternion, etc.
+#include "fci_state_manager.h" // For Stamped3DVector, StampedQuaternion, PositionError, VelocityError
 #include "fci_transformations.h" // For coordinate transformations
 
 // PID gains structure
@@ -14,53 +14,59 @@ struct PIDGains {
     PIDGains(double kp = 0.0, double ki = 0.0, double kd = 0.0) : Kp(kp), Ki(ki), Kd(kd) {}
 };
 
-// Controller gains for attitude and thrust
-struct PIDControllerGains {
-    PIDGains pitch{0.1, 0.0, 0.05};
-    PIDGains roll{0.1, 0.0, 0.05};
-    PIDGains yaw{0.1, 0.0, 0.05};
-    PIDGains thrust{0.8, 0.0, 0.1};
+struct PositionControllerGains {
+    PIDGains x;
+    PIDGains y;
+    PIDGains z;
 };
 
-struct AccelerationControllerGains {
-    PIDGains roll{0.1, 0.0, 0.05};
-    PIDGains pitch{0.1, 0.0, 0.05};
-    PIDGains thrust{0.4, 0.0, 0.0};
+// Controller gains for velocity control
+struct VelocityControllerGains {
+    PIDGains vel_x;
+    PIDGains vel_y;
+    PIDGains vel_z;
 };
 
 class FCI_Controller {
 public:
     explicit FCI_Controller(const FCI_Transformations& transformations);
 
-    // Set PID gains for attitude and thrust
-    void setPIDGains(const PIDControllerGains& gains);
+    // Set PID gains for position (attitude) control
+    void setPositionPIDGains(const PositionControllerGains& gains);
 
-    // Position PID control (returns roll, pitch, yaw, thrust)
-    Eigen::Vector4d pidControl(double sample_time,
-                               PositionError& previous_position_error,
-                               const Stamped3DVector& position_ned_earth,
-                               const StampedQuaternion& attitude,
-                               const Stamped3DVector& target_position_ned_earth);
+    // Set PID gains for velocity control
+    void setVelocityPIDGains(const VelocityControllerGains& gains);
 
-    // Acceleration PID control (returns roll, pitch, yaw, thrust)
-    Eigen::Vector4d accelerationControl(double sample_time,
-                                        AccelerationError& previous_acceleration_error,
-                                        const Stamped3DVector& acceleration_frd,
-                                        const Stamped3DVector& target_acceleration_frd);
+    // Position control: Returns target velocities in FRD frame (x, y, z)
+    Eigen::Vector3d positionControl(double sample_time,
+                                   PositionError& previous_position_error,
+                                   const Stamped3DVector& position_ned_earth,
+                                   const StampedQuaternion& attitude,
+                                   const Stamped3DVector& target_position_ned_earth,
+                                   const double max_linear_velocity);
 
-    // Utility function to map normalized values to angles
+    // Velocity control: Returns roll, pitch, yaw, thrust
+    Eigen::Vector4d velocityControl(double sample_time,
+                                   VelocityError& previous_velocity_error,
+                                   const Stamped3DVector& velocity_frd,
+                                   const Eigen::Vector3d& target_velocity_frd,
+                                   const double max_angle_radians,
+                                   const double max_thrust,
+                                   const double min_thrust);
+
     double mapNormToAngle(double norm) const;
 
-    float max_linear_velocity_ = 0.2; // Maximum linear velocity constraint
+    float max_linear_velocity_ = 0.0; // Maximum linear velocity constraint (set via config)
 
 private:
     const FCI_Transformations& transformations_; // Reference to transformations utility
-    PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust
-    AccelerationControllerGains acceleration_pid_gains_; // PID gains for acceleration
+    PositionControllerGains position_pid_gains_; // PID gains for position control
+    VelocityControllerGains velocity_pid_gains_; // PID gains for velocity control
 
-    // Constrain control outputs
-    double constrainAngle(double angle) const;
-    double constrainThrust(double thrust) const;
+    // Generic PID computation for a single axis
+    double computePID(double error, double& previous_error, double& error_integral,
+                     double sample_time, const PIDGains& gains,
+                     bool apply_anti_windup, double min_output, double max_output) const;
 };
 
 #endif // FCI_CONTROLLER_H

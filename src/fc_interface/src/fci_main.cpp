@@ -62,18 +62,22 @@ public:
         this->get_parameter("position_source", position_source);
         RCLCPP_INFO(get_logger(), "Using %s position source", position_source.c_str());
 
-        // Load PID gains
-        PIDControllerGains pid_gains;
-        load_pid_gains("pitch", pid_gains.pitch, 0.1, 0.0, 0.05);
-        load_pid_gains("roll", pid_gains.roll, 0.1, 0.0, 0.05);
-        load_pid_gains("yaw", pid_gains.yaw, 0.1, 0.0, 0.05);
-        load_pid_gains("thrust", pid_gains.thrust, 0.8, 0.0, 0.1);
+        // Load PID gains for position control
+        PositionControllerGains position_gains;
+        load_pid_gains("position.x", position_gains.x);
+        load_pid_gains("position.y", position_gains.y);
+        load_pid_gains("position.z", position_gains.z);
+        controller_.setPositionPIDGains(position_gains);
+
+        // Load PID gains for velocity control
+        VelocityControllerGains velocity_gains;
+        load_pid_gains("velocity.vel_x", velocity_gains.vel_x);
+        load_pid_gains("velocity.vel_y", velocity_gains.vel_y);
+        load_pid_gains("velocity.vel_z", velocity_gains.vel_z);
+        controller_.setVelocityPIDGains(velocity_gains);
 
         this->declare_parameter("controller_constraints.max_linear_velocity",0.2);
         this->get_parameter("controller_constraints.max_linear_velocity", controller_.max_linear_velocity_);
-
-        // Set PID gains in controller
-        controller_.setPIDGains(pid_gains);
 
         // Load safety parameters
         this->declare_parameter("safety.check_gcs_timeout", true);
@@ -173,23 +177,23 @@ public:
 
 private:
 
-    void load_pid_gains(const std::string& controller, PIDGains& gains, 
-        double kp_default, double ki_default, double kd_default)
+    void load_pid_gains(const std::string& controller, PIDGains& gains)
     {
-    // Declare parameters
-    this->declare_parameter("pid_gains." + controller + ".Kp", kp_default);
-    this->declare_parameter("pid_gains." + controller + ".Ki", ki_default);
-    this->declare_parameter("pid_gains." + controller + ".Kd", kd_default);
+        // Declare parameters
+        this->declare_parameter("pid_gains." + controller + ".Kp", 0.0);
+        this->declare_parameter("pid_gains." + controller + ".Ki", 0.0);
+        this->declare_parameter("pid_gains." + controller + ".Kd", 0.0);
 
-    // Get parameters
-    this->get_parameter("pid_gains." + controller + ".Kp", gains.Kp);
-    this->get_parameter("pid_gains." + controller + ".Ki", gains.Ki);
-    this->get_parameter("pid_gains." + controller + ".Kd", gains.Kd);
+        // Get parameters
+        this->get_parameter("pid_gains." + controller + ".Kp", gains.Kp);
+        this->get_parameter("pid_gains." + controller + ".Ki", gains.Ki);
+        this->get_parameter("pid_gains." + controller + ".Kd", gains.Kd);
 
-    // Log gains
-    RCLCPP_INFO(get_logger(), "%s PID gains: Kp=%.2f, Ki=%.2f, Kd=%.2f",
-    controller.c_str(), gains.Kp, gains.Ki, gains.Kd);
+        // Log gains
+        RCLCPP_INFO(get_logger(), "%s PID gains: Kp=%.2f, Ki=%.2f, Kd=%.2f",
+                    controller.c_str(), gains.Kp, gains.Ki, gains.Kd);
     }
+
     
     void safetyCheckCallback()
     {
@@ -392,9 +396,8 @@ private:
         return {manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w()};
     }
 
-    Eigen::Vector4d positionMode()
+Eigen::Vector4d positionMode()
     {
-
         if (is_trajectory_active_) {
             double dt = (get_time() - trajectory_start_time_).seconds();
             if (dt > path_planner_.getTotalTime()) {
@@ -412,10 +415,8 @@ private:
         Stamped3DVector position = state_manager_.getGlobalPosition();
         StampedQuaternion attitude = state_manager_.getAttitude();
         Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
+        Stamped3DVector velocity = state_manager_.getGlobalVelocity();
 
-        // Calculate global position error in NED frame
-        Eigen::Vector3d global_error_ned = target_position_3d.vector() - position.vector();
-    
         double dt = (get_time() - position.getTime()).seconds();
         if (dt > timeout_threshold_)
         {
@@ -423,31 +424,11 @@ private:
             return Eigen::Vector4d::Zero();
         }
 
-        Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
-        //print error
-        //RCLCPP_INFO(get_logger(), "Position error: x=%.2f, y=%.2f, z=%.2f", global_error_ned.x(), global_error_ned.y(), global_error_ned.z());
-
-        return output;
-    }
-
-    Eigen::Vector4d controlModeACCELTEST()
-    {
-        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-        Stamped3DVector acceleration = state_manager_.getGlobalAcceleration();
-        StampedQuaternion attitude = state_manager_.getAttitude();
-        Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
-
-        // Calculate global position error in NED frame
-        Eigen::Vector3d global_error_ned = target_position_3d.vector() - acceleration.vector();
-
-        double dt = (get_time() - acceleration.getTime()).seconds();
-        if (dt > timeout_threshold_)
-        {
-            RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", timeout_threshold_);
-            return Eigen::Vector4d::Zero();
-        }
-
-        Eigen::Vector4d output = controller_.accelerationControl(dt, prev_acceleration_error_, acceleration, target_position_3d);
+        // Compute target velocities
+        Eigen::Vector3d target_velocity_frd = controller_.positionControl(dt, prev_position_error_, position, attitude, target_position_3d, controller_.max_linear_velocity_);
+        
+        // Compute control outputs
+        Eigen::Vector4d output = controller_.velocityControl(dt, prev_velocity_error_, velocity, target_velocity_frd, M_PI / 18.0, -1.0, -0.05);
         return output;
     }
 
@@ -461,14 +442,9 @@ private:
         StampedQuaternion attitude = state_manager_.getAttitude();
         Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
 
-        double dt = (get_time() - position.getTime()).seconds();
-        if (dt > timeout_threshold_)
-        {
-            RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", timeout_threshold_);
-            return Eigen::Vector4d::Zero();
-        }
+        // Use position mode
+        Eigen::Vector4d output = positionMode();
 
-        Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
         return {manual_input.x(), manual_input.y(), manual_input.z(), output.w()};
     }
 
@@ -620,6 +596,7 @@ private:
         }
 
     }
+
 
     // Command functions
     void arm()
@@ -895,6 +872,7 @@ private:
     FCI_PathPlanner path_planner_;
 
     PositionError prev_position_error_;
+    VelocityError prev_velocity_error_;
     AccelerationError prev_acceleration_error_;
     static constexpr float yaw_sensitivity_ = 1.0f / 20.0f;
 
