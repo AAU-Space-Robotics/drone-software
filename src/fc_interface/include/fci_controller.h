@@ -51,6 +51,8 @@ public:
     // Utility function to map normalized values to angles
     double mapNormToAngle(double norm) const;
 
+    float max_linear_velocity_ = 0.2; // Maximum linear velocity constraint
+
 private:
     const FCI_Transformations& transformations_; // Reference to transformations utility
     PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust
