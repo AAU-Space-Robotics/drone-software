@@ -622,6 +622,7 @@ private:
 
     void disarm(bool kill = false)
     {
+        publishAttitudeSetpoint(Eigen::Vector4d(0.0, 0.0, 0.0, 0.0));
         float param2 = kill ? 21196.0 : 0.0;
         RCLCPP_INFO(get_logger(), "Sending disarm command (kill=%d)...", kill);
         publishVehicleCommand(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0, param2);
