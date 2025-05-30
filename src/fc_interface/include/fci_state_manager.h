@@ -40,7 +40,15 @@ enum class FlightMode {
     MANUAL_AIDED = 1,
     POSITION = 2,
     SAFETYLAND_BLIND = 3,
-    LAND_POSITION = 4
+    BEGIN_LAND_POSITION = 4,
+    LAND_POSITION = 5
+};
+
+enum class TrajectoryMode {
+    UNINITIALIZED = -1,
+    INACTIVE = 0,
+    ACTIVE = 1,
+    COMPLETED = 2
 };
 
 // Used to define 3D(~4D), where the last dimension is time 
@@ -155,6 +163,8 @@ struct DroneState {
     Command command = Command::DISARM;
     ArmingState arming_state = ArmingState::DISARMED;
     FlightMode flight_mode = FlightMode::STANDBY;
+    TrajectoryMode trajectory_mode = TrajectoryMode::INACTIVE;
+    rclcpp::Time trajectory_start_time_;
 };
 
 // Battery state
@@ -208,6 +218,9 @@ public:
     void setTargetPositionProfile(const Stamped4DVector& new_data);
     Stamped4DVector getTargetPositionProfile();
 
+    void setHeartbeat(const rclcpp::Time& new_data);
+    rclcpp::Time getHeartbeat();
+
     void setDroneCmdAck(const DroneCmdAck& new_data);
     DroneCmdAck getDroneCmdAck();
 
@@ -229,6 +242,8 @@ public:
 private:
     
     // Mutexes for thread safety
+    std::mutex heartbeat_mutex_;
+
     std::mutex position_global_mutex_;
     std::mutex velocity_global_mutex_;
     std::mutex acceleration_global_mutex_;
@@ -244,6 +259,8 @@ private:
     std::mutex battery_state_mutex_;
 
     // Data structures to store state information
+    rclcpp::Time heartbeat_time_;
+
     Stamped3DVector position_global_;
     Stamped3DVector velocity_global_;
     Stamped3DVector acceleration_global_;

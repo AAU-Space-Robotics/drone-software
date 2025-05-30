@@ -18,6 +18,7 @@
 #include <interfaces/msg/motion_capture_pose.hpp>
 #include <interfaces/msg/drone_state.hpp>
 #include <interfaces/msg/drone_scope.hpp>
+#include <interfaces/msg/gcs_heartbeat.hpp>
 
 #include "fci_controller.h"
 #include "fci_state_manager.h"
@@ -98,6 +99,7 @@ public:
 
         
         // Set initial state
+        state_manager_.setHeartbeat(get_time());
         state_manager_.setGlobalPosition(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setGlobalVelocity(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setTargetPositionProfile(Stamped4DVector(get_time(), 0.0, 0.0, 0.0, 0.0));
@@ -122,6 +124,11 @@ public:
                 [this](const interfaces::msg::MotionCapturePose::SharedPtr msg)
                 { motionCaptureLocalPositionCallback(msg); });
         }
+
+        gcs_heartbeat_sub_ = create_subscription<interfaces::msg::GcsHeartbeat>(
+            "thyra/in/heartbeat", qos,
+            [this](const interfaces::msg::GcsHeartbeat::SharedPtr msg)
+            { gcsHeartbeatCallback(msg); });
 
         attitude_sub_ = create_subscription<VehicleAttitude>(
             "/fmu/out/vehicle_attitude", qos,
@@ -164,7 +171,6 @@ public:
 
         RCLCPP_INFO(get_logger(), "FlightControllerInterface initialized.");
 
-
     }
 
     rclcpp::Time get_time() const {
@@ -190,10 +196,15 @@ private:
     RCLCPP_INFO(get_logger(), "%s PID gains: Kp=%.2f, Ki=%.2f, Kd=%.2f",
     controller.c_str(), gains.Kp, gains.Ki, gains.Kd);
     }
+
+    void gcsHeartbeatCallback(const interfaces::msg::GcsHeartbeat::SharedPtr msg)
+    {
+        // Use the arrival time of the GCS heartbeat message as the heartbeat time
+        state_manager_.setHeartbeat(get_time());
+    }
     
     void safetyCheckCallback()
     {
-        std::lock_guard<std::mutex> lock(current_control_mode_mutex_);
         DroneState drone_state = state_manager_.getDroneState();
 
         // Skip checks if drone is disarmed or already in a fail-safe mode
@@ -204,36 +215,53 @@ private:
             return;
         }
 
-        
-        if (check_gcs_timeout_)
-        {
-            // Check GCS input freshness
-            gcs_stale_ = false;
-            Stamped4DVector manual_input = state_manager_.getManualControlInput();
-                if ((get_time() - manual_input.getTime()).seconds() > gcs_timeout_threshold_)
-                {
-                    RCLCPP_WARN(get_logger(), "No GCS input received in the last %.2f seconds!", gcs_timeout_threshold_);
-                    gcs_stale_ = true;
-                }
-        }
+        bool trigger_safety_land = false;
+        bool trigger_blind_land = false;
+        bool landing_position_mode = drone_state.flight_mode == FlightMode::LAND_POSITION;
 
-        if (check_position_timeout_)
+        // Check GCS input freshness
+        if (check_gcs_timeout_ && !landing_position_mode)
         {
-            // Check position data freshness
-            position_stale_ = false;
-            Stamped3DVector position = state_manager_.getGlobalPosition();
-            if ((get_time() - position.getTime()).seconds() > position_timeout_threshold_)
+            gcs_stale_ = (get_time() - state_manager_.getHeartbeat()).seconds() > gcs_timeout_threshold_;
+            if (gcs_stale_)
             {
-                RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", position_timeout_threshold_);
-                position_stale_ = true;
+                RCLCPP_WARN(get_logger(), "No GCS input received in the last %.2f seconds!", gcs_timeout_threshold_);
             }
         }
 
-        // Trigger fail-safe if needed
-        if (gcs_stale_ || position_stale_)
+        // Check position data freshness
+        if (check_position_timeout_)
         {
-            RCLCPP_ERROR(get_logger(), "Entering safety land mode due to stale data (GCS: %s, Position: %s)",
-                         gcs_stale_ ? "stale" : "fresh", position_stale_ ? "stale" : "fresh");
+            position_stale_ = (get_time() - state_manager_.getGlobalPosition().getTime()).seconds() > position_timeout_threshold_;
+            if (position_stale_)
+            {
+                RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", position_timeout_threshold_);
+            }
+        }
+
+        // Determine fail-safe action
+        if (gcs_stale_ && !position_stale_ && !landing_position_mode)
+        {
+            RCLCPP_WARN(get_logger(), "Entering safety land mode due to stale GCS input");
+            trigger_safety_land = true;
+        }
+        else if (position_stale_)
+        {
+            RCLCPP_WARN(get_logger(), "Entering safety land mode due to stale data (GCS: %s, Position: %s)",
+                        gcs_stale_ ? "stale" : "fresh", position_stale_ ? "stale" : "fresh");
+            trigger_blind_land = true;
+        }
+
+        // Apply fail-safe
+        if (trigger_safety_land && !landing_position_mode)
+            {
+                setDroneMode(FlightMode::BEGIN_LAND_POSITION);
+                ensureControlLoopRunning(2);
+                landPositionMode();
+            }
+        else if (trigger_blind_land)
+        {
+            setDroneMode(FlightMode::SAFETYLAND_BLIND);
             ensureControlLoopRunning(3); // Switch to safetyLandBlindMode
         }
     }
@@ -394,11 +422,14 @@ private:
 
     Eigen::Vector4d positionMode()
     {
+        DroneState drone_state = state_manager_.getDroneState();
 
-        if (is_trajectory_active_) {
-            double dt = (get_time() - trajectory_start_time_).seconds();
+        if (drone_state.trajectory_mode == TrajectoryMode::ACTIVE) {
+            double dt = (get_time() - drone_state.trajectory_start_time_).seconds();
             if (dt > path_planner_.getTotalTime()) {
-                is_trajectory_active_ = false;
+                drone_state.trajectory_mode = TrajectoryMode::COMPLETED;
+                state_manager_.setDroneState(drone_state);
+
                 Eigen::Vector3d final_position = path_planner_.getTrajectoryPoint(path_planner_.getTotalTime(), trajectoryMethod::MIN_SNAP).position;
                 Stamped4DVector target_profile(get_time(), final_position.x(), final_position.y(), final_position.z(), 0.0);
                 state_manager_.setTargetPositionProfile(target_profile);
@@ -406,6 +437,18 @@ private:
             Eigen::Vector3d target_position = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP).position;
             Stamped4DVector target_profile(get_time(), target_position.x(), target_position.y(), target_position.z(), 0.0);
             state_manager_.setTargetPositionProfile(target_profile);
+        }
+        else if (drone_state.flight_mode == FlightMode::LAND_POSITION && drone_state.trajectory_mode == TrajectoryMode::COMPLETED)
+        {
+            // Drone is now landed, update state and disarm
+            RCLCPP_INFO(get_logger(), "Drone has landed, disarming...");
+            drone_state.flight_mode = FlightMode::LANDED;
+            drone_state.arming_state = ArmingState::DISARMED;
+            drone_state.command = Command::DISARM;
+            drone_state.trajectory_mode = TrajectoryMode::INACTIVE;
+            state_manager_.setDroneState(drone_state);
+            disarm(true);
+            cleanupControlLoop();
         }
 
         Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
@@ -525,19 +568,16 @@ private:
         }
     }
 
- 
     void ensureControlLoopRunning(int mode) {
-        DroneState drone_state = state_manager_.getDroneState();
         std::lock_guard<std::mutex> lock(current_control_mode_mutex_);
-
-        if (!control_timer_ && drone_state.arming_state == ArmingState::ARMED) {
-            current_control_mode_ = mode;
-            control_timer_ = create_wall_timer(10ms, [this]() { controlLoop(); });
-            RCLCPP_INFO(get_logger(), "Control loop started with mode: %d", mode);
-        } else if (control_timer_ && mode != current_control_mode_) {
-            // Update mode without restarting timer
+        if (current_control_mode_ != mode) {
             current_control_mode_ = mode;
             RCLCPP_INFO(get_logger(), "Control mode updated to: %d", mode);
+        }
+        DroneState drone_state = state_manager_.getDroneState();
+        if (!control_timer_ && drone_state.arming_state == ArmingState::ARMED) {
+            control_timer_ = create_wall_timer(10ms, [this]() { controlLoop(); });
+            RCLCPP_INFO(get_logger(), "Control loop started with mode: %d", mode);
         }
     }
 
@@ -591,12 +631,10 @@ private:
         // Get current yaw of the drone
         StampedQuaternion attitude = state_manager_.getAttitude();
 
-        if (drone_state.flight_mode != FlightMode::LAND_POSITION)
+        if (drone_state.flight_mode == FlightMode::BEGIN_LAND_POSITION)
         {
             // Make the drone go into safety land mode
-            RCLCPP_INFO(get_logger(), "Safety land mode activated.");
-            drone_state.timestamp = get_time();
-            drone_state.flight_mode = FlightMode::LAND_POSITION;
+            RCLCPP_INFO(get_logger(), "Position based land mode activated.");
 
             // Set the target position to the current position
             Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
@@ -614,11 +652,24 @@ private:
             path_planner_.GenerateTrajectory(takeoff_position, target_position, current_velocity, current_acceleration, path_planner_.calculateDuration(distance, controller_.max_linear_velocity_), trajectoryMethod::MIN_SNAP);
 
             // set trajectory start time
-            trajectory_start_time_ = get_time();
-            is_trajectory_active_ = true;
+            drone_state.flight_mode = FlightMode::LAND_POSITION;
+            drone_state.trajectory_start_time_ = get_time();
+            drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
+            state_manager_.setDroneState(drone_state);
 
         }
 
+    }
+
+    void setDroneMode(FlightMode mode)
+    {
+        DroneState drone_state = state_manager_.getDroneState();
+        if (drone_state.flight_mode != mode)
+        {
+            drone_state.timestamp = get_time();
+            drone_state.flight_mode = mode;
+            state_manager_.setDroneState(drone_state);
+        }
     }
 
     // Command functions
@@ -631,6 +682,8 @@ private:
 
     void disarm(bool kill = false)
     {
+        publishAttitudeSetpoint(Eigen::Vector4d(0.0, 0.0, 0.0, 0.0));
+
         float param2 = kill ? 21196.0 : 0.0;
         RCLCPP_INFO(get_logger(), "Sending disarm command (kill=%d)...", kill);
         publishVehicleCommand(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0, param2);
@@ -769,7 +822,9 @@ private:
             }
             else if (goal->command_type == "takeoff")
             {
+                setDroneMode(FlightMode::POSITION);
                 ensureControlLoopRunning(2);
+                
                 
                 // Set the takeoff position, to the current target to handle ssteady state errors by mitigating, free fall
                 Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
@@ -785,9 +840,11 @@ private:
                 // Generate takeoff trajectory
                 path_planner_.GenerateTrajectory(takeoff_position, target_position, current_velocity, current_acceleration, takeoff_time, trajectoryMethod::MIN_SNAP);
 
-                // set trajectory start time
-                trajectory_start_time_ = get_time();
-                is_trajectory_active_ = true;
+                // set trajectory start time and activate trajectory mode
+                DroneState drone_state = state_manager_.getDroneState();
+                drone_state.trajectory_start_time_ = get_time();
+                drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
+                state_manager_.setDroneState(drone_state);
 
                 result->success = true;
                 result->message = "Drone taking off.";
@@ -795,6 +852,7 @@ private:
             }
             else if (goal->command_type == "goto")
             {
+                setDroneMode(FlightMode::POSITION);
                 ensureControlLoopRunning(2);
                 // Set the takeoff position, to the current target to handle ssteady state errors by mitigating, free fall
 
@@ -816,8 +874,10 @@ private:
                 path_planner_.GenerateTrajectory(takeoff_position, target_position, current_velocity, current_acceleration, takeoff_time, trajectoryMethod::MIN_SNAP);
 
                 // set trajectory start time
-                trajectory_start_time_ = get_time();
-                is_trajectory_active_ = true;
+                DroneState drone_state = state_manager_.getDroneState();
+                drone_state.trajectory_start_time_ = get_time();
+                drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
+                state_manager_.setDroneState(drone_state);
 
                 result->success = true;
                 result->message = "Drone moving to target position.";
@@ -826,18 +886,21 @@ private:
             else if (goal->command_type == "manual")
             {
                 cleanupControlLoop();
+                setDroneMode(FlightMode::MANUAL);
                 ensureControlLoopRunning(0);
                 result->success = true;
                 result->message = "Drone in manual mode.";
             }
             else if (goal->command_type == "manual_aided")
             {
+                setDroneMode(FlightMode::MANUAL_AIDED);
                 ensureControlLoopRunning(1);
                 result->success = true;
                 result->message = "Drone in manual aided mode.";
             }
             else if (goal->command_type == "land")
             {
+                setDroneMode(FlightMode::BEGIN_LAND_POSITION);
                 ensureControlLoopRunning(2);
                 // Land drone
                 landPositionMode();
@@ -876,6 +939,7 @@ private:
     rclcpp::Publisher<interfaces::msg::DroneState>::SharedPtr drone_state_pub_;
 
     // rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr gps_sub_;
+    rclcpp::Subscription<interfaces::msg::GcsHeartbeat>::SharedPtr gcs_heartbeat_sub_;
     rclcpp::Subscription<interfaces::msg::MotionCapturePose>::SharedPtr motion_capture_local_position_sub_;
     rclcpp::Subscription<VehicleLocalPosition>::SharedPtr local_position_sub_;
     rclcpp::Subscription<VehicleAttitude>::SharedPtr attitude_sub_;
@@ -916,11 +980,6 @@ private:
     double timeout_threshold_;
     int current_control_mode_;
     std::mutex current_control_mode_mutex_;
-
-
-    bool is_trajectory_active_ = false;
-    rclcpp::Time trajectory_start_time_;
-    
 };
 
 int main(int argc, char *argv[])

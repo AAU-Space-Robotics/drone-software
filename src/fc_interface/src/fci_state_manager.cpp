@@ -61,6 +61,18 @@ Stamped4DVector FCI_StateManager::getTargetPositionProfile() {
 
 // ---
 
+void FCI_StateManager::setHeartbeat(const rclcpp::Time& new_data) {
+    std::lock_guard<std::mutex> lock(heartbeat_mutex_);
+    heartbeat_time_ = new_data;   
+}
+
+rclcpp::Time FCI_StateManager::getHeartbeat() {
+    std::lock_guard<std::mutex> lock(heartbeat_mutex_);
+    return heartbeat_time_;   
+}
+
+// ---
+
 void FCI_StateManager::setDroneCmdAck(const DroneCmdAck& new_data) {
     std::lock_guard<std::mutex> lock(drone_cmd_ack_mutex_);
     drone_cmd_ack_ = new_data;   
