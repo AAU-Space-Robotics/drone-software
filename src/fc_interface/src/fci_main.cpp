@@ -126,7 +126,7 @@ public:
         }
 
         gcs_heartbeat_sub_ = create_subscription<interfaces::msg::GcsHeartbeat>(
-            "thyra/in/heartbeat", qos,
+            "thyra/in/gcs_heartbeat", qos,
             [this](const interfaces::msg::GcsHeartbeat::SharedPtr msg)
             { gcsHeartbeatCallback(msg); });
 
@@ -683,10 +683,7 @@ private:
     void disarm(bool kill = false)
     {
         publishAttitudeSetpoint(Eigen::Vector4d(0.0, 0.0, 0.0, 0.0));
-<<<<<<< HEAD
 
-=======
->>>>>>> 554de5cb2fdea51ab9d8c8f79722aef64087760f
         float param2 = kill ? 21196.0 : 0.0;
         RCLCPP_INFO(get_logger(), "Sending disarm command (kill=%d)...", kill);
         publishVehicleCommand(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0, param2);

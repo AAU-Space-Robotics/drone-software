@@ -87,6 +87,7 @@ install(PROGRAMS
   script/GUI.py
   script/drone_state_publisher.py
   script/MotionCaptureReceiver.py
+  script/gcs_heartbeat.py
   DESTINATION lib/${PROJECT_NAME}/scripts
 )
 
