@@ -40,7 +40,8 @@ public:
                                PositionError& previous_position_error,
                                const Stamped3DVector& position_ned_earth,
                                const StampedQuaternion& attitude,
-                               const Stamped3DVector& target_position_ned_earth);
+                               const Stamped3DVector& target_position_ned_earth,
+                               const Eigen::Vector4d& previous_control_signal);
 
     // Acceleration PID control (returns roll, pitch, yaw, thrust)
     Eigen::Vector4d accelerationControl(double sample_time,
@@ -51,12 +52,15 @@ public:
     // Utility function to map normalized values to angles
     double mapNormToAngle(double norm) const;
 
-    float max_linear_velocity_ = 0.2; // Maximum linear velocity constraint
+    float max_linear_velocity_ = 0.01; // Maximum linear velocity constraint
+    float ema_filter_alpha_ = 0.01; // Alpha value for EMA filter
 
 private:
     const FCI_Transformations& transformations_; // Reference to transformations utility
     PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust
     AccelerationControllerGains acceleration_pid_gains_; // PID gains for acceleration
+
+    double EMA_filter(double current_value, double previous_value) const;
 
     // Constrain control outputs
     double constrainAngle(double angle) const;

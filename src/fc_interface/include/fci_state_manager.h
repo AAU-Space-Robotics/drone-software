@@ -239,6 +239,9 @@ public:
     void setAccelerationError(const AccelerationError& new_data);
     AccelerationError getAccelerationError();
 
+    void setLatestControlSignal(const Eigen::Vector4d& new_data);
+    Eigen::Vector4d getLatestControlSignal();
+
 private:
     
     // Mutexes for thread safety
@@ -255,6 +258,7 @@ private:
     std::mutex manual_control_input_mutex_;
     std::mutex acceleration_error_mutex_;
     std::mutex position_error_mutex_;
+    std::mutex latest_control_signal_mutex_;
 
     std::mutex battery_state_mutex_;
 
@@ -273,6 +277,7 @@ private:
     Stamped4DVector manual_control_input_;
     AccelerationError acceleration_error_;
     PositionError position_error_;
+    Eigen::Vector4d latest_control_signal_ = Eigen::Vector4d::Zero(); // Initialize to zero
     
 };
 

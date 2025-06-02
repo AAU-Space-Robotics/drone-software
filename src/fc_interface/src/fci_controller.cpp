@@ -13,7 +13,8 @@ Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
                                            PositionError& previous_position_error,
                                            const Stamped3DVector& position_ned_earth,
                                            const StampedQuaternion& attitude,
-                                           const Stamped3DVector& target_position_ned_earth) {
+                                           const Stamped3DVector& target_position_ned_earth,
+                                           const Eigen::Vector4d& previous_control_signal) {
     // Calculate position error in NED frame
     Eigen::Vector3d position_error_ned = target_position_ned_earth.vector() - position_ned_earth.vector();
     Eigen::Vector3d position_error_ned_d = (position_error_ned - 
@@ -52,6 +53,9 @@ Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
     roll = constrainAngle(roll);
     pitch = constrainAngle(pitch);
     thrust = constrainThrust(thrust);
+
+    
+    thrust = EMA_filter(thrust, previous_control_signal.w()); // Apply EMA filter to thrust
 
     // Update previous error
     previous_position_error.X.error = position_error_ned.x();
@@ -123,6 +127,10 @@ Eigen::Vector4d FCI_Controller::accelerationControl(double sample_time,
 
     // Return control outputs (roll, pitch, yaw, thrust)
     return {0.0, 0.0, 0.0, thrust};
+}
+
+double FCI_Controller::EMA_filter(double new_value, double previous_value) const {
+    return ema_filter_alpha_ * previous_value + (1.0f - ema_filter_alpha_) * new_value;
 }
 
 double FCI_Controller::mapNormToAngle(double norm) const {

@@ -72,6 +72,11 @@ public:
 
         this->declare_parameter("controller_constraints.max_linear_velocity",0.2);
         this->get_parameter("controller_constraints.max_linear_velocity", controller_.max_linear_velocity_);
+        this->declare_parameter("pid_gains.ema.alpha",0.0);
+        this->get_parameter("pid_gains.ema.alpha", controller_.ema_filter_alpha_);
+
+        RCLCPP_INFO(get_logger(), "Controller constraints: max_linear_velocity=%.2f, ema_filter_alpha=%.2f",
+                    controller_.max_linear_velocity_, controller_.ema_filter_alpha_);
 
         // Set PID gains in controller
         controller_.setPIDGains(pid_gains);
@@ -466,31 +471,14 @@ private:
             return Eigen::Vector4d::Zero();
         }
 
-        Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
+        Eigen::Vector4d last_control_signal = state_manager_.getLatestControlSignal();
+
+        Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d, last_control_signal);
         //print error
         //RCLCPP_INFO(get_logger(), "Position error: x=%.2f, y=%.2f, z=%.2f", global_error_ned.x(), global_error_ned.y(), global_error_ned.z());
 
-        return output;
-    }
+        state_manager_.setLatestControlSignal(output);
 
-    Eigen::Vector4d controlModeACCELTEST()
-    {
-        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-        Stamped3DVector acceleration = state_manager_.getGlobalAcceleration();
-        StampedQuaternion attitude = state_manager_.getAttitude();
-        Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
-
-        // Calculate global position error in NED frame
-        Eigen::Vector3d global_error_ned = target_position_3d.vector() - acceleration.vector();
-
-        double dt = (get_time() - acceleration.getTime()).seconds();
-        if (dt > timeout_threshold_)
-        {
-            RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", timeout_threshold_);
-            return Eigen::Vector4d::Zero();
-        }
-
-        Eigen::Vector4d output = controller_.accelerationControl(dt, prev_acceleration_error_, acceleration, target_position_3d);
         return output;
     }
 
@@ -511,8 +499,8 @@ private:
             return Eigen::Vector4d::Zero();
         }
 
-        Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
-        return {manual_input.x(), manual_input.y(), manual_input.z(), output.w()};
+        //Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
+        return {manual_input.x(), manual_input.y(), manual_input.z(), 0.0};
     }
 
     void controlLoop()

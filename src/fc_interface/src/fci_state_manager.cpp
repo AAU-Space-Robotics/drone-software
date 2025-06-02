@@ -143,5 +143,14 @@ PositionError FCI_StateManager::getPositionError() {
     return position_error_;   
 }
 
+void FCI_StateManager::setLatestControlSignal(const Eigen::Vector4d& new_data) {
+    std::lock_guard<std::mutex> lock(latest_control_signal_mutex_);
+    latest_control_signal_ = new_data;   
+}
+Eigen::Vector4d FCI_StateManager::getLatestControlSignal() {
+    std::lock_guard<std::mutex> lock(latest_control_signal_mutex_);
+    return latest_control_signal_;   
+}
+
 // End of Setters & Getters
 
