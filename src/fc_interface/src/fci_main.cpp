@@ -385,7 +385,8 @@ private:
         
         //float32 battery_percentage  # 0.0 to 100.0
         //uint8 arming_state  
-        //msg.arming_state = state_manager_.arming_state
+        //DroneState drone_state = state_manager_.getDroneState();
+        //msg.arming_state = drone_state.arming_state;
         //uint8 estop  
 
         drone_state_pub_->publish(msg);
