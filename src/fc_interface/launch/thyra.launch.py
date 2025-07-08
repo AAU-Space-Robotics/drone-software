@@ -41,7 +41,7 @@ def generate_launch_description():
         
         # Start MicroXRCEAgent (output suppressed)
         ExecuteProcess(
-            cmd=['MicroXRCEAgent', 'serial', '--dev', '/dev/serial0', '-b', '921600'],
+            cmd=['MicroXRCEAgent', 'serial', '--dev', '/dev/ttyAMA0', '-b', '921600'],
             output='log',
         ),
 

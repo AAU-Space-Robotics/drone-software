@@ -8,4 +8,4 @@ flight_controller_interface:
       position_timeout_threshold: 0.2  # Timeout for position data (seconds)
       safety_thrust_initial: -0.72      # Initial thrust for safety landing (negative for downward)
       safety_thrust_final: -0.66        # Final thrust for safety landing (negative for downward)
-      safety_thrustdown_rate: 0.2   # Rate of thrust decrease during safety landing
+      safety_thrustdown_rate: 0.0   # Rate of thrust decrease during safety landing

@@ -200,6 +200,10 @@ Check for available devices on network
 Issues with px4 agent:
 -https://discuss.px4.io/t/issue-with-attitude-target-thrust-and-quaternions-are-conflicting/43515/10
 
+sudo nano /boot/firmware/config.txt
+In top insert after first paragraph:
+dtoverlay=uart0-pi5
 
+MicroXRCEAgent serial --dev /dev/ttyAMA0 -b 921600
 
 
