@@ -14,6 +14,7 @@ from threading import Thread
 from interfaces.msg import DroneState 
 from dataclasses import dataclass
 from decimal import *
+import os
 
 class DroneData:
     position: list = (0.0, 0.0, 0.0)
@@ -509,11 +510,28 @@ def main():
     impl = GlfwRenderer(window)
     #impl.process_inputs()
     io = imgui.get_io()
-    global font,font_large, font_small, font_for_meter
-    font = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/src/gcs/fonts/source-code-pro/SourceCodePro-Black.otf", 40)  # <-- bigger font size
-    font_large = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/src/gcs/fonts/source-code-pro/SourceCodePro-Black.otf", 50)  # <-- bigger font size
-    font_small = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/src/gcs/fonts/source-code-pro/SourceCodePro-Black.otf", 30)  # <-- bigger font size
-    font_for_meter = io.fonts.add_font_from_file_ttf("/home/dksor/drone-software/src/gcs/fonts/source-code-pro/SourceCodePro-Black.otf", 20)
+    global font, font_large, font_small, font_for_meter
+    # Try to find the font in the ROS package share directory
+    import ament_index_python.packages
+    try:
+        font_dir = os.path.join(
+            ament_index_python.packages.get_package_share_directory("gcs"),
+            "fonts", "source-code-pro"
+        )
+        font_path = os.path.join(font_dir, "SourceCodePro-Black.otf")
+    except Exception as e:
+        print(f"Could not find gcs package share directory: {e}")
+        glfw.terminate()
+        return
+    font_path = os.path.normpath(font_path)
+    if not os.path.isfile(font_path):
+        print(f"Font file not found: {font_path}")
+        glfw.terminate()
+        return
+    font = io.fonts.add_font_from_file_ttf(font_path, 40)
+    font_large = io.fonts.add_font_from_file_ttf(font_path, 50)
+    font_small = io.fonts.add_font_from_file_ttf(font_path, 30)
+    font_for_meter = io.fonts.add_font_from_file_ttf(font_path, 20)
     impl.refresh_font_texture()
 
 
@@ -526,7 +544,17 @@ def main():
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
     # Load image data (e.g., via PIL)
-    image = Image.open("/home/dksor/drone-software/src/gcs/images/droneImage.png").convert("RGBA")
+    image_dir = os.path.join(
+        ament_index_python.packages.get_package_share_directory("gcs"),
+        "images"
+    )
+    image_path = os.path.join(image_dir, "droneImage.png")
+    image_path = os.path.normpath(image_path)
+    if not os.path.isfile(image_path):
+        print(f"Image file not found: {image_path}")
+        glfw.terminate()
+        return
+    image = Image.open(image_path).convert("RGBA")
     image_data = image.tobytes()
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, image_data)
