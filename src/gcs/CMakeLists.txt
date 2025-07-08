@@ -51,6 +51,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(tinyxml2)
 
+# Ensure tinyxml2 is built with -fPIC
+set_target_properties(tinyxml2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+
 
 # Find OpenGL package
 find_package(OpenGL REQUIRED)

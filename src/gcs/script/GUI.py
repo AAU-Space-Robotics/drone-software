@@ -98,7 +98,7 @@ class DroneGuiNode(Node):
         battery_average_current = msg.battery_average_current
         
         arming_state = msg.arming_state
-        
+        print(f"Arming state: {arming_state}")
 
 def Arm_Button():
         global button_color, drone_kill
