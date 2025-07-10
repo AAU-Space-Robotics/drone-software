@@ -113,6 +113,8 @@ ament_target_dependencies(gcs_node
 install(TARGETS gcs_node
   DESTINATION lib/${PROJECT_NAME}
 )
+install(DIRECTORY fonts DESTINATION share/${PROJECT_NAME}/)
+install(DIRECTORY images DESTINATION share/${PROJECT_NAME}/)
 
 # Ament package
 ament_package()
