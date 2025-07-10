@@ -3,13 +3,13 @@ flight_controller_interface:
   ros__parameters:
     pid_gains:
           pitch:
-            Kp: 0.1
+            Kp: 0.13
             Ki: 0.0
-            Kd: 0.05
+            Kd: 0.08
           roll:
-            Kp: 0.1
+            Kp: 0.13
             Ki: 0.0
-            Kd: 0.05
+            Kd: 0.08
           yaw:
             Kp: 0.1
             Ki: 0.0
