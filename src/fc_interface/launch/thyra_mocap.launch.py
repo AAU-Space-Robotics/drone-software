@@ -35,7 +35,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'position_source',
-            default_value='px4',
+            default_value='mocap',
             description='Position source: px4 or mocap'
         ),
         

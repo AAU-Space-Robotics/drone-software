@@ -277,6 +277,8 @@ private:
         Stamped3DVector local_position(get_time(), msg->x, msg->y, msg->z);
         state_manager_.setGlobalPosition(local_position);
 
+        //RCLCPP_INFO(get_logger(), "Local position: x=%.2f, y=%.2f, z=%.2f", local_position.x(), local_position.y(), local_position.z());
+
         // Set the velocity in the state manager
         Stamped3DVector local_velocity(get_time(), msg->vx, msg->vy, msg->vz);
         state_manager_.setGlobalVelocity(local_velocity);
