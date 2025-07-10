@@ -59,6 +59,9 @@ def generate_launch_description():
             cmd=['MicroXRCEAgent', 'udp4', '-p', '8888'],
             output='log',
         ),
+        
+        # Remap topic /fmu/out/vehicle_status to /fmu/out/vehicle_status_v1
+        
       
         # Delay and launch FlightControllerInterface node
         TimerAction(
@@ -69,6 +72,9 @@ def generate_launch_description():
                     executable='fci',
                     name='flight_controller_interface',
                     output='screen',
+                    remappings=[
+                        ('/fmu/out/vehicle_status_v1', '/fmu/out/vehicle_status'),
+                    ],
                     parameters=[
                         controller_params_path,
                         safety_params_path,

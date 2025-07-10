@@ -171,7 +171,7 @@ public:
 
         // Timers
         offboard_timer_ = create_wall_timer(200ms, [this](){ setOffboardMode(); });
-        drone_state_timer = create_wall_timer(100ms, [this](){ publish_drone_state(); });
+        //drone_state_timer = create_wall_timer(100ms, [this](){ publish_drone_state(); });
         safety_timer_ = create_wall_timer(200ms, [this]() { safetyCheckCallback(); });
 
         RCLCPP_INFO(get_logger(), "FlightControllerInterface initialized.");

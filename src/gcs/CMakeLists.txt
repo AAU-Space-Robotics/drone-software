@@ -92,6 +92,7 @@ install(PROGRAMS
   script/drone_state_publisher.py
   script/MotionCaptureReceiver.py
   script/gcs_heartbeat.py
+  script/fft.py
   DESTINATION lib/${PROJECT_NAME}/scripts
 )
 

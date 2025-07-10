@@ -23,7 +23,7 @@ class MotionCaptureNode(Node):
         self.timer = self.create_timer(1/110, self.publish_message)
         
         # Socket configuration
-        self.HOST = '192.168.10.87'  # Motion capture system IP
+        self.HOST = '192.168.10.86'  # Motion capture system IP
         self.PORT = 12345           # Port number
         
         # Initialize socket connection
