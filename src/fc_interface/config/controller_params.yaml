@@ -15,9 +15,9 @@ flight_controller_interface:
             Ki: 0.0
             Kd: 0.05
           thrust:
-            Kp: 0.7
+            Kp: 0.8
             Ki: 0.0
-            Kd: 0.15
+            Kd: 0.1
           ema:
             alpha: 0.15 # Exponential moving average factor for smoothing
 
