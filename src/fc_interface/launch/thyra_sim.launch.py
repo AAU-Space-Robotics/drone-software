@@ -72,7 +72,7 @@ def generate_launch_description():
                     remappings=[
                         ('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),
                         ('/fmu/out/battery_status', '/fmu/out/battery_status_v1'),
-                        ('/fmu/in/vehicle_attitude_setpoint_v1', '/fmu/in/vehicle_attitude_setpoint'),
+                        ('/fmu/in/vehicle_attitude_setpoint', '/fmu/in/vehicle_attitude_setpoint_v1'),
                     ],
                     parameters=[
                         controller_params_path,
