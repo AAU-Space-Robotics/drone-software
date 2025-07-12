@@ -322,6 +322,8 @@ private:
     void vehicleStatusCallback(const VehicleStatus::SharedPtr msg)
     {
         DroneState drone_state = state_manager_.getDroneState();
+
+        
         
         // Reset the control loop if the arming state changes. Only if the drone is asked to be armed, while armed, do nothing.
         if (drone_state.arming_state == ArmingState::DISARMED && msg->arming_state == 2 || 
@@ -387,10 +389,14 @@ private:
         
         //float32 battery_percentage  # 0.0 to 100.0
         //uint8 arming_state  
-        //DroneState drone_state = state_manager_.getDroneState();
-        //msg.arming_state = drone_state.arming_state;
+        DroneState drone_state = state_manager_.getDroneState();
+        msg.arming_state = static_cast<uint8_t>(drone_state.arming_state);
+        
+        
         //uint8 estop  
-
+        FlightMode flightmode = drone_state.flight_mode;
+        msg.flight_mode = static_cast<int16_t>(flightmode);
+        //RCLCPP_INFO(get_logger(), "Flight mode: %d", static_cast<int>(msg.flight_mode));
         drone_state_pub_->publish(msg);
     }
 
@@ -619,6 +625,7 @@ private:
     {
         // Get current state of the drone
         DroneState drone_state = state_manager_.getDroneState();
+        
         // Get current yaw of the drone
         StampedQuaternion attitude = state_manager_.getAttitude();
 
@@ -655,6 +662,7 @@ private:
     void setDroneMode(FlightMode mode)
     {
         DroneState drone_state = state_manager_.getDroneState();
+    
         if (drone_state.flight_mode != mode)
         {
             drone_state.timestamp = get_time();

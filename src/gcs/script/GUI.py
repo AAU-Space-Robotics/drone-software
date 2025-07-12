@@ -7,14 +7,21 @@ import OpenGL.GL as gl
 from PIL import Image
 from OpenGL.GL import *
 
+import rclpy
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from threading import Thread
+from interfaces.msg import DroneState
+from interfaces.action import DroneCommand
+from dataclasses import dataclass
+from decimal import Decimal
+import os
+import ament_index_python.packages
 
 import rclpy
 from rclpy.node import Node
-from threading import Thread
-from interfaces.msg import DroneState 
-from dataclasses import dataclass
-from decimal import *
-import os
+from interfaces.msg import ManualControlInput
+import pygame
 
 class DroneData:
     position: list = (0.0, 0.0, 0.0)
@@ -41,7 +48,7 @@ velocity_timestamp = 0
 battery_voltage, battery_current, battery_percentage = 0.0, 0.0, 0.0
 battery_discharge_rate, battery_average_current = 0.0, 0.0
 arming_state = 0
-
+estop = 0
 drone_state = False
 
 
@@ -56,28 +63,29 @@ class DroneGuiNode(Node):
             self.state_callback,
             10
         )
+        self.manual_control_publisher = self.create_publisher(ManualControlInput, '/fmu/in/manual_control_input', 10)
+        self._action_client = ActionClient(self, DroneCommand, '/fmu/in/drone_command')
+        self.get_logger().info('DroneCommand client initialized, waiting for action server...')
+        self._action_client.wait_for_server()
+        self.goal_handle = None
 
     def state_callback(self, msg):
         global position_x, position_y, position_z, position_timestamp
-        global target_position_x, target_position_y, target_position_z, target_profile_timestamp
+        global target_position_x, target_position_y, target_position_z
         global roll, pitch, yaw
         global velocity_x, velocity_y, velocity_z, velocity_timestamp
         global battery_voltage, battery_state_timestamp, battery_current, battery_percentage, battery_discharge_rate, battery_average_current
-        global arming_state
+        global arming_state, flight_mode
         position_timestamp = msg.position_timestamp
-        #print(f"Position timestamp: {position_timestamp}")
         if len(msg.position) >= 3:
             position_x = msg.position[0]
             position_y = msg.position[1]
             position_z = msg.position[2]
-            #print(f"Position: {position_x}, {position_y}, {position_z}")
-            #print(Decimal(position_x).quantize(Decimal('0.00')))
         velocity_timestamp = msg.velocity_timestamp
         if len(msg.velocity) >= 3:
             velocity_x = msg.velocity[0]
             velocity_y = msg.velocity[1]
             velocity_z = msg.velocity[2]
-        #print(f"Velocity: {velocity_x}, {velocity_y}, {velocity_z}")
         if len(msg.orientation) >= 3:
             roll = msg.orientation[0]
             pitch = msg.orientation[1]
@@ -87,101 +95,109 @@ class DroneGuiNode(Node):
             target_position_y = msg.target_position[1]
             target_position_z = msg.target_position[2]
         battery_state_timestamp = msg.battery_state_timestamp
-        
         battery_voltage = msg.battery_voltage
-        
         battery_current = msg.battery_current
-        
         battery_percentage = msg.battery_percentage
-        
         battery_discharge_rate = msg.battery_discharged_mah
-        #print(f'Battery discharge rate: {battery_discharge_rate}')
         battery_average_current = msg.battery_average_current
-        
         arming_state = msg.arming_state
-        print(f"Arming state: {arming_state}")
+        #self.get_logger().info(f"Arming state: {arming_state}")
+        flight_mode = msg.flight_mode
 
-def Arm_Button():
-        global button_color, drone_kill
-        global font
-        global drone_state
-        # Change button color on press
-        drone_kill = Kill_command()
-        #button_color = (0.0,0.5,0.0)   if Kill_command() else (1.0,0.0,0.0)
-         
-        imgui.set_cursor_pos((450,30))
-        button_color = (0.0, 0.5, 0.0) if drone_kill else (1.0, 0.0, 0.0)#here
-        button_text = "Press to Arm!  "  if drone_kill else "Press to Disarm"
+    def send_command(self, command_type, target_pose=None):
+        goal_msg = DroneCommand.Goal()
+        goal_msg.command_type = command_type
+        if target_pose is not None:
+            goal_msg.target_pose = target_pose
+        self.get_logger().info(f'Sending command: {command_type}, target_pose: {target_pose}')
+        future = self._action_client.send_goal_async(
+            goal_msg,
+            feedback_callback=self.feedback_callback
+        )
+        future.add_done_callback(self.goal_response_callback)
 
-        imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
-        imgui.push_style_color(imgui.COLOR_BUTTON, *button_color)
-        imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *button_color)  # Match hover color to button color
-        imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *button_color)  # Match active color to button color
-       
-        with imgui.font(font_small):
-            if imgui.button(button_text):
-                if drone_kill:
-                    # If armed, allow disarming
-                    # Replace this with your own disarm function
-                    drone_kill = False
-                    drone_state = True  # Or call a function that disarms it
-                else:
-                    # If disarmed, try to arm (if allowed)
-                    # If arming not allowed, keep it disarmed
-                    if not Kill_command():  # If Kill_command still returns False, stay disarmed
-                        drone_kill = True  # Or call a function that arms it
-                        drone_state = False
+    def goal_response_callback(self, future):
+        self.goal_handle = future.result()
+        if not self.goal_handle.accepted:
+            self.get_logger().warn('Goal rejected by server')
+            return
+        self.get_logger().info('Goal accepted by server, waiting for result...')
+        self.goal_handle.get_result_async().add_done_callback(self.result_callback)
 
-        imgui.pop_style_color(3)
-        imgui.pop_style_var()
-        imgui.set_cursor_pos((710, 30))
-        with imgui.font(font):
+    def feedback_callback(self, feedback_msg):
+        self.get_logger().info(f'Received feedback: {feedback_msg.feedback}')
+
+    def result_callback(self, future):
+        result = future.result().result
+        self.get_logger().info(f'Result: success={result.success}, message={result.message}')
+        self.goal_handle = None
+    def send_manual_control(self, roll, pitch, yaw_velocity, thrust):
+        msg = ManualControlInput()
+        msg.roll = float(roll)
+        msg.pitch = float(pitch)
+        msg.yaw = float(yaw_velocity)
+        msg.thrust = float(thrust)
+        self.manual_control_publisher.publish(msg)
+
+def Arm_Button(node):
+    global button_color, drone_kill, drone_state
+    global arming_state
+    imgui.set_cursor_pos((450, 30))
+    button_color = (0.0, 0.5, 0.0) if drone_kill else (1.0, 0.0, 0.0)
+    button_text = "Press to Arm!" if drone_kill else "Press to Disarm"
+    imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+    imgui.push_style_color(imgui.COLOR_BUTTON, *button_color)
+    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *button_color)
+    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *button_color)
+    if arming_state == 1:
+        drone_kill = False
+        drone_state = True
+        button_text = "Press to Disarm"
+    elif arming_state == 0:
+        drone_kill = True
+        drone_state = False
+        button_text = "Press to Arm!"
+    with imgui.font(font_small):
+        if imgui.button(button_text):
             if drone_kill:
-
-                    imgui.text("THYRA IS DISARMED!")
+                node.send_command("arm")
+                drone_kill = False
+                drone_state = True
             else:
-
-                    imgui.text("THYRA IS ARMED!")
-
-        draw_list = imgui.get_window_draw_list()
-        start_x, start_y = 450, 70  # Starting point of the line (x, y)
-        end_x, end_y = 1100, 70      # Ending point of the line (x, y)
-        color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
-        draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
-       
-   
-       
-        
-def Kill_command(): 
-    global killbutton_color, drone_kill
+                node.send_command("disarm")
+                drone_kill = True
+                drone_state = False
+    imgui.pop_style_color(3)
+    imgui.pop_style_var()
+    imgui.set_cursor_pos((710, 30))
+    with imgui.font(font):
+        if drone_kill:
+            imgui.text("THYRA IS DISARMED!")
+        else:
+            imgui.text("THYRA IS ARMED!")
     draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.8, 0.0, 0.0, 1.0) 
-                                                                #flags is for rounding different corners
-    #draw_list.add_rect_filled(1200,27, 1350,80,color,rounding =10.0, flags=15)
-    imgui.set_cursor_pos((1150,30))
+    start_x, start_y = 450, 70
+    end_x, end_y = 1100, 70
+    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
+    draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
 
+def Kill_command(node):
+    global killbutton_color, drone_kill
+    imgui.set_cursor_pos((1150, 30))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *killbutton_color)
-    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(1.0,0.0,0.0))
-    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.2,0.0,0.0)) 
+    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 1.0, 0.0, 0.0, 1.0)  # Fixed: Added alpha
+    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.2, 0.0, 0.0, 1.0)   # Fixed: Added alpha
     with imgui.font(font_large):
-        if imgui.button("Kill",width=150, height=100):
+        if imgui.button("Kill", width=150, height=100):
+            node.send_command("estop")
             drone_kill = True
     imgui.pop_style_color(3)
     imgui.pop_style_var()
-
-    if(killbutton_color == (1.0,0.0,0.0)):
-        color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0) 
-    else:
-        color = imgui.get_color_u32_rgba(0.8, 0.0, 0.0, 1.0) 
-
-    if drone_kill == True:
-        return True
-    else:
-        return False
+    return drone_kill
 
 
-def Text_field():
+def Goto_field(node):
 
     global text_buffer
     text_field = ""
@@ -189,7 +205,7 @@ def Text_field():
     
     imgui.set_cursor_pos((450,670))
     with imgui.font(font):
-        imgui.text("Input field")
+        imgui.text("Goto Pose (x y z):")
     imgui.set_cursor_pos((450,715))
     imgui.set_next_item_width(300)
     imgui.set_window_font_scale(2.0) 
@@ -197,9 +213,8 @@ def Text_field():
     if changed:
         text_buffer = text_field
     imgui.set_window_font_scale(1.0)
-    imgui.set_cursor_pos((450,750))
-    with imgui.font(font):
-        imgui.text(f"You typed: {text_buffer}")
+ 
+  
 
     imgui.set_cursor_pos((770,705))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
@@ -208,10 +223,14 @@ def Text_field():
     imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0,0.2,0.0)) 
     with imgui.font(font_small):
         if imgui.button("Add",width=70, height=50):
-            drone_kill = True
+            try:
+                x, y, z = map(float, text_buffer.strip().split())
+                node.send_command("goto", [x, y, -z])
+            except ValueError:
+                node.get_logger().warn("Invalid pose input for goto, please enter x y z values")
     imgui.pop_style_color(3)
     imgui.pop_style_var()
- 
+   
 
 
 def Dropdown_Menu():
@@ -226,7 +245,6 @@ def Dropdown_Menu():
             "Controller", current_item, items)
     #imgui.set_cursor_pos((10,570))
     #imgui.text(f"{str(items[current_item])}")
-
 
 def XYZ_Text_Field(msg):
     #Drawing a square kek
@@ -272,8 +290,6 @@ def XYZ_Text_Field(msg):
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
     imgui.set_cursor_pos((1250, 215)); imgui.text(f" Position Timestamp {position_timestamp}")
     
-
-    
 def RPY_Text_Field():
     
     draw_list = imgui.get_window_draw_list()
@@ -294,10 +310,6 @@ def RPY_Text_Field():
         imgui.set_cursor_pos((150,363)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
         imgui.set_cursor_pos((150,413)); imgui.text(f"{Decimal(yaw).quantize(Decimal('0.00'))}")
 
-
-
-    
-    
 def XYZVelocity_Text_Field():
     
     global velocity_x, velocity_y, velocity_z, velocity_timestamp
@@ -325,13 +337,7 @@ def XYZVelocity_Text_Field():
         imgui.set_cursor_pos((200,623)); imgui.text("m/s")
         imgui.pop_style_color()
     imgui.set_cursor_pos((1250, 255)); imgui.text(f" Velocity Timestamp {velocity_timestamp}")
-        
-        
     
-
-
-
-
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
@@ -388,9 +394,7 @@ def drone_visualization():
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
                                                                 #flags is for rounding different corners
     draw_list.add_rect_filled(453,153, 1097,567,color,rounding =10.0, flags=15)
-        
-    
-    
+          
 def Arrows():
     slider_value = 0.0  # default
 
@@ -462,21 +466,118 @@ def Arrows():
         end_x + 5, end_y - 23,  # base right
         color
         )
+
+def takeoff_button(node):
+    imgui.set_cursor_pos((450, 600))
+    imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+    imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0)) 
+    with imgui.font(font_small):
+        if imgui.button("Takeoff", width=150, height=50):
+            node.send_command("takeoff", [-2.0])  
+    imgui.pop_style_color(3)
+    imgui.pop_style_var() 
+
+def land_button(node):
+    imgui.set_cursor_pos((650, 600))
+    imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+    imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0))  
+    with imgui.font(font_small):
+        if imgui.button("Land", width=150, height=50):
+            node.send_command("land")  
+    imgui.pop_style_color(3)
+    imgui.pop_style_var()
+
+def manual_aided(node):
+    imgui.set_cursor_pos((850, 600))
+    imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+    imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0))  
+    with imgui.font(font_small):
+        if imgui.button("Manual Aided", width=200, height=50):
+           node.send_command("manual") 
+    imgui.pop_style_color(3)
+    imgui.pop_style_var()
+    flight_mode_text = ""
+    if flight_mode == -2:
+        flight_mode_text = "Landed"
+    elif flight_mode == -1:
+        flight_mode_text = "Standby"
+    elif flight_mode == 0:
+        flight_mode_text = "Manual"
+    elif flight_mode == 1:
+        flight_mode_text = "Manual Aided"
+    elif flight_mode == 2:
+        flight_mode_text = "Position"
+    elif flight_mode == 3:
+        flight_mode_text = "Safetyland Blind "
+    elif flight_mode == 4:
+        flight_mode_text = "Begin land position"
+    elif flight_mode == 5:
+        flight_mode_text = "Land position"
     
+    imgui.set_cursor_pos((870, 710))
+    with imgui.font(font_small):
+        imgui.text("Flight Mode: " + str(flight_mode_text))
 
-
-def start_ros():
-    rclpy.init()
-    node = DroneGuiNode()
-    rclpy.spin(node)
+def start_ros(node):
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     node.destroy_node()
     rclpy.shutdown()
 
+def start_joystick(node):
+    pygame.init()
+    pygame.joystick.init()
 
-def main():
-    # Start ROS in background thread
-    Thread(target=start_ros, daemon=True).start()
+    if pygame.joystick.get_count() == 0:
+        print("No joystick connected.")
+        return
 
+    joystick = pygame.joystick.Joystick(0)
+    joystick.init()
+    print(f"Initialized joystick: {joystick.get_name()}")
+
+    clock = pygame.time.Clock()
+
+    try:
+        while rclpy.ok():
+            pygame.event.pump()  # Process internal queue
+
+            # Example axis mapping
+            roll = joystick.get_axis(0) if abs(joystick.get_axis(0)) > 0.05 else 0.0
+            pitch = -joystick.get_axis(1) if abs(joystick.get_axis(1)) > 0.05 else 0.0
+            yaw_velocity = joystick.get_axis(2) if abs(joystick.get_axis(2)) > 0.05 else 0.0
+            thrust = -joystick.get_axis(3) if abs(joystick.get_axis(3)) > 0.05 else 0.0
+         
+
+            node.drone_cmd.arm = int(abs(node.joystick.get_button(3)))
+     
+            node.drone_cmd.estop = node.joystick.get_button(2)
+        
+            # Optional: Clamp thrust or scale values here if needed
+            node.drone_cmd.estop = node.joystick.get_button(2)
+
+            node.send_manual_control(roll, pitch, yaw_velocity, thrust)
+
+            clock.tick(20)  # 20 Hz update rate
+    except KeyboardInterrupt:
+        pass
+    finally:
+        pygame.quit()
+
+def main(args=None):
+    rclpy.init()
+    global font, font_large, font_small, font_for_meter
+    node = DroneGuiNode()  # Create node once
+    Thread(target=start_ros, args=(node,), daemon=True).start()
+    Thread(target=start_joystick, args=(node,), daemon=True).start()
     # Initialize GLFW
     if not glfw.init():
         print("Could not initialize GLFW")
@@ -587,8 +688,9 @@ def main():
         drone_visualization()
         imgui.set_cursor_pos((550,320));imgui.image(texture_id, 250, 250)
         
-        Arm_Button()
-        Text_field()
+        Arm_Button(node)
+        Kill_command(node)
+        Goto_field(node)
         Dropdown_Menu()
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
@@ -596,11 +698,14 @@ def main():
         
         batteryGraph()
         Arrows()
-
+        takeoff_button(node)
+        land_button(node)
+        manual_aided(node)
         imgui.end()
 
         
         # Render
+        
         imgui.render()
         impl.render(imgui.get_draw_data())
         glfw.swap_buffers(window)
@@ -608,7 +713,7 @@ def main():
     # Cleanup
     impl.shutdown()
     glfw.terminate()
-
+    node.destroy_node()
 if __name__ == "__main__":
     main()
     
