@@ -207,3 +207,14 @@ dtoverlay=uart0-pi5
 MicroXRCEAgent serial --dev /dev/ttyAMA0 -b 921600
 
 
+Lidar:
+#install
+sudo apt-get update
+sudo apt-get upgrade -y
+sudo apt install -y i2c-tools
+
+
+
+
+
+
