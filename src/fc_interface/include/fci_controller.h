@@ -56,7 +56,8 @@ public:
 
     double mapNormToAngle(double norm) const;
 
-    float max_linear_velocity_ = 0.0; // Maximum linear velocity constraint (set via config)
+    float max_linear_velocity_ = 0.01; // Maximum linear velocity constraint
+    float ema_filter_alpha_ = 0.01; // Alpha value for EMA filter
 
 private:
     const FCI_Transformations& transformations_; // Reference to transformations utility
@@ -67,6 +68,11 @@ private:
     double computePID(double error, double& previous_error, double& error_integral,
                      double sample_time, const PIDGains& gains,
                      bool apply_anti_windup, double min_output, double max_output) const;
+    double EMA_filter(double current_value, double previous_value) const;
+
+    // Constrain control outputs
+    double constrainAngle(double angle) const;
+    double constrainThrust(double thrust) const;
 };
 
 #endif // FCI_CONTROLLER_H

@@ -19,8 +19,8 @@ def generate_launch_description():
     px4_dir = os.path.join(general_dir, 'PX4-Autopilot')
     
     # Path to the simulation config file
-    controller_params_path = PathJoinSubstitution([pkg_share, 'config', 'controller_params_sim.yaml'])
-    safety_params_path = PathJoinSubstitution([pkg_share, 'config', 'safety_params_sim.yaml'])
+    controller_params_path = PathJoinSubstitution([pkg_share, 'config', 'controller_params.yaml'])
+    safety_params_path = PathJoinSubstitution([pkg_share, 'config', 'safety_params.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
@@ -35,13 +35,13 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'position_source',
-            default_value='px4',
+            default_value='mocap',
             description='Position source: px4 or mocap'
         ),
         
         # Start MicroXRCEAgent (output suppressed)
         ExecuteProcess(
-            cmd=['MicroXRCEAgent', 'serial', '--dev', '/dev/serial0', '-b', '921600'],
+            cmd=['MicroXRCEAgent', 'serial', '--dev', '/dev/ttyAMA0', '-b', '921600'],
             output='log',
         ),
 

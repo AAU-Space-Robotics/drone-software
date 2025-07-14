@@ -101,6 +101,10 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
     return {roll, -pitch, 0.0, thrust};
 } //M_PI / 18.0
 
+double FCI_Controller::EMA_filter(double new_value, double previous_value) const {
+    return ema_filter_alpha_ * previous_value + (1.0f - ema_filter_alpha_) * new_value;
+}
+
 double FCI_Controller::mapNormToAngle(double norm) const {
     constexpr double max_angle = M_PI / 18.0; // ~10 degrees
     return norm * max_angle;

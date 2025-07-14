@@ -17,6 +17,6 @@ float32 battery_average_current
 
 uint8 arming_state           
 uint8 estop          
-
+int16 flight_mode
 
 

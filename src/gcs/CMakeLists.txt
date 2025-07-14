@@ -51,6 +51,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(tinyxml2)
 
+# Ensure tinyxml2 is built with -fPIC
+set_target_properties(tinyxml2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+
 
 # Find OpenGL package
 find_package(OpenGL REQUIRED)
@@ -87,6 +91,8 @@ install(PROGRAMS
   script/GUI.py
   script/drone_state_publisher.py
   script/MotionCaptureReceiver.py
+  script/gcs_heartbeat.py
+  script/fft.py
   DESTINATION lib/${PROJECT_NAME}/scripts
 )
 
@@ -108,6 +114,8 @@ ament_target_dependencies(gcs_node
 install(TARGETS gcs_node
   DESTINATION lib/${PROJECT_NAME}
 )
+install(DIRECTORY fonts DESTINATION share/${PROJECT_NAME}/)
+install(DIRECTORY images DESTINATION share/${PROJECT_NAME}/)
 
 # Ament package
 ament_package()
