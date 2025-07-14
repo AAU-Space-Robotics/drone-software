@@ -53,6 +53,11 @@ def generate_launch_description():
                     package='fc_interface',
                     executable='fci',
                     name='flight_controller_interface',
+                    remappings=[
+                        ('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),
+                        ('/fmu/out/battery_status', '/fmu/out/battery_status_v1'),
+                        ('/fmu/in/vehicle_attitude_setpoint', '/fmu/in/vehicle_attitude_setpoint_v1'),
+                    ],
                     output='screen',
                     parameters=[
                         controller_params_path,
