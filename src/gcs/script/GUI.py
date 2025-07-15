@@ -10,6 +10,7 @@ from OpenGL.GL import *
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
+import threading
 from threading import Thread
 from interfaces.msg import DroneState
 from interfaces.action import DroneCommand
@@ -22,12 +23,39 @@ import rclpy
 from rclpy.node import Node
 from interfaces.msg import ManualControlInput
 import pygame
+from datetime import datetime
+from collections import deque
 
 class DroneData:
     position: list = (0.0, 0.0, 0.0)
     velocity: list = (0.0, 0.0, 0.0)
     orientation: list = (0.0, 0.0, 0.0)
     battery_voltage: float = 0.0
+
+class ImGuiLogger:
+    def __init__(self, max_messages=1000):
+        self.messages = deque(maxlen=max_messages)
+        self.lock = threading.Lock()
+    
+    def log(self, level, message):
+        with self.lock:
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self.messages.append({
+                'level': level,
+                'message': message,
+                'timestamp': timestamp
+            })
+    def info(self, message):
+        self.log('INFO', message)
+    
+    def warn(self, message):
+        self.log('WARN', message)
+    
+    def error(self, message):
+        self.log('ERROR', message)
+    
+    def debug(self, message):
+        self.log('DEBUG', message)
 
 drone_data = DroneData()
 
@@ -50,6 +78,7 @@ battery_discharge_rate, battery_average_current = 0.0, 0.0
 arming_state = 0
 estop = 0
 drone_state = False
+GUI_console_logs = [""]
 
 
 
@@ -63,11 +92,38 @@ class DroneGuiNode(Node):
             self.state_callback,
             10
         )
+        self.imgui_logger = ImGuiLogger()
+        self.timer = self.create_timer(0.1, self.timer_callback)
         self.manual_control_publisher = self.create_publisher(ManualControlInput, '/fmu/in/manual_control_input', 10)
         self._action_client = ActionClient(self, DroneCommand, '/fmu/in/drone_command')
-        self.get_logger().info('DroneCommand client initialized, waiting for action server...')
+
+        self.imgui_logger.info('DroneCommand client initialized, waiting for action server...')
         self._action_client.wait_for_server()
         self.goal_handle = None
+
+        self.log_filters = {
+            'show_info': True,
+            'show_warn': True,
+            'show_error': True,
+            'show_debug': False
+        }
+    
+    def timer_callback(self):
+        # Example of different log levels
+        if hasattr(self, 'timer_count'):
+            self.timer_count += 1
+        else:
+            self.timer_count = 1
+            
+        #if self.timer_count % 50 == 0:  # Every 5 seconds
+        #    self.imgui_logger.info(f"System heartbeat - {self.timer_count}")
+        
+        # Log ROS2 messages to ImGui as well
+        #msg = "Timer callback executed"
+        #self.get_logger().info(msg)
+        #self.imgui_logger.debug(msg)
+        
+
 
     def state_callback(self, msg):
         global position_x, position_y, position_z, position_timestamp
@@ -76,12 +132,27 @@ class DroneGuiNode(Node):
         global velocity_x, velocity_y, velocity_z, velocity_timestamp
         global battery_voltage, battery_state_timestamp, battery_current, battery_percentage, battery_discharge_rate, battery_average_current
         global arming_state, flight_mode
+        global GUI_console_logs
+
+        if hasattr(self, 'last_arming_state') and self.last_arming_state != msg.arming_state:
+            self.imgui_logger.warn(f"Arming state changed: {self.last_arming_state} -> {msg.arming_state}")
+        
+        if hasattr(self, 'last_flight_mode') and self.last_flight_mode != msg.flight_mode:
+            self.imgui_logger.warn(f"Flight mode changed: {self.last_flight_mode} -> {msg.flight_mode}")
+        
+        # Store previous states
+        self.last_arming_state = msg.arming_state
+        self.last_flight_mode = msg.flight_mode
+
+
         position_timestamp = msg.position_timestamp
         if len(msg.position) >= 3:
+            #Barbre was here....
             position_x = msg.position[0]
             position_y = msg.position[1]
             position_z = msg.position[2]
         velocity_timestamp = msg.velocity_timestamp
+
         if len(msg.velocity) >= 3:
             velocity_x = msg.velocity[0]
             velocity_y = msg.velocity[1]
@@ -94,6 +165,7 @@ class DroneGuiNode(Node):
             target_position_x = msg.target_position[0]
             target_position_y = msg.target_position[1]
             target_position_z = msg.target_position[2]
+
         battery_state_timestamp = msg.battery_state_timestamp
         battery_voltage = msg.battery_voltage
         battery_current = msg.battery_current
@@ -103,13 +175,16 @@ class DroneGuiNode(Node):
         arming_state = msg.arming_state
         #self.get_logger().info(f"Arming state: {arming_state}")
         flight_mode = msg.flight_mode
+        GUI_console_logs[0] = str(self.get_logger())
 
     def send_command(self, command_type, target_pose=None):
         goal_msg = DroneCommand.Goal()
         goal_msg.command_type = command_type
         if target_pose is not None:
             goal_msg.target_pose = target_pose
-        self.get_logger().info(f'Sending command: {command_type}, target_pose: {target_pose}')
+        log_msg = f'Sending command: {command_type}, target_pose: {target_pose}'
+        self.get_logger().info(log_msg)
+        self.imgui_logger.info(log_msg)
         future = self._action_client.send_goal_async(
             goal_msg,
             feedback_callback=self.feedback_callback
@@ -119,17 +194,28 @@ class DroneGuiNode(Node):
     def goal_response_callback(self, future):
         self.goal_handle = future.result()
         if not self.goal_handle.accepted:
-            self.get_logger().warn('Goal rejected by server')
+            msg = 'Goal was rejected by the server'
+            self.get_logger().warn(msg)
+            self.imgui_logger.warn(msg)
             return
-        self.get_logger().info('Goal accepted by server, waiting for result...')
+        msg = 'Goal accepted by server, waiting for result...'
+        self.get_logger().info(msg)
+        self.imgui_logger.info(msg)
         self.goal_handle.get_result_async().add_done_callback(self.result_callback)
 
     def feedback_callback(self, feedback_msg):
-        self.get_logger().info(f'Received feedback: {feedback_msg.feedback}')
+        msg = f'Feedback received: {feedback_msg.feedback}'
+        self.get_logger().info(msg)
+        self.imgui_logger.info(msg)
 
     def result_callback(self, future):
         result = future.result().result
-        self.get_logger().info(f'Result: success={result.success}, message={result.message}')
+        msg = f'Action completed with result: success={result.success}, message={result.message}'
+        self.get_logger().info(msg)
+        if result.success:
+            self.imgui_logger.info(msg)
+        else:
+            self.imgui_logger.error(msg)
         self.goal_handle = None
     def send_manual_control(self, roll, pitch, yaw_velocity, thrust):
         msg = ManualControlInput()
@@ -183,7 +269,7 @@ def Arm_Button(node):
 
 def Kill_command(node):
     global killbutton_color, drone_kill
-    imgui.set_cursor_pos((1150, 30))
+    imgui.set_cursor_pos((1450, 30))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *killbutton_color)
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 1.0, 0.0, 0.0, 1.0)  # Fixed: Added alpha
@@ -196,17 +282,16 @@ def Kill_command(node):
     imgui.pop_style_var()
     return drone_kill
 
-
 def Goto_field(node):
 
     global text_buffer
     text_field = ""
     #changed = False
     
-    imgui.set_cursor_pos((450,670))
+    imgui.set_cursor_pos((450,770)) #moved 100 down y-axis for fullscreen
     with imgui.font(font):
-        imgui.text("Goto Pose (x y z):")
-    imgui.set_cursor_pos((450,715))
+        imgui.text("Target Pose (x y -z):")
+    imgui.set_cursor_pos((450,835))
     imgui.set_next_item_width(300)
     imgui.set_window_font_scale(2.0) 
     changed, text_field= imgui.input_text("", text_buffer, 64)
@@ -216,22 +301,20 @@ def Goto_field(node):
  
   
 
-    imgui.set_cursor_pos((770,705))
+    imgui.set_cursor_pos((770,825))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0,0.8,0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0,0.2,0.0)) 
     with imgui.font(font_small):
-        if imgui.button("Add",width=70, height=50):
+        if imgui.button("Send",width=70, height=50):
             try:
                 x, y, z = map(float, text_buffer.strip().split())
-                node.send_command("goto", [x, y, -z])
+                node.send_command("goto", [x, y, z])
             except ValueError:
                 node.get_logger().warn("Invalid pose input for goto, please enter x y z values")
     imgui.pop_style_color(3)
     imgui.pop_style_var()
-   
-
 
 def Dropdown_Menu():
     global current_item
@@ -267,11 +350,11 @@ def XYZ_Text_Field(msg):
         imgui.set_cursor_pos((60,195)); imgui.text("Z = ")
         imgui.set_cursor_pos((170,93)); imgui.text(f"{Decimal(position_x).quantize(Decimal('0.000'))}")
         imgui.set_cursor_pos((170,143)); imgui.text(f"{Decimal(position_y).quantize(Decimal('0.000'))}")
-        imgui.set_cursor_pos((170,193)); imgui.text(f"{-(Decimal(position_z).quantize(Decimal('0.000')))}")
+        imgui.set_cursor_pos((170,193)); imgui.text(f"{(Decimal(position_z).quantize(Decimal('0.000')))}")
 
         imgui.set_cursor_pos((313,93)); imgui.text(f"{Decimal(target_position_x).quantize(Decimal('0.000'))}")
         imgui.set_cursor_pos((313,143)); imgui.text(f"{Decimal(target_position_y).quantize(Decimal('0.000'))}")
-        imgui.set_cursor_pos((313,193)); imgui.text(f"{-(Decimal(target_position_z).quantize(Decimal('0.000')))}")
+        imgui.set_cursor_pos((313,193)); imgui.text(f"{(Decimal(target_position_z).quantize(Decimal('0.000')))}")
     with imgui.font(font_for_meter):
         imgui.set_cursor_pos((240,240)); imgui.text("*measure in meters")
         imgui.set_cursor_pos((405,42)); imgui.text("*")
@@ -288,7 +371,7 @@ def XYZ_Text_Field(msg):
         end_x, end_y = 287, 235      # Ending point of the line (x, y)
         color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
-    imgui.set_cursor_pos((1250, 215)); imgui.text(f" Position Timestamp {position_timestamp}")
+    imgui.set_cursor_pos((1620, 215)); imgui.text(f" Position Timestamp {position_timestamp}")
     
 def RPY_Text_Field():
     
@@ -336,15 +419,15 @@ def XYZVelocity_Text_Field():
         imgui.set_cursor_pos((100,623)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
         imgui.set_cursor_pos((200,623)); imgui.text("m/s")
         imgui.pop_style_color()
-    imgui.set_cursor_pos((1250, 255)); imgui.text(f" Velocity Timestamp {velocity_timestamp}")
+    imgui.set_cursor_pos((1620, 255)); imgui.text(f" Velocity Timestamp {velocity_timestamp}")
     
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0) 
-    draw_list.add_rect(1525,40,1565,110,color, rounding=1.0,flags=15,thickness=3)   
-    draw_list.add_rect(1532,31,1557,38,color, rounding=1.0,flags=3,thickness=3)  
+    draw_list.add_rect(1845,40,1885,110,color, rounding=1.0,flags=15,thickness=3)   #shifted all 320 for fullscreen
+    draw_list.add_rect(1852,31,1877,38,color, rounding=1.0,flags=3,thickness=3)  
     if(battery_percentage > 0.5):
         battery_color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0)
         
@@ -352,35 +435,35 @@ def batteryGraph():
         battery_color = imgui.get_color_u32_rgba(1.0, 1.0, 0.0, 1.0)
     else:
         battery_color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
-    imgui.set_cursor_pos((1524, 116)); imgui.text(f"{Decimal(100*battery_percentage).quantize(Decimal('0.00'))} %")
+    imgui.set_cursor_pos((1844, 116)); imgui.text(f"{Decimal(100*battery_percentage).quantize(Decimal('0.00'))} %")
     #draw_list.add_rect_filled(1465,31,1432+(battery_percentage*25),38,color, rounding=1.0,flags=3)
     #print(battery_voltage)
-    draw_list.add_rect_filled(1528,106,1562,(battery_progressbar),battery_color, rounding=1.0,flags=15)
+    draw_list.add_rect_filled(1848,106,1882,(battery_progressbar),battery_color, rounding=1.0,flags=15)
 
-    imgui.set_cursor_pos((1320, 30)); imgui.text(f"Voltage:          {Decimal(battery_voltage).quantize(Decimal('0.0'))} V")
-    imgui.set_cursor_pos((1320, 60)); imgui.text(f"Current:          {-(Decimal(battery_current).quantize(Decimal('0.0')))} A")
-    imgui.set_cursor_pos((1320, 90)); imgui.text(f"Discharge rate:   {Decimal(battery_discharge_rate).quantize(Decimal('0.0'))} mAh")
-    imgui.set_cursor_pos((1320, 120)); imgui.text(f"Average current:  {-(Decimal(battery_average_current).quantize(Decimal('0.0')))} A")
+    imgui.set_cursor_pos((1640, 30)); imgui.text(f"Voltage:          {Decimal(battery_voltage).quantize(Decimal('0.0'))} V")
+    imgui.set_cursor_pos((1640, 60)); imgui.text(f"Current:          {-(Decimal(battery_current).quantize(Decimal('0.0')))} A")
+    imgui.set_cursor_pos((1640, 90)); imgui.text(f"Discharge rate:   {Decimal(battery_discharge_rate).quantize(Decimal('0.0'))} mAh")
+    imgui.set_cursor_pos((1640, 120)); imgui.text(f"Average current:  {-(Decimal(battery_average_current).quantize(Decimal('0.0')))} A")
 
     draw_list = imgui.get_window_draw_list()
-    start_x, start_y = 1510, 30  # Starting point of the line (x, y)
-    end_x, end_y = 1510, 132      # Ending point of the line (x, y)
+    start_x, start_y = 1830, 30  # Starting point of the line (x, y)
+    end_x, end_y = 1830, 132      # Ending point of the line (x, y)
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
     draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
 
     draw_list = imgui.get_window_draw_list()
-    start_x, start_y = 1439, 30  # Starting point of the line (x, y)
-    end_x, end_y = 1439, 132      # Ending point of the line (x, y)
+    start_x, start_y = 1759, 30  # Starting point of the line (x, y)
+    end_x, end_y = 1759, 132      # Ending point of the line (x, y)
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
     draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
 
     draw_list = imgui.get_window_draw_list()
-    start_x, start_y = 1310, 30  # Starting point of the line (x, y)
-    end_x, end_y = 1310, 132      # Ending point of the line (x, y)
+    start_x, start_y = 1630, 30  # Starting point of the line (x, y)
+    end_x, end_y = 1630, 132      # Ending point of the line (x, y)
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
     draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
 
-    imgui.set_cursor_pos((1250, 175)); imgui.text(f" Battery Timestamp  {battery_state_timestamp}")
+    imgui.set_cursor_pos((1620, 175)); imgui.text(f" Battery Timestamp  {battery_state_timestamp}") # all timestamps are moved 370 for fulscreen
 
 def map_value(value, in_min, in_max, out_min, out_max):
     return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -475,7 +558,7 @@ def takeoff_button(node):
     imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0)) 
     with imgui.font(font_small):
         if imgui.button("Takeoff", width=150, height=50):
-            node.send_command("takeoff", [-2.0])  
+            node.send_command("takeoff", [-1.0])  
     imgui.pop_style_color(3)
     imgui.pop_style_var() 
 
@@ -491,15 +574,43 @@ def land_button(node):
     imgui.pop_style_color(3)
     imgui.pop_style_var()
 
-def manual_aided(node):
+def return_to_home_button(node):
     imgui.set_cursor_pos((850, 600))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0))  
     with imgui.font(font_small):
+        if imgui.button("Return", width=150, height=50):
+            node.send_command("goto", [float(0.0), float(0.0), float(-1.5)]) 
+    imgui.pop_style_color(3)
+    imgui.pop_style_var()
+
+def manual_aided(node):
+    imgui.set_cursor_pos((1400, 200))
+    button_color = (0.5, 0.5, 0.5)
+    hover_color = (0.5, 0.8, 0.5)
+    active_color = (0.5, 1, 0.5)
+    imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+    imgui.push_style_color(imgui.COLOR_BUTTON, *button_color)
+    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *hover_color)
+    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *active_color)  
+    with imgui.font(font_small):
         if imgui.button("Manual Aided", width=200, height=50):
-           node.send_command("manual") 
+            try :
+                # Check if joystick is connected
+                if pygame.joystick.get_count() > 0:
+                    button_color = (0.0, 0.5, 0.0)  # Green color for connected joystick
+                    hover_color = (0.0, 0.8, 0.0)  # Lighter green for hover
+                    active_color = (0.0, 0.2, 0.0)
+                    node.send_command("manual_aided")
+                    print("Manual Aided mode activated.")
+                else:
+                    print("Joystick not connected or not initialized.")
+            except AttributeError:
+                print("Joystick not initialized or not available.")
+              
+   
     imgui.pop_style_color(3)
     imgui.pop_style_var()
     flight_mode_text = ""
@@ -520,7 +631,7 @@ def manual_aided(node):
     elif flight_mode == 5:
         flight_mode_text = "Land position"
     
-    imgui.set_cursor_pos((870, 710))
+    imgui.set_cursor_pos((450, 710))
     with imgui.font(font_small):
         imgui.text("Flight Mode: " + str(flight_mode_text))
 
@@ -572,6 +683,78 @@ def start_joystick(node):
     finally:
         pygame.quit()
 
+def GuiConsoleLogger(node):
+    global font_small
+    
+    # Position the logger window in the bottom right area
+    imgui.set_cursor_pos((1150, 600))
+    
+    # Create a child window for the logger
+    imgui.begin_child("LoggerWindow", 750, 280, border=True)
+    
+    # Header
+    with imgui.font(font_small):
+        imgui.text("Console Logger")
+    
+    imgui.separator()
+    
+    # Filter checkboxes
+    imgui.text("Filters:")
+    imgui.same_line()
+    
+    # Use persistent filter states from the node
+    node.log_filters['show_info'] = imgui.checkbox("INFO", node.log_filters['show_info'])[1]
+    imgui.same_line()
+    node.log_filters['show_warn'] = imgui.checkbox("WARN", node.log_filters['show_warn'])[1]
+    imgui.same_line()
+    node.log_filters['show_error'] = imgui.checkbox("ERROR", node.log_filters['show_error'])[1]
+    imgui.same_line()
+    node.log_filters['show_debug'] = imgui.checkbox("DEBUG", node.log_filters['show_debug'])[1]
+    
+    # Clear button
+    imgui.same_line()
+    if imgui.button("Clear"):
+        with node.imgui_logger.lock:
+            node.imgui_logger.messages.clear()
+    
+    imgui.separator()
+    
+    # Scrollable log area
+    imgui.begin_child("ScrollingRegion", 0, 0, border=False)
+    
+    # Display log messages
+    with node.imgui_logger.lock:
+        for msg in node.imgui_logger.messages:
+            # Filter by level
+            if (msg['level'] == 'INFO' and not node.log_filters['show_info']) or \
+               (msg['level'] == 'WARN' and not node.log_filters['show_warn']) or \
+               (msg['level'] == 'ERROR' and not node.log_filters['show_error']) or \
+               (msg['level'] == 'DEBUG' and not node.log_filters['show_debug']):
+                continue
+            
+            # Format the message
+            formatted_msg = f"[{msg['timestamp']}] {msg['level']}: {msg['message']}"
+            
+            # Color based on log level
+            if msg['level'] == 'ERROR':
+                imgui.text_colored(formatted_msg, 1.0, 0.4, 0.4, 1.0)
+            elif msg['level'] == 'WARN':
+                imgui.text_colored(formatted_msg, 1.0, 0.8, 0.0, 1.0)
+            elif msg['level'] == 'INFO':
+                imgui.text_colored(formatted_msg, 0.4, 1.0, 0.4, 1.0)
+            elif msg['level'] == 'DEBUG':
+                imgui.text_colored(formatted_msg, 0.7, 0.7, 0.7, 1.0)
+            else:
+                imgui.text(formatted_msg)
+    
+    # Auto-scroll to bottom if we're at the bottom
+    if imgui.get_scroll_y() >= imgui.get_scroll_max_y():
+        imgui.set_scroll_here_y(1.0)
+    
+    imgui.end_child()
+    imgui.end_child()
+
+
 def main(args=None):
     rclpy.init()
     global font, font_large, font_small, font_for_meter
@@ -592,15 +775,22 @@ def main(args=None):
     #width, height = mode.size.width, mode.size.height
     
     # Create borderless window
-    window = glfw.create_window(1600, 800, "THYRA", None, None)
+    #window_width, window_height = pygame.display.get_surface().get_size()
+    glfw.init()
+    glfw.window_hint(glfw.RESIZABLE, glfw.TRUE)
+    glfw.window_hint(glfw.DECORATED, glfw.TRUE)
+    glfw.window_hint(glfw.MAXIMIZED, glfw.TRUE)
+
+    window = glfw.create_window(800, 1000, "THYRA", None, None)
+    glfw.set_window_pos(window, 0, 0)
     if not window:
         print("Could not create GLFW window")
-        glfw.terminate()
+        glfw.terminate()  
         return
     
     # Make the OpenGL context current
     glfw.make_context_current(window)
-    
+
     # Initialize ImGui
 
     #Not quiet sure what to do about this yet....
@@ -613,7 +803,7 @@ def main(args=None):
     io = imgui.get_io()
     global font, font_large, font_small, font_for_meter
     # Try to find the font in the ROS package share directory
-    import ament_index_python.packages
+    
     try:
         font_dir = os.path.join(
             ament_index_python.packages.get_package_share_directory("gcs"),
@@ -668,12 +858,13 @@ def main(args=None):
         impl.process_inputs()
         clear_color = (0.0, 0.0, 0.12, 0.0)  # RGBA 
         gl.glClearColor(*clear_color)
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         imgui.new_frame()
       
         # Create UI without windowed mode
         imgui.set_next_window_position(0, 0)
-        imgui.set_next_window_size(1600, 800)
+        window_width, window_height = glfw.get_framebuffer_size(window)
+        imgui.set_next_window_size(window_width, window_height)
         imgui.begin("wtf", flags=imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_RESIZE | imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_BACKGROUND)
         imgui.set_cursor_pos((20,10))
         with imgui.font(font_small):
@@ -681,7 +872,7 @@ def main(args=None):
         #Creating a line for seperation
         draw_list = imgui.get_window_draw_list()
         start_x, start_y = 430, 0  # Starting point of the line (x, y)
-        end_x, end_y = 430, 800      # Ending point of the line (x, y)
+        end_x, end_y = 430, 2000      # Ending point of the line (x, y)
         color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
         #Running different widgets
@@ -700,7 +891,10 @@ def main(args=None):
         Arrows()
         takeoff_button(node)
         land_button(node)
+        return_to_home_button(node)
         manual_aided(node)
+        GuiConsoleLogger(node)
+        
         imgui.end()
 
         
