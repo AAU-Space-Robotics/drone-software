@@ -16,7 +16,7 @@ def generate_launch_description():
     
     # directory which workspace is located in
     general_dir = os.path.abspath(os.path.join(workspace_dir, '..', '..', '..'))
-    px4_dir = os.path.join(general_dir, 'PX4-Autopilot')
+    px4_dir = os.path.join(general_dir, 'PX4-Autopilot_thyra')
     
     # Path to the simulation config file
     controller_params_path = PathJoinSubstitution([pkg_share, 'config', 'controller_params_sim.yaml'])

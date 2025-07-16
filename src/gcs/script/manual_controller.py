@@ -15,7 +15,7 @@ class ManualController(Node):
         self.controller_type = 1 #to choose controller. 1 for TX16S and 0 for PS4
 
 
-        self.publisher_ = self.create_publisher(ManualControlInput, 'drone/in/manual_input', qos_settings)
+        self.publisher_ = self.create_publisher(ManualControlInput, 'thyra/in/manual_input', qos_settings)
         self.timer = self.create_timer(0.01, self.publish_control)  # 100Hz
         self.drone_cmd = ManualControlInput()
         

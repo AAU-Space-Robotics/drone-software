@@ -88,14 +88,14 @@ class DroneGuiNode(Node):
         super().__init__('thyra_gui_node')
         self.subscription = self.create_subscription(
             DroneState,
-            "drone/out/drone_state",
+            "thyra/out/drone_state",
             self.state_callback,
             10
         )
         self.imgui_logger = ImGuiLogger()
         self.timer = self.create_timer(0.1, self.timer_callback)
-        self.manual_control_publisher = self.create_publisher(ManualControlInput, '/fmu/in/manual_control_input', 10)
-        self._action_client = ActionClient(self, DroneCommand, '/fmu/in/drone_command')
+        self.manual_control_publisher = self.create_publisher(ManualControlInput, '/thyra/in/manual_control_input', 10)
+        self._action_client = ActionClient(self, DroneCommand, '/thyra/in/drone_command')
 
         self.imgui_logger.info('DroneCommand client initialized, waiting for action server...')
         self._action_client.wait_for_server()
