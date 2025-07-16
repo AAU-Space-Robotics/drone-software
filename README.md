@@ -213,7 +213,10 @@ sudo apt-get update
 sudo apt-get upgrade -y
 sudo apt install -y i2c-tools
 
+Simulation:
+src/modules/simulation/simulator_mavlink/sitl_targets_gazebo-classic.cmake
 
+Tools/simulation/gz/worlds/erc.sdf
 
 
 
