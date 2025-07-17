@@ -148,7 +148,7 @@ public:
             [this](const interfaces::msg::ManualControlInput::SharedPtr msg)
             { manualControlInputCallback(msg); });
         battery_status_sub_ = create_subscription<BatteryStatus>(
-            "/fmu/out/battery_status", qos,
+            "/fmu/out/battery_status_v1", qos,
             [this](const BatteryStatus::SharedPtr msg)
             { batteryStatusCallback(msg); });
 
@@ -302,6 +302,7 @@ private:
 
     void batteryStatusCallback(const BatteryStatus::SharedPtr msg)
     {
+
         BatteryState battery_state;
         battery_state.timestamp = get_time();
         battery_state.cell_count = msg->cell_count;
