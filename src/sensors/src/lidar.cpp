@@ -3,9 +3,11 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <rclcpp/rclcpp.hpp>
+#include <px4_msgs/msg/distance_sensor.hpp>
 
 LidarNode::LidarNode() : Node("lidar_node"), file_i2c(-1) {
-    publisher_ = create_publisher<sensor_msgs::msg::Range>("lidar/distance", 10);
+    px4_publisher_ = create_publisher<px4_msgs::msg::DistanceSensor>("/fmu/in/distance_sensor", 10);
     timer_ = create_wall_timer(std::chrono::milliseconds(5), std::bind(&LidarNode::read_and_publish, this));
     
     if (i2c_init() < 0 || i2c_connect(LIDAR_ADDR_DEFAULT) < 0) {
@@ -15,7 +17,7 @@ LidarNode::LidarNode() : Node("lidar_node"), file_i2c(-1) {
     }
     
     configure(0, LIDAR_ADDR_DEFAULT);
-    RCLCPP_INFO(get_logger(), "Lidar initialized successfully");
+    RCLCPP_INFO(get_logger(), "Garmin LIDAR-Lite v3HP initialized successfully");
 }
 
 int32_t LidarNode::i2c_init() {
@@ -107,11 +109,13 @@ int32_t LidarNode::i2c_write(uint8_t reg_addr, uint8_t* data, uint8_t num_bytes,
 
 int32_t LidarNode::i2c_read(uint8_t reg_addr, uint8_t* data, uint8_t num_bytes, uint8_t address) {
     i2c_connect(address);
-    write(file_i2c, &reg_addr, 1);
+    if (write(file_i2c, &reg_addr, 1) < 0) {
+        RCLCPP_ERROR(get_logger(), "Failed to write register address");
+        return -1;
+    }
     return read(file_i2c, data, num_bytes);
 }
 
-// Moving average filter for distance
 double LidarNode::moving_average(double new_value) {
     static std::array<double, 5> values = {0};
     static size_t index = 0;
@@ -138,15 +142,25 @@ void LidarNode::read_and_publish() {
 
     // Downsample: Publish every 4th sample (200 Hz to 50 Hz)
     if (++sample_count >= 4) {
-        auto msg = sensor_msgs::msg::Range();
-        msg.header.stamp = now();
-        msg.header.frame_id = "lidar_frame";
-        msg.radiation_type = sensor_msgs::msg::Range::INFRARED;
-        msg.field_of_view = 0.1;
-        msg.min_range = 0.05;    // 5 cm
-        msg.max_range = 40.0;    // 40 meters
-        msg.range = distance / 100.0; // Convert cm to meters
-        publisher_->publish(msg);
+        // Only publish valid distances (5 cm to 40 m)
+        if (distance >= 5 && distance <= 4000) {
+            auto px4_msg = px4_msgs::msg::DistanceSensor();
+            px4_msg.timestamp = this->get_clock()->now().nanoseconds() / 1000; // Microseconds
+            px4_msg.device_id = 1234; // Unique ID for the sensor
+            px4_msg.min_distance = 0.05; // 5 cm
+            px4_msg.max_distance = 40.0; // 40 meters
+            px4_msg.current_distance = distance / 100.0; // Convert cm to meters
+            px4_msg.variance = (distance / 100.0 < 2.0) ? 0.01 : 0.0025; // ±5 cm for <2 m, ±2.5 cm for >2 m
+            px4_msg.signal_quality = -1; // Unknown quality
+            px4_msg.type = 0; // MAV_DISTANCE_SENSOR_LASER
+            px4_msg.h_fov = 0.0; // 1D LiDAR has no FOV
+            px4_msg.v_fov = 0.0;
+            px4_msg.q = {0.0, 0.0, 0.0, 1.0}; // Identity quaternion for downward-facing
+            px4_msg.orientation = 25; // ROTATION_DOWNWARD_FACING
+            px4_publisher_->publish(px4_msg);
+        } else {
+            RCLCPP_WARN(get_logger(), "Invalid distance reading: %.2d cm", distance);
+        }
         sample_count = 0; // Reset counter
     }
 }

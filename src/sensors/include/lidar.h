@@ -3,6 +3,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/range.hpp>
+#include <px4_msgs/msg/distance_sensor.hpp>
 #include <cstdint>
 
 #define LIDAR_ADDR_DEFAULT 0x62
@@ -20,7 +21,7 @@ public:
 
 private:
     int32_t file_i2c;
-    rclcpp::Publisher<sensor_msgs::msg::Range>::SharedPtr publisher_;
+    rclcpp::Publisher<px4_msgs::msg::DistanceSensor>::SharedPtr px4_publisher_;
     rclcpp::TimerBase::SharedPtr timer_;
 
     int32_t i2c_init();

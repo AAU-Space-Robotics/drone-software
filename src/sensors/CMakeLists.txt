@@ -16,6 +16,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(px4_msgs REQUIRED)
+
 
 # Include directories
 include_directories(include)
@@ -27,6 +29,7 @@ add_executable(lidar src/lidar.cpp)
 ament_target_dependencies(lidar
   rclcpp
   sensor_msgs
+  px4_msgs
 )
 
 # Install C++ executables
