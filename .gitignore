@@ -16,3 +16,4 @@ src/px4_ros_com
 src/px4_msgs
 src/px4_msgs_thyra
 imgui.ini
+src/realsense-ros
