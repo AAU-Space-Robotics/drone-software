@@ -31,7 +31,7 @@ clone_repo_if_not_exists() {
 }
 
 # Clone the px4_msgs repository
-clone_repo_if_not_exists "https://github.com/PX4/px4_msgs.git"
+clone_repo_if_not_exists "git@github.com:AAU-Space-Robotics/px4_msgs_thyra.git"
 
 # Navigate to the parent directory to check/install Micro-XRCE-DDS-Agent and PX4-Autopilot
 cd "$PARENT_DIR" || exit
@@ -53,12 +53,12 @@ else
 fi
 
 # Check and install PX4-Autopilot
-if [ -d "PX4-Autopilot" ]; then
-  echo "PX4-Autopilot is already installed, skipping installation."
+if [ -d "PX4-Autopilot_thyra" ]; then
+  echo "PX4-Autopilot_thyra is already installed, skipping installation."
 else
   echo "Installing PX4-Autopilot..."
-  git clone https://github.com/PX4/PX4-Autopilot.git --recursive
-  cd PX4-Autopilot
+  git clone git@github.com:AAU-Space-Robotics/PX4-Autopilot_thyra.git --recursive
+  cd PX4-Autopilot_thyra
   bash ./Tools/setup/ubuntu.sh
   make px4_sitl
   cd "$PARENT_DIR" || exit

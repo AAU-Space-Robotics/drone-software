@@ -115,7 +115,7 @@ public:
         offboard_control_mode_pub_ = create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
         attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
-        drone_state_pub_ = create_publisher<interfaces::msg::DroneState>("drone/out/drone_state", 10);
+        drone_state_pub_ = create_publisher<interfaces::msg::DroneState>("thyra/out/drone_state", 10);
 
         // Subscribers
         if (position_source == "px4"){
@@ -125,7 +125,7 @@ public:
         }
         else if (position_source == "mocap"){
             motion_capture_local_position_sub_ = create_subscription<interfaces::msg::MotionCapturePose>(
-                "drone/in/motion_capture_pose", qos,
+                "thyra/in/motion_capture_pose", qos,
                 [this](const interfaces::msg::MotionCapturePose::SharedPtr msg)
                 { motionCaptureLocalPositionCallback(msg); });
         }
@@ -144,7 +144,7 @@ public:
             [this](const VehicleStatus::SharedPtr msg)
             { vehicleStatusCallback(msg); });
         manual_input_sub_ = create_subscription<interfaces::msg::ManualControlInput>(
-            "drone/in/manual_input", qos,
+            "thyra/in/manual_input", qos,
             [this](const interfaces::msg::ManualControlInput::SharedPtr msg)
             { manualControlInputCallback(msg); });
         battery_status_sub_ = create_subscription<BatteryStatus>(
@@ -155,7 +155,7 @@ public:
 
         // Action server
         drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
-            this, "/fmu/in/drone_command",
+            this, "/thyra/in/drone_command",
             [this](const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const DroneCommand::Goal> goal)
             {
                 return handleDroneCommand(uuid, goal);

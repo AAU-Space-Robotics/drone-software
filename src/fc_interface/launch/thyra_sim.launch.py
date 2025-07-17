@@ -16,7 +16,7 @@ def generate_launch_description():
     
     # directory which workspace is located in
     general_dir = os.path.abspath(os.path.join(workspace_dir, '..', '..', '..'))
-    px4_dir = os.path.join(general_dir, 'PX4-Autopilot')
+    px4_dir = os.path.join(general_dir, 'PX4-Autopilot_thyra')
     
     # Path to the simulation config file
     controller_params_path = PathJoinSubstitution([pkg_share, 'config', 'controller_params_sim.yaml'])
@@ -38,20 +38,36 @@ def generate_launch_description():
             default_value='px4',
             description='Position source: px4 or mocap'
         ),
-
-        # Start PX4 SITL with Gazebo (output suppressed)
-        ExecuteProcess(
-        cmd=[
-            'bash', '-c',
-            f'''
-            echo "Trying to cd into: {px4_dir}" && \
-            cd {px4_dir} && \
-            echo "Now in: $(pwd)" && \
-            make px4_sitl gz_x500 > /dev/null 2>&1
-            '''
-        ],
-        shell=True,
-        output='screen',
+        
+        # ExecuteProcess(
+        #     cmd=[
+        #         'bash', '-c',
+        #         f'''
+        #         echo "Trying to cd into: {px4_dir}" && \
+        #         cd {px4_dir} && \
+        #         echo "Now in: $(pwd)" && \
+        #         export GAZEBO_RESOURCE_PATH=~/PX4-Autopilot_thyra/Tools/simulation/gz/worlds:$GAZEBO_RESOURCE_PATH && \
+        #         echo "Now running PX4 SITL with Gazebo X500 world" && \
+        #         make px4_sitl gz_x500_erc > /dev/null 2>&1
+        #         '''
+        #     ],
+        #     shell=True,
+        #     output='screen',
+        # ),
+         ExecuteProcess(
+            cmd=[
+                'bash', '-c',
+                f'''
+                echo "Trying to cd into: {px4_dir}" && \
+                cd {px4_dir} && \
+                echo "Now in: $(pwd)" && \
+                export GAZEBO_RESOURCE_PATH=~/PX4-Autopilot_thyra/Tools/simulation/gz/worlds:$GAZEBO_RESOURCE_PATH && \
+                echo "Now running PX4 SITL with Gazebo X500 world" && \
+                make px4_sitl gz_x500
+                '''
+            ],
+            shell=True,
+            output='screen',
         ),
         
         # Start MicroXRCEAgent (output suppressed)

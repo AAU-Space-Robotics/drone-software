@@ -18,7 +18,7 @@ class MotionCaptureNode(Node):
         )
         
         # Create publisher with MotionCapturePose message type
-        self.publisher_ = self.create_publisher(MotionCapturePose, 'drone/in/motion_capture_pose', qos)
+        self.publisher_ = self.create_publisher(MotionCapturePose, 'thyra/in/motion_capture_pose', qos)
         # 110 Hz publishing rate
         self.timer = self.create_timer(1/110, self.publish_message)
         
