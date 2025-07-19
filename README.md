@@ -173,13 +173,13 @@ Run this command from the workspace root (e.g., `~/drone-software`). Ensure the 
 
 - **Takeoff:**
   ```bash
-  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'takeoff', target_pose: [-10], yaw: 0.0}"
+  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'takeoff', target_pose: [-2], yaw: 0.0}"
   ```
-  - Requires one argument: the z-coordinate (altitude) to reach (e.g., `-10` for 10 meters upward). Negative values indicate upward movement.
+  - Requires one argument: the z-coordinate (altitude) to reach (e.g., `-2` for 2 meters upward). Negative values indicate upward movement.
 
 - **Go To:**
   ```bash
-  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'goto', target_pose: [5,5,-10], yaw: 0.0}"
+  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'goto', target_pose: [1,1,-2], yaw: 0.0}"
   ```
   - Requires an `[x, y, z]` coordinate. The command will be rejected without all three values. Altitude is specified with negative values for higher altitudes.
 
