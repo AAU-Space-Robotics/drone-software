@@ -19,8 +19,7 @@ def generate_launch_description():
     px4_dir = os.path.join(general_dir, 'PX4-Autopilot')
     
     # Path to the simulation config file
-    controller_params_path = PathJoinSubstitution([pkg_share, 'config', 'controller_params.yaml'])
-    safety_params_path = PathJoinSubstitution([pkg_share, 'config', 'safety_params.yaml'])
+    params_path = PathJoinSubstitution([pkg_share, 'config', 'thyra_params.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
@@ -59,8 +58,7 @@ def generate_launch_description():
                     ],
                     output='screen',
                     parameters=[
-                        controller_params_path,
-                        safety_params_path,
+                        params_path,
                         {'use_sim_time': use_sim_time},
                         {'position_source': position_source}
                     ]

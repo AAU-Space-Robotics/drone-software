@@ -162,5 +162,14 @@ Eigen::Vector4d FCI_StateManager::getLatestControlSignal() {
     return latest_control_signal_;   
 }
 
+void FCI_StateManager::setGroundDistanceState(const Stamped3DVector& new_data) {
+    std::lock_guard<std::mutex> lock(ground_distance_state_mutex_);
+    ground_distance_state_ = new_data;   
+}
+Stamped3DVector FCI_StateManager::getGroundDistanceState() {
+    std::lock_guard<std::mutex> lock(ground_distance_state_mutex_);
+    return ground_distance_state_;   
+}
+
 // End of Setters & Getters
 

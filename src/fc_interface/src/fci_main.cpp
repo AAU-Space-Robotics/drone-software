@@ -11,6 +11,7 @@
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
 #include <px4_msgs/msg/battery_status.hpp>
+#include <px4_msgs/msg/distance_sensor.hpp>
 
 
 #include <interfaces/action/drone_command.hpp>
@@ -70,12 +71,12 @@ public:
         load_pid_gains("yaw", pid_gains.yaw, 0.1, 0.0, 0.05);
         load_pid_gains("thrust", pid_gains.thrust, 0.8, 0.0, 0.1);
 
-        this->declare_parameter("controller_constraints.max_linear_velocity",0.2);
-        this->get_parameter("controller_constraints.max_linear_velocity", controller_.max_linear_velocity_);
-        this->declare_parameter("controller_constraints.max_angular_velocity",0.5);
-        this->get_parameter("controller_constraints.max_angular_velocity", controller_.max_angular_velocity_);
-        this->declare_parameter("pid_gains.ema.alpha",0.0);
-        this->get_parameter("pid_gains.ema.alpha", controller_.ema_filter_alpha_);
+        this->declare_parameter("controller.constraints.max_linear_velocity",0.1);
+        this->get_parameter("controller.constraints.max_linear_velocity", controller_.max_linear_velocity_);
+        this->declare_parameter("controller.constraints.max_angular_velocity",0.1);
+        this->get_parameter("controller.constraints.max_angular_velocity", controller_.max_angular_velocity_);
+        this->declare_parameter("controller.ema.alpha",0.0);
+        this->get_parameter("controller.ema.alpha", controller_.ema_filter_alpha_);
 
         RCLCPP_INFO(get_logger(), "Controller constraints: max_linear_velocity=%.2f, max_angular_velocity=%.2f, ema_filter_alpha=%.2f",
                     controller_.max_linear_velocity_, controller_.max_angular_velocity_ , controller_.ema_filter_alpha_);
@@ -103,6 +104,11 @@ public:
                     gcs_timeout_threshold_, position_timeout_threshold_,
                     safety_thrust_, safety_thrustdown_rate_);
   
+        // Load setup parameters
+        this->declare_parameter("setup.lidar_offset", 0.0);
+        this->get_parameter("setup.lidar_offset", lidar_offset_);
+
+        RCLCPP_INFO(get_logger(), "Lidar offset: %.2f", lidar_offset_);
 
         
         // Set initial state
@@ -112,6 +118,7 @@ public:
         state_manager_.setTargetPositionProfile(Stamped4DVector(get_time(), 0.0, 0.0, 0.0, 0.0));
         state_manager_.setAttitude(StampedQuaternion(get_time(), Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0)));
         state_manager_.setManualControlInput(Stamped4DVector(get_time(), 0.0, 0.0, 0.0, 0.0));
+        state_manager_.setGroundDistanceState(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
 
         // Publishers
         offboard_control_mode_pub_ = create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
@@ -153,6 +160,10 @@ public:
             "/fmu/out/battery_status_v1", qos,
             [this](const BatteryStatus::SharedPtr msg)
             { batteryStatusCallback(msg); });
+        ground_distance_sub_ = create_subscription<DistanceSensor>(
+            "/thyra/out/distance_sensor", qos,
+            [this](const DistanceSensor::SharedPtr msg)
+            { GroundDistanceCallback(msg);});
 
 
         // Action server
@@ -190,18 +201,94 @@ private:
         double kp_default, double ki_default, double kd_default)
     {
     // Declare parameters
-    this->declare_parameter("pid_gains." + controller + ".Kp", kp_default);
-    this->declare_parameter("pid_gains." + controller + ".Ki", ki_default);
-    this->declare_parameter("pid_gains." + controller + ".Kd", kd_default);
+    this->declare_parameter("controller.pid_gains." + controller + ".Kp", kp_default);
+    this->declare_parameter("controller.pid_gains." + controller + ".Ki", ki_default);
+    this->declare_parameter("controller.pid_gains." + controller + ".Kd", kd_default);
 
     // Get parameters
-    this->get_parameter("pid_gains." + controller + ".Kp", gains.Kp);
-    this->get_parameter("pid_gains." + controller + ".Ki", gains.Ki);
-    this->get_parameter("pid_gains." + controller + ".Kd", gains.Kd);
+    this->get_parameter("controller.pid_gains." + controller + ".Kp", gains.Kp);
+    this->get_parameter("controller.pid_gains." + controller + ".Ki", gains.Ki);
+    this->get_parameter("controller.pid_gains." + controller + ".Kd", gains.Kd);
 
     // Log gains
     RCLCPP_INFO(get_logger(), "%s PID gains: Kp=%.2f, Ki=%.2f, Kd=%.2f",
     controller.c_str(), gains.Kp, gains.Ki, gains.Kd);
+    }
+
+    void GroundDistanceCallback(const DistanceSensor::SharedPtr msg)
+    {
+        // Retrieve measurement
+        double ground_distance = msg->current_distance - lidar_offset_;
+
+        // Shift old values to make space for the newest one
+        for (int i = 0; i < max_ground_distance_readings_ - 1; ++i) {
+            ground_distance_readings_[i] = ground_distance_readings_[i + 1];
+            ground_distance_timestamps_[i] = ground_distance_timestamps_[i + 1];
+        }
+
+        // Add newest reading and timestamp at the end
+        ground_distance_readings_[max_ground_distance_readings_ - 1] = static_cast<float>(ground_distance);
+        ground_distance_timestamps_[max_ground_distance_readings_ - 1] = get_time();
+
+        // Track number of valid readings
+        static int valid_readings_ = 0;
+        if (valid_readings_ < max_ground_distance_readings_) {
+            valid_readings_++;
+        }
+
+        // --- Calculate average ---
+        float sum = 0.0f;
+        int valid_count = std::min(valid_readings_, max_ground_distance_readings_);
+        for (int i = max_ground_distance_readings_ - valid_count; i < max_ground_distance_readings_; ++i) {
+            sum += ground_distance_readings_[i];
+        }
+        float avg_ground_distance = valid_count > 0 ? sum / static_cast<float>(valid_count) : 0.0f;
+
+        // --- Calculate velocity ---
+        float ground_distance_velocity = 0.0f;
+        double dt_sec_vel = 0.0; // Declare dt_sec_vel in a broader scope
+        bool valid_velocity = false;
+        if (valid_readings_ >= 2) {
+            rclcpp::Duration dt_vel = ground_distance_timestamps_[max_ground_distance_readings_ - 1] -
+                                    ground_distance_timestamps_[max_ground_distance_readings_ - 2];
+            dt_sec_vel = dt_vel.seconds();
+            if (dt_sec_vel > 0.0 &&
+                ground_distance_timestamps_[max_ground_distance_readings_ - 1].get_clock_type() ==
+                ground_distance_timestamps_[max_ground_distance_readings_ - 2].get_clock_type()) {
+                ground_distance_velocity = (ground_distance_readings_[max_ground_distance_readings_ - 1] -
+                                        ground_distance_readings_[max_ground_distance_readings_ - 2]) / dt_sec_vel;
+                valid_velocity = true;
+            } else {
+                RCLCPP_WARN(get_logger(), "Invalid time difference for velocity calculation: dt=%.6f, same_source=%d",
+                            dt_sec_vel, ground_distance_timestamps_[max_ground_distance_readings_ - 1].get_clock_type() ==
+                            ground_distance_timestamps_[max_ground_distance_readings_ - 2].get_clock_type());
+            }
+        }
+
+        // --- Calculate acceleration ---
+        float ground_distance_acceleration = 0.0f;
+        if (valid_readings_ >= 3 && valid_velocity) {
+            rclcpp::Duration dt_acc = ground_distance_timestamps_[max_ground_distance_readings_ - 2] -
+                                    ground_distance_timestamps_[max_ground_distance_readings_ - 3];
+            double dt_sec_acc = dt_acc.seconds();
+            if (dt_sec_acc > 0.0 &&
+                ground_distance_timestamps_[max_ground_distance_readings_ - 2].get_clock_type() ==
+                ground_distance_timestamps_[max_ground_distance_readings_ - 3].get_clock_type()) {
+                float prev_velocity = (ground_distance_readings_[max_ground_distance_readings_ - 2] -
+                                    ground_distance_readings_[max_ground_distance_readings_ - 3]) / dt_sec_acc;
+                ground_distance_acceleration = (ground_distance_velocity - prev_velocity) / dt_sec_vel;
+            } else {
+                RCLCPP_WARN(get_logger(), "Invalid time difference for acceleration calculation: dt_acc=%.6f, same_source=%d",
+                            dt_sec_acc, ground_distance_timestamps_[max_ground_distance_readings_ - 2].get_clock_type() ==
+                            ground_distance_timestamps_[max_ground_distance_readings_ - 3].get_clock_type());
+            }
+        }
+
+        // Set the ground distance state in the state manager
+        Stamped3DVector ground_distance_state(get_time(), avg_ground_distance, ground_distance_velocity, ground_distance_acceleration);
+        state_manager_.setGroundDistanceState(ground_distance_state);
+        // RCLCPP_INFO(get_logger(), "Ground distance: %.2f m, Velocity: %.2f m/s, Acceleration: %.2f m/s²",
+        //             avg_ground_distance, ground_distance_velocity, ground_distance_acceleration);
     }
 
     void gcsHeartbeatCallback(const interfaces::msg::GcsHeartbeat::SharedPtr msg)
@@ -971,6 +1058,7 @@ private:
     rclcpp::Subscription<VehicleStatus>::SharedPtr status_sub_;
     rclcpp::Subscription<interfaces::msg::ManualControlInput>::SharedPtr manual_input_sub_;
     rclcpp::Subscription<BatteryStatus>::SharedPtr battery_status_sub_;
+    rclcpp::Subscription<DistanceSensor>::SharedPtr ground_distance_sub_;
 
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;
@@ -987,6 +1075,9 @@ private:
     AccelerationError prev_acceleration_error_;
     static constexpr float yaw_sensitivity_ = 1.0f / 20.0f;
 
+    // Setup variables
+    float lidar_offset_; // Describes what the Lidar measures, in meteres when standing on the ground
+
     //Safety variables
     bool gcs_stale_ = false;
     bool position_stale_ = false;
@@ -999,7 +1090,12 @@ private:
     float gcs_timeout_threshold_;
     float position_timeout_threshold_;
     rclcpp::Time safety_land_start_time_;
-    
+
+    // Last X Ground Distance Sensor readings
+    static constexpr int max_ground_distance_readings_ = 10;
+    std::vector<float> ground_distance_readings_ = std::vector<float>(max_ground_distance_readings_, 0.0f);
+    std::vector<rclcpp::Time> ground_distance_timestamps_ = std::vector<rclcpp::Time>(max_ground_distance_readings_, rclcpp::Time(0, 0));
+
     int offboard_setpoint_counter_;
     bool offboard_mode_set_;
     double timeout_threshold_;

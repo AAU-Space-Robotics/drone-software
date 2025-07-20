@@ -19,9 +19,8 @@ def generate_launch_description():
     px4_dir = os.path.join(general_dir, 'PX4-Autopilot_thyra')
     
     # Path to the simulation config file
-    controller_params_path = PathJoinSubstitution([pkg_share, 'config', 'controller_params_sim.yaml'])
-    safety_params_path = PathJoinSubstitution([pkg_share, 'config', 'safety_params_sim.yaml'])
-   
+    params_path = PathJoinSubstitution([pkg_share, 'config', 'thyra_params_sim.yaml'])
+    
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     position_source = LaunchConfiguration('position_source', default='px4')
@@ -63,7 +62,7 @@ def generate_launch_description():
                 echo "Now in: $(pwd)" && \
                 export GAZEBO_RESOURCE_PATH=~/PX4-Autopilot_thyra/Tools/simulation/gz/worlds:$GAZEBO_RESOURCE_PATH && \
                 echo "Now running PX4 SITL with Gazebo X500 world" && \
-                make px4_sitl gz_x500 > /dev/null 2>&1
+                make px4_sitl gz_x500_lidar_down > /dev/null 2>&1
                 '''
             ],
             shell=True,
@@ -89,10 +88,10 @@ def generate_launch_description():
                         ('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),
                         ('/fmu/out/battery_status', '/fmu/out/battery_status_v1'),
                         ('/fmu/in/vehicle_attitude_setpoint', '/fmu/in/vehicle_attitude_setpoint_v1'),
+                        ('/thyra/out/distance_sensor', '/fmu/out/distance_sensor'),
                     ],
                     parameters=[
-                        controller_params_path,
-                        safety_params_path,
+                        params_path,
                         {'use_sim_time': use_sim_time},
                         {'position_source': position_source}
                     ],

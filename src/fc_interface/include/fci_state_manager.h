@@ -245,6 +245,9 @@ public:
     void setLatestControlSignal(const Eigen::Vector4d& new_data);
     Eigen::Vector4d getLatestControlSignal();
 
+    void setGroundDistanceState(const Stamped3DVector& new_data);
+    Stamped3DVector getGroundDistanceState();
+
 private:
     
     // Mutexes for thread safety
@@ -254,6 +257,7 @@ private:
     std::mutex velocity_global_mutex_;
     std::mutex acceleration_global_mutex_;
     
+    std::mutex ground_distance_state_mutex_;
     std::mutex attitude_data_mutex_;
     std::mutex target_position_profile_mutex_;
     std::mutex target_attitude_mutex_;
@@ -273,6 +277,7 @@ private:
     Stamped3DVector velocity_global_;
     Stamped3DVector acceleration_global_;
     
+    Stamped3DVector ground_distance_state_;
     StampedQuaternion attitude_;
     Stamped4DVector target_position_profile_;
     StampedQuaternion target_attitude_;

@@ -6,7 +6,6 @@
 #include <eigen3/Eigen/Geometry>
 #include <cmath>
 #include <rclcpp/rclcpp.hpp>
-#include <GeographicLib/LocalCartesian.hpp>
 #include "fci_state_manager.h" 
 
 class FCI_Transformations {
@@ -38,8 +37,7 @@ public:
     double unwrapAngle(double angle, double max = M_PI, double min = -M_PI) const;
 
 private:
-    mutable std::mutex gps_data_mutex_;       // Thread safety for GPS data
-    Stamped3DVector gps_origin_data_;         // GPS origin in NED frame
+
 };
 
 #endif // FCI_TRANSFORMATIONS_H
