@@ -166,26 +166,26 @@ To operate either the real or simulated drone, a ground control station must com
 With the preliminary setup complete, the interface node can be called. This allows the drone system to accept commands from the ROS 2 network based on custom modes. The drone must be armed before it can perform any actions. Use the following command to arm it:
 
 ```bash
-ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'arm', target_pose: [], yaw: 0.0}"
+ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'arm', target_pose: [], yaw: 0.0}"
 ```
 
 Run this command from the workspace root (e.g., `~/drone-software`). Ensure the package is sourced with `source install/setup.bash` beforehand, or the ROS 2 network will not recognize the package. Once armed, send a new command within approximately 10 seconds, or the drone will disarm due to a PX4 safety feature (not implemented in this package). The following commands are currently supported:
 
 - **Takeoff:**
   ```bash
-  ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'takeoff', target_pose: [-10], yaw: 0.0}"
+  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'takeoff', target_pose: [-2], yaw: 0.0}"
   ```
-  - Requires one argument: the z-coordinate (altitude) to reach (e.g., `-10` for 10 meters upward). Negative values indicate upward movement.
+  - Requires one argument: the z-coordinate (altitude) to reach (e.g., `-2` for 2 meters upward). Negative values indicate upward movement.
 
 - **Go To:**
   ```bash
-  ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'goto', target_pose: [5,5,-10], yaw: 0.0}"
+  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'goto', target_pose: [1,1,-2], yaw: 0.0}"
   ```
   - Requires an `[x, y, z]` coordinate. The command will be rejected without all three values. Altitude is specified with negative values for higher altitudes.
 
 - **Manual Mode:**
   ```bash
-  ros2 action send_goal /fmu/in/drone_command interfaces/action/DroneCommand "{command_type: 'manual', target_pose: [], yaw: 0.0}"
+  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'manual', target_pose: [], yaw: 0.0}"
   ```
   - Switches the controller to listen for manual control inputs on the `drone/in/manual_input` topic. A node in the `gcs` package can publish control values from a PS4 controller.
 
