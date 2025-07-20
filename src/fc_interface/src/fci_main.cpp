@@ -465,10 +465,7 @@ private:
             }
             FullTrajectoryPoint target_point = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP);
             Stamped4DVector target_profile(get_time(), target_point.position.x(), target_point.position.y(), target_point.position.z(), 0.0); // No yaw in Vector4d
-            float yaw = transformations_.quaternionToEuler(target_point.orientation).x();
-            // RCLCPP_INFO(get_logger(), "Target position: x=%.2f, y=%.2f, z=%.2f, yaw=%.5f]",
-            //             target_profile.x(), target_profile.y(), target_profile.z(),
-            //             yaw);
+         
             state_manager_.setTargetPositionProfile(target_profile);
             state_manager_.setTargetAttitude(StampedQuaternion(get_time(), target_point.orientation));
         }
@@ -503,6 +500,8 @@ private:
         // Replace zero yaw with the planned yaw from quaternion
         Eigen::Vector3d target_euler = transformations_.quaternionToEuler(state_manager_.getTargetAttitude().quaternion());
 
+        
+        //RCLCPP_INFO(get_logger(), "target yaw: %.2f", target_euler.x());
 
         output.z() = target_euler.x();
         return output;
@@ -638,8 +637,8 @@ private:
         return Eigen::Vector4d(euler.x(), euler.y(), euler.z(), safety_thrust_);
     }
 
-  void landPositionMode()
-{
+    void landPositionMode()
+    {
     // Get current state of the drone
     DroneState drone_state = state_manager_.getDroneState();
     StampedQuaternion attitude = state_manager_.getAttitude();
@@ -673,7 +672,7 @@ private:
         drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
         state_manager_.setDroneState(drone_state);
     }
-}
+    }
 
     void setDroneMode(FlightMode mode)
     {
@@ -879,24 +878,24 @@ private:
                 Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 Eigen::Quaterniond takeoff_quat = attitude.quaternion().normalized();
                 float target_yaw = transformations_.unwrapAngle(goal->yaw, 2*M_PI, 0);
-                float current_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(takeoff_quat).z(), 2*M_PI, 0);
+                float current_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(takeoff_quat).x(), 2*M_PI, 0);
                 Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
                 Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
-
-                std::cout << "Current yaw: " << current_yaw << ", Target yaw: " << target_yaw << std::endl;
 
                 // Set the target position and orientation with specified yaw
                 Eigen::Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
                 Eigen::Quaterniond target_quat = transformations_.eulerToQuaternion(0.0, 0.0, target_yaw).normalized();
 
                 float distance = (target_position - takeoff_position).norm();
-                float distance_angular = std::abs(target_yaw - current_yaw);
+                // Compute shortest angular distance (yaw wraps around 2*pi)
+                float distance_angular = std::fabs(std::atan2(std::sin(target_yaw - current_yaw), std::cos(target_yaw - current_yaw)));
+                RCLCPP_INFO(get_logger(), "target yaw: %.2f, current yaw: %.2f, distance angular: %.2f", target_yaw, current_yaw, distance_angular);
                 float takeoff_time_cartesian = path_planner_.calculateDuration(distance, controller_.max_linear_velocity_);
                 float takeoff_time_angular = path_planner_.calculateDuration(distance_angular, controller_.max_angular_velocity_);
                 float takeoff_time = std::max(takeoff_time_cartesian, takeoff_time_angular);
-
-                std::cout << "target_quat: " << target_quat.coeffs().transpose() << std::endl;
-                std::cout << "target_yaw_transformed: " << transformations_.quaternionToEuler(target_quat).x() << std::endl;
+                
+                // Print time, and yaw
+                RCLCPP_INFO(get_logger(), "Takeoff time (cartesian): %.2f seconds, Takeoff time (angular): %.2f seconds", takeoff_time_cartesian, takeoff_time_angular);
 
                 // Generate trajectory
                 path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, takeoff_time, trajectoryMethod::MIN_SNAP);
@@ -909,7 +908,7 @@ private:
 
                 result->success = true;
                 result->message = "Drone moving to target position.";
-                std::cout << "Goto target: " << target_position.transpose() << std::endl;
+                std::cout << "Goto target: " << target_position.transpose() << ", yaw: " << target_yaw << std::endl;
             }
             else if (goal->command_type == "manual")
             {
