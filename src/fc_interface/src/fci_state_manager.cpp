@@ -59,6 +59,16 @@ Stamped4DVector FCI_StateManager::getTargetPositionProfile() {
     return target_position_profile_;   
 }
 
+void FCI_StateManager::setTargetAttitude(const StampedQuaternion& new_data) {
+    std::lock_guard<std::mutex> lock(target_attitude_mutex_);
+    target_attitude_ = new_data;   
+}
+
+StampedQuaternion FCI_StateManager::getTargetAttitude() {
+    std::lock_guard<std::mutex> lock(target_attitude_mutex_);
+    return target_attitude_;   
+}
+
 // ---
 
 void FCI_StateManager::setHeartbeat(const rclcpp::Time& new_data) {

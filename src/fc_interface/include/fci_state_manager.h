@@ -218,6 +218,9 @@ public:
     void setTargetPositionProfile(const Stamped4DVector& new_data);
     Stamped4DVector getTargetPositionProfile();
 
+    void setTargetAttitude(const StampedQuaternion& new_data);
+    StampedQuaternion getTargetAttitude();
+
     void setHeartbeat(const rclcpp::Time& new_data);
     rclcpp::Time getHeartbeat();
 
@@ -253,6 +256,7 @@ private:
     
     std::mutex attitude_data_mutex_;
     std::mutex target_position_profile_mutex_;
+    std::mutex target_attitude_mutex_;
     std::mutex drone_cmd_ack_mutex_;
     std::mutex drone_state_mutex_;
     std::mutex manual_control_input_mutex_;
@@ -271,6 +275,7 @@ private:
     
     StampedQuaternion attitude_;
     Stamped4DVector target_position_profile_;
+    StampedQuaternion target_attitude_;
     DroneCmdAck drone_cmd_ack_;
     DroneState drone_state_;
     BatteryState battery_state_;

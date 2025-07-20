@@ -59,8 +59,11 @@ ament_target_dependencies(fci
   px4_msgs
 )
 
+
+
 # Ensure the `serial` library headers are available
 target_include_directories(fci PRIVATE ${serial_SOURCE_DIR}/include ${GeographicLib_SOURCE_DIR}/include)
+
 
 # Install C++ executables
 install(TARGETS

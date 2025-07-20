@@ -11,7 +11,7 @@
 
 class FCI_Transformations {
 public:
-    FCI_Transformations() : gps_origin_set_(false) {}
+    FCI_Transformations(){}
 
     // GPS Origin Management
     void setGPSOrigin(const rclcpp::Time& timestamp, double latitude, double longitude, double altitude);
@@ -35,12 +35,11 @@ public:
     // Utility Functions
     double degToRad(double degrees) const;
     double radToDeg(double radians) const;
+    double unwrapAngle(double angle, double max = M_PI, double min = -M_PI) const;
 
 private:
     mutable std::mutex gps_data_mutex_;       // Thread safety for GPS data
     Stamped3DVector gps_origin_data_;         // GPS origin in NED frame
-    bool gps_origin_set_ = false;             // Flag for GPS origin initialization
-    GeographicLib::LocalCartesian geographic_converter_; // ENU coordinate converter
 };
 
 #endif // FCI_TRANSFORMATIONS_H

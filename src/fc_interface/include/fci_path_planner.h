@@ -11,10 +11,10 @@ struct TrajectoryPoint {
 };
 
 struct FullTrajectoryPoint {
-    Eigen::Vector3d position;
+    Eigen::Vector3d position;        // x, y, z
+    Eigen::Quaterniond orientation;  // Quaternion for yaw
     Eigen::Vector3d velocity;
     Eigen::Vector3d acceleration;
-
 };
 
 struct trajectorySegment {
@@ -34,8 +34,10 @@ public:
     float calculateDuration(float distance, float velocity) const;
 
     bool GenerateTrajectory(
-        const Eigen::Vector3d& start,
-        const Eigen::Vector3d& end,
+        const Eigen::Vector3d& start_pos,
+        const Eigen::Vector3d& end_pos,
+        const Eigen::Quaterniond& start_quat,
+        const Eigen::Quaterniond& end_quat,
         const Eigen::Vector3d& vel,
         const Eigen::Vector3d& acc,
         double time,
@@ -61,7 +63,9 @@ private:
     double total_time;
     Eigen::Vector3d start_vel;
     Eigen::Vector3d start_acc;
-    trajectorySegment segments[3];
+    trajectorySegment segments[3]; // x, y, z
+    Eigen::Quaterniond start_quat;
+    Eigen::Quaterniond end_quat;
 
     std::vector<double> generatePolynomialCoefficients(
         double start,

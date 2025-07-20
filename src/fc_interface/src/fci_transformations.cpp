@@ -1,38 +1,5 @@
 #include "fci_transformations.h"
 
-void FCI_Transformations::setGPSOrigin(const rclcpp::Time& timestamp, double latitude, double longitude, double altitude) {
-    std::lock_guard<std::mutex> lock(gps_data_mutex_);
-    gps_origin_data_.setTime(timestamp);
-    gps_origin_data_.setX(latitude);
-    gps_origin_data_.setY(longitude);
-    gps_origin_data_.setZ(altitude);
-    gps_origin_set_ = true;
-    geographic_converter_.Reset(latitude, longitude, altitude);
-}
-
-bool FCI_Transformations::isGPSOriginSet() const {
-    std::lock_guard<std::mutex> lock(gps_data_mutex_);
-    return gps_origin_set_;
-}
-
-Stamped3DVector FCI_Transformations::getGPSOrigin() const {
-    std::lock_guard<std::mutex> lock(gps_data_mutex_);
-    return gps_origin_data_;
-}
-
-Stamped3DVector FCI_Transformations::convertGPSToGlobalPosition(const rclcpp::Time& timestamp, double latitude, double longitude, double altitude) const {
-    double x_enu, y_enu, z_enu;
-    geographic_converter_.Forward(latitude, longitude, altitude, x_enu, y_enu, z_enu);
-
-    Stamped3DVector global_data;
-    global_data.setTime(timestamp);
-    global_data.setX(y_enu);  // East → North
-    global_data.setY(x_enu);  // North → East
-    global_data.setZ(-z_enu); // Up → Down
-
-    return global_data;
-}
-
 Stamped3DVector FCI_Transformations::accelerationLocalToGlobal(const rclcpp::Time& timestamp, 
                                                               const Eigen::Quaterniond& attitude, 
                                                               const Eigen::Vector3d& acceleration_local) const {
@@ -53,7 +20,29 @@ Eigen::Quaterniond FCI_Transformations::eulerToQuaternion(double roll, double pi
 }
 
 Eigen::Vector3d FCI_Transformations::quaternionToEuler(const Eigen::Quaterniond& q) const {
-    return q.normalized().toRotationMatrix().eulerAngles(0, 1, 2); // Roll, Pitch, Yaw
+    // Get Euler angles in ZYX convention (yaw, pitch, roll)
+    Eigen::Vector3d euler = q.toRotationMatrix().eulerAngles(2, 1, 0);
+    
+    // Extract yaw, pitch, roll
+    double yaw = euler.x();
+    double pitch = euler.y();
+    double roll = euler.z();
+
+    // Normalize pitch to [-π/2, π/2] to avoid gimbal lock ambiguities
+    if (std::abs(pitch) > M_PI / 2) {
+        // Adjust yaw and flip pitch and roll to maintain equivalent rotation
+        yaw += M_PI;
+        pitch = M_PI - pitch; // Reflect pitch around π
+        roll += M_PI;
+    }
+
+    // Unwrap angles to [0, 2π]
+    yaw = unwrapAngle(yaw, 2 * M_PI, 0);
+    pitch = unwrapAngle(pitch, 2 * M_PI, 0);
+    roll = unwrapAngle(roll, 2 * M_PI, 0);
+
+    // Ensure yaw is in [0, 2π] and consistent with input
+    return Eigen::Vector3d(yaw, pitch, roll);
 }
 
 Eigen::Vector3d FCI_Transformations::errorGlobalToLocal(const Eigen::Vector3d& error_ned_earth, 
@@ -68,3 +57,10 @@ double FCI_Transformations::degToRad(double degrees) const {
 double FCI_Transformations::radToDeg(double radians) const {
     return radians * 180.0 / M_PI;
 }
+
+double FCI_Transformations::unwrapAngle(double angle, double max, double min) const {
+    // Unwrap the angle to be within the range [min, max]    
+    while (angle > max) angle -= 2.0 * M_PI;
+    while (angle < min) angle += 2.0 * M_PI;
+    return angle;
+    }

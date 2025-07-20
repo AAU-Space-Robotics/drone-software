@@ -23,3 +23,4 @@ flight_controller_interface:
 
     controller_constraints:
       max_linear_velocity:   0.4 # Maximum linear velocity (m/s)
+      max_angular_velocity:  0.5 # Maximum angular velocity (rad/s)

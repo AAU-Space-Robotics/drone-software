@@ -1,5 +1,7 @@
 #include "fci_path_planner.h"
 #include <cmath>
+#include <eigen3/Eigen/Geometry>
+#include <iostream>
 
 FCI_PathPlanner::FCI_PathPlanner() : total_time(0.0) {
     // start_vel and start_acc are initialized to zero by Vector3d's default constructor
@@ -20,24 +22,27 @@ float FCI_PathPlanner::calculateDuration(float distance, float velocity) const {
     return distance / safe_velocity;
 }
 
-
 bool FCI_PathPlanner::GenerateTrajectory(
-    const Eigen::Vector3d& start,
-    const Eigen::Vector3d& end,
+    const Eigen::Vector3d& start_pos,
+    const Eigen::Vector3d& end_pos,
+    const Eigen::Quaterniond& start_quat,
+    const Eigen::Quaterniond& end_quat,
     const Eigen::Vector3d& current_velocity,
     const Eigen::Vector3d& current_acceleration,
     double time,
     trajectoryMethod method) {
 
     total_time = time;
-
     start_vel = current_velocity;
     start_acc = current_acceleration;
+    this->start_quat = start_quat.normalized();
+    this->end_quat = end_quat.normalized();
 
     if (method == MIN_SNAP) {
-        segments[0].coefficient = generatePolynomialCoefficients(start(0), end(0), start_vel(0), start_acc(0), time, method);
-        segments[1].coefficient = generatePolynomialCoefficients(start(1), end(1), start_vel(1), start_acc(1), time, method);
-        segments[2].coefficient = generatePolynomialCoefficients(start(2), end(2), start_vel(2), start_acc(2), time, method);
+        for (int i = 0; i < 3; ++i) {
+            segments[i].coefficient = generatePolynomialCoefficients(
+                start_pos(i), end_pos(i), start_vel(i), start_acc(i), time, method);
+        }
     }
     return true;
 }
@@ -67,6 +72,15 @@ std::vector<FullTrajectoryPoint> FCI_PathPlanner::getTrajectoryPoints(double dt,
             point.position = Eigen::Vector3d(x.position, y.position, z.position);
             point.velocity = Eigen::Vector3d(x.velocity, y.velocity, z.velocity);
             point.acceleration = Eigen::Vector3d(x.acceleration, y.acceleration, z.acceleration);
+            // Slerp for quaternion interpolation
+            Eigen::Quaterniond slerp_quat = end_quat;
+
+            // Ensure SLERP takes the shortest path
+            if (start_quat.dot(end_quat) < 0.0) {
+                slerp_quat.coeffs() *= -1.0;
+            }
+
+            point.orientation = start_quat.slerp(t / total_time, slerp_quat).normalized();
         }
         points.push_back(point);
     }
@@ -82,6 +96,15 @@ FullTrajectoryPoint FCI_PathPlanner::getTrajectoryPoint(double t, trajectoryMeth
         point.position = Eigen::Vector3d(x.position, y.position, z.position);
         point.velocity = Eigen::Vector3d(x.velocity, y.velocity, z.velocity);
         point.acceleration = Eigen::Vector3d(x.acceleration, y.acceleration, z.acceleration);
+        // Slerp for quaternion interpolation
+        Eigen::Quaterniond slerp_quat = end_quat;
+        
+        // Ensure SLERP takes the shortest path
+        if (start_quat.dot(end_quat) < 0.0) {
+            slerp_quat.coeffs() *= -1.0;
+        }
+
+        point.orientation = start_quat.slerp(t / total_time, slerp_quat).normalized();
     }
     return point;
 }
