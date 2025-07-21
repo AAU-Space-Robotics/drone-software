@@ -744,13 +744,14 @@ private:
         Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
 
         // Calculate the landing position
-        double z_landing = takeoff_position.z() + GroundDistance.vector().x(); //Takeoff position is in the inertial frame, where a negative z is upwards. Add ground distance to it to get landing position
-
-        RCLCPP_INFO(get_logger(), "Takeoff position: x=%.2f, y=%.2f, z=%.2f", takeoff_position.x(), takeoff_position.y(), takeoff_position.z());
-        RCLCPP_INFO(get_logger(), "Ground distance: %.2f", GroundDistance.vector().x());
-        RCLCPP_INFO(get_logger(), "Landing position: z=%.2f", z_landing);
-
-
+        double z_landing = 0.0; // Default landing height
+        RCLCPP_INFO(get_logger(), "Time difference to ground distance: %.2f seconds", get_time() - GroundDistance.getTime());
+        if ((get_time() - GroundDistance.getTime()).seconds() < 0.3)
+        {
+            z_landing = takeoff_position.z() + GroundDistance.vector().x();
+            RCLCPP_INFO(get_logger(), "Using ground distance sensor for landing: z_landing=%.2f", z_landing);
+        }
+         
         // Set the target landing position and orientation (maintain current orientation)
         Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), z_landing}; // Land at z = 0.0
         Eigen::Quaterniond target_quat = takeoff_quat; // Preserve current orientation
