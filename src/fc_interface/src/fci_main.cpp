@@ -728,7 +728,6 @@ private:
     {
     // Get current state of the drone
     DroneState drone_state = state_manager_.getDroneState();
-    StampedQuaternion attitude = state_manager_.getAttitude();
 
     if (drone_state.flight_mode == FlightMode::BEGIN_LAND_POSITION)
     {
@@ -739,12 +738,21 @@ private:
         Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
         Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
         Eigen::Quaterniond takeoff_quat = (state_manager_.getAttitude()).quaternion().normalized();
+        Stamped3DVector GroundDistance = state_manager_.getGroundDistanceState();
         
         Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
         Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
 
+        // Calculate the landing position
+        double z_landing = takeoff_position.z() + GroundDistance.vector().x(); //Takeoff position is in the inertial frame, where a negative z is upwards. Add ground distance to it to get landing position
+
+        RCLCPP_INFO(get_logger(), "Takeoff position: x=%.2f, y=%.2f, z=%.2f", takeoff_position.x(), takeoff_position.y(), takeoff_position.z());
+        RCLCPP_INFO(get_logger(), "Ground distance: %.2f", GroundDistance.vector().x());
+        RCLCPP_INFO(get_logger(), "Landing position: z=%.2f", z_landing);
+
+
         // Set the target landing position and orientation (maintain current orientation)
-        Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), 0.0}; // Land at z = 0.0
+        Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), z_landing}; // Land at z = 0.0
         Eigen::Quaterniond target_quat = takeoff_quat; // Preserve current orientation
 
         float distance = std::abs(target_position.z() - takeoff_position.z());
