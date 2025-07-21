@@ -7,8 +7,18 @@
 #include <px4_msgs/msg/distance_sensor.hpp>
 
 LidarNode::LidarNode() : Node("lidar_node"), file_i2c(-1) {
-    px4_publisher_ = create_publisher<px4_msgs::msg::DistanceSensor>("/fmu/in/distance_sensor", 10);
-    timer_ = create_wall_timer(std::chrono::milliseconds(5), std::bind(&LidarNode::read_and_publish, this));
+    // ROS 2 QoS settings
+    rclcpp::QoS qos(10);
+    qos.reliability(rclcpp::ReliabilityPolicy::BestEffort);
+    qos.durability(rclcpp::DurabilityPolicy::TransientLocal);
+
+    px4_publisher_ = create_publisher<px4_msgs::msg::DistanceSensor>(
+        "/fmu/in/distance_sensor", qos);
+    
+    float sample_rate = 350.0; // Hz
+    int timer_interval_ms = static_cast<int>(1000.0 / sample_rate);
+    timer_ = create_wall_timer(std::chrono::milliseconds(timer_interval_ms), 
+                             std::bind(&LidarNode::read_and_publish, this));
     
     if (i2c_init() < 0 || i2c_connect(LIDAR_ADDR_DEFAULT) < 0) {
         RCLCPP_ERROR(get_logger(), "Failed to initialize I2C");
@@ -116,20 +126,17 @@ int32_t LidarNode::i2c_read(uint8_t reg_addr, uint8_t* data, uint8_t num_bytes, 
     return read(file_i2c, data, num_bytes);
 }
 
-double LidarNode::moving_average(double new_value) {
-    static std::array<double, 5> values = {0};
+double LidarNode::moving_average(float new_value) {
     static size_t index = 0;
-    static size_t count = 0;
-
-    values[index] = new_value;
-    index = (index + 1) % values.size();
-    if (count < values.size()) ++count;
+    
+    moving_average_values[index] = new_value;
+    index = (index + 1) % SAMPLES_PERIOD;
 
     double sum = 0.0;
-    for (size_t i = 0; i < count; ++i) {
-        sum += values[i];
+    for (size_t i = 0; i < SAMPLES_PERIOD; ++i) {
+        sum += moving_average_values[i];
     }
-    return sum / count;
+    return sum / SAMPLES_PERIOD;
 }
 
 void LidarNode::read_and_publish() {
@@ -140,17 +147,17 @@ void LidarNode::read_and_publish() {
     auto distance = read_distance(LIDAR_ADDR_DEFAULT);
     distance = moving_average(static_cast<double>(distance)); // Apply moving average filter
 
-    // Downsample: Publish every 4th sample (200 Hz to 50 Hz)
+    double height = (distance < 5) ? 0.0 : (distance - 5);
+
     if (++sample_count >= 4) {
-        // Only publish valid distances (5 cm to 40 m)
-        if (distance >= 5 && distance <= 4000) {
+        if (distance <= 3995) {
             auto px4_msg = px4_msgs::msg::DistanceSensor();
             px4_msg.timestamp = this->get_clock()->now().nanoseconds() / 1000; // Microseconds
             px4_msg.device_id = 1234; // Unique ID for the sensor
-            px4_msg.min_distance = 0.05; // 5 cm
-            px4_msg.max_distance = 40.0; // 40 meters
-            px4_msg.current_distance = distance / 100.0; // Convert cm to meters
-            px4_msg.variance = (distance / 100.0 < 2.0) ? 0.01 : 0.0025; // ±5 cm for <2 m, ±2.5 cm for >2 m
+            px4_msg.min_distance = 0.00; // 5 cm
+            px4_msg.max_distance = 39.95; // 40 meters
+            px4_msg.current_distance = height / 100.0; // Convert cm to meters, offset applied
+            px4_msg.variance = (height / 100.0 < 2.0) ? 0.01 : 0.0025; // ±5 cm for <2 m, ±2.5 cm for >2 m
             px4_msg.signal_quality = -1; // Unknown quality
             px4_msg.type = 0; // MAV_DISTANCE_SENSOR_LASER
             px4_msg.h_fov = 0.0; // 1D LiDAR has no FOV
@@ -159,7 +166,7 @@ void LidarNode::read_and_publish() {
             px4_msg.orientation = 25; // ROTATION_DOWNWARD_FACING
             px4_publisher_->publish(px4_msg);
         } else {
-            RCLCPP_WARN(get_logger(), "Invalid distance reading: %.2d cm", distance);
+            RCLCPP_WARN(get_logger(), "Invalid distance reading: %.2f cm", distance);
         }
         sample_count = 0; // Reset counter
     }

@@ -745,7 +745,6 @@ private:
 
         // Calculate the landing position
         double z_landing = 0.0; // Default landing height
-        RCLCPP_INFO(get_logger(), "Time difference to ground distance: %.2f seconds", get_time() - GroundDistance.getTime());
         if ((get_time() - GroundDistance.getTime()).seconds() < 0.3)
         {
             z_landing = takeoff_position.z() + GroundDistance.vector().x();
