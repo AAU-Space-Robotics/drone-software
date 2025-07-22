@@ -37,4 +37,4 @@ flight_controller_interface:
 
     # Setup Parameters
     setup:
-      lidar_offset: 0.1 # Lidar offset for zero height calibration (meters)
+      lidar_offset: 0.0 # Lidar offset for zero height calibration (meters)

@@ -7,99 +7,6 @@ SCRIPT_DIR=$(dirname "$(realpath "$0")")
 ROS_WORKSPACE_PATH="$SCRIPT_DIR"  # Base workspace is drone-software
 SRC_DIR="$ROS_WORKSPACE_PATH/src"
 PARENT_DIR=$(dirname "$ROS_WORKSPACE_PATH")  # Directory containing drone-software
-ROS_DISTRO="humble"
-
-# Check if ROS_DISTRO is set
-if [ -z "$ROS_DISTRO" ]; then
-    echo "Error: ROS distribution not found. Ensure ROS 2 is installed."
-    exit 1
-fi
-
-# 1. Install Intel RealSense SDK
-echo "Checking Intel RealSense SDK installation..."
-if ! dpkg -l | grep -q librealsense2-dkms; then
-    echo "Installing Intel RealSense SDK..."
-    
-    # Create keyrings directory if it doesn't exist
-    sudo mkdir -p /etc/apt/keyrings
-    
-    # Add Intel RealSense repository key
-    if ! curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp | sudo tee /etc/apt/keyrings/librealsense.pgp > /dev/null; then
-        echo "Error: Failed to download RealSense PGP key"
-        exit 1
-    fi
-
-    # Install apt-transport-https if not already installed
-    if ! dpkg -l | grep -q apt-transport-https; then
-        sudo apt-get update
-        if ! sudo apt-get install -y apt-transport-https; then
-            echo "Error: Failed to install apt-transport-https"
-            exit 1
-        fi
-    fi
-
-    # Add Intel RealSense repository
-    echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" | \
-        sudo tee /etc/apt/sources.list.d/librealsense.list > /dev/null
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to add RealSense repository"
-        exit 1
-    fi
-
-    # Update package lists
-    if ! sudo apt-get update; then
-        echo "Error: Failed to update package lists"
-        exit 1
-    fi
-
-    # Install RealSense packages
-    for package in librealsense2-dkms librealsense2-utils librealsense2-dev; do
-        if ! sudo apt-get install -y "$package"; then
-            echo "Error: Failed to install $package"
-            exit 1
-        fi
-    done
-else
-    echo "Intel RealSense SDK is already installed."
-fi
-
-# 2. Install ROS RealSense wrapper
-echo "Checking ROS RealSense wrapper installation..."
-if ! dpkg -l | grep -q "ros-$ROS_DISTRO-realsense2-camera"; then
-    echo "Installing ROS $ROS_DISTRO RealSense wrapper..."
-    
-    # Create keyrings directory if it doesn't exist
-    sudo mkdir -p /etc/apt/keyrings
-    
-    # Add ROS 2 repository key
-    if ! curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key | sudo tee /etc/apt/keyrings/ros2-latest.gpg > /dev/null; then
-        echo "Error: Failed to add ROS 2 repository key"
-        exit 1
-    fi
-
-    # Remove any existing ROS 2 repository files to avoid conflicts
-    sudo rm -f /etc/apt/sources.list.d/ros2*.list
-    echo "deb [signed-by=/etc/apt/keyrings/ros2-latest.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -sc) main" | \
-        sudo tee /etc/apt/sources.list.d/ros2-latest.list > /dev/null
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to add ROS 2 repository"
-        exit 1
-    fi
-
-    # Update package lists
-    if ! sudo apt-get update; then
-        echo "Error: Failed to update package lists for ROS packages"
-        exit 1
-    fi
-
-    # Install ROS RealSense packages
-    if ! sudo apt-get install -y "ros-$ROS_DISTRO-realsense2-camera" "ros-$ROS_DISTRO-realsense2-description"; then
-        echo "Error: Failed to install ROS RealSense packages"
-        exit 1
-    fi
-else
-    echo "ROS $ROS_DISTRO RealSense wrapper is already installed."
-fi
 
 # 3. Check if the src directory exists, create it if it doesn't
 if [ ! -d "$SRC_DIR" ]; then
@@ -126,27 +33,6 @@ clone_repo_if_not_exists() {
         echo "$target_dir already exists, skipping clone."
     fi
 }
-
-# 6. Clone the Intel realsense wrapper repository
-clone_repo_if_not_exists "git@github.com:IntelRealSense/realsense-ros.git" "realsense-ros" "ros2-master"
-
-# 6.5. Initialize rosdep and install dependencies
-# if ! command -v rosdep &> /dev/null; then
-#   echo "Installing python3-rosdep..."
-#   sudo apt-get update
-#   sudo apt-get install python3-rosdep -y
-# fi
-
-# if [ ! -f "/etc/ros/rosdep/sources.list.d/20-default.list" ]; then
-#   echo "Initializing rosdep..."
-#   sudo rosdep init
-# fi
-
-# echo "Updating rosdep..."
-# rosdep update
-
-# echo "Installing ROS 2 dependencies for workspace (skipping librealsense2)..."
-# rosdep install -i --from-path . --rosdistro "$ROS_DISTRO" --skip-keys=librealsense2 -y
 
 # 7. Clone the px4_msgs repository
 clone_repo_if_not_exists "git@github.com:AAU-Space-Robotics/px4_msgs_thyra.git" "px4_msgs_thyra"

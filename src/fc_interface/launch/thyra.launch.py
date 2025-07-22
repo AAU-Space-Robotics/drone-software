@@ -43,6 +43,18 @@ def generate_launch_description():
             cmd=['MicroXRCEAgent', 'serial', '--dev', '/dev/ttyAMA0', '-b', '921600'],
             output='log',
         ),
+        
+        # Start Lidar node
+        Node(
+            package='sensors',
+            executable='lidar',
+            name='lidar_node',
+            output='screen',
+            remappings=[
+                ('/fmu/in/distance_sensor', '/thyra/out/distance_sensor'),
+            ],
+        ),
+            
 
         # Delay and launch FlightControllerInterface node
         TimerAction(
