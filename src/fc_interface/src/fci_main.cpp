@@ -114,6 +114,7 @@ public:
         // Set initial state
         state_manager_.setHeartbeat(get_time());
         state_manager_.setGlobalPosition(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
+        state_manager_.setOrigin(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setGlobalVelocity(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setTargetPositionProfile(Stamped4DVector(get_time(), 0.0, 0.0, 0.0, 0.0));
         state_manager_.setAttitude(StampedQuaternion(get_time(), Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0)));
@@ -363,7 +364,8 @@ private:
     void localPositionCallback(const VehicleLocalPosition::SharedPtr msg)
     {
         // Note that local position refers to coordinates being expressed in cartesian coordinates
-        Stamped3DVector local_position(get_time(), msg->x, msg->y, msg->z);
+        Stamped3DVector origin = state_manager_.getOrigin();
+        Stamped3DVector local_position(get_time(), msg->x - origin.x(), msg->y - origin.y(), msg->z - origin.z());
         state_manager_.setGlobalPosition(local_position);
 
         //RCLCPP_INFO(get_logger(), "Local position: x=%.2f, y=%.2f, z=%.2f", local_position.x(), local_position.y(), local_position.z());
@@ -382,7 +384,8 @@ private:
 
     void motionCaptureLocalPositionCallback(const interfaces::msg::MotionCapturePose::SharedPtr msg)
     {
-        Stamped3DVector local_position(get_time(), msg->x, msg->y, msg->z);
+        Stamped3DVector origin = state_manager_.getOrigin();
+        Stamped3DVector local_position(get_time(), msg->x - origin.x(), msg->y - origin.y(), msg->z- origin.z());
 
         //RCLCPP_INFO(get_logger(), "Motion capture position: x=%.2f, y=%.2f, z=%.2f", local_position.x(), local_position.y(), local_position.z());
 
@@ -828,7 +831,7 @@ private:
     rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID & /*uuid*/,
                                                    std::shared_ptr<const DroneCommand::Goal> goal)
     {
-        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided"};
+        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin"};
         RCLCPP_INFO(get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
 
         DroneState drone_state = state_manager_.getDroneState();
@@ -866,6 +869,12 @@ private:
         if (goal->command_type == "manual" && (drone_state.flight_mode == FlightMode::MANUAL || drone_state.arming_state != ArmingState::ARMED))
         {
             RCLCPP_WARN(get_logger(), "Rejected: already in manual mode or drone not armed.");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+        if (goal->command_type == "set_origin" && (drone_state.arming_state != ArmingState::DISARMED))
+        {
+           
+            RCLCPP_WARN(get_logger(), "Rejected: Drone was not disarmed");
             return rclcpp_action::GoalResponse::REJECT;
         }
 
@@ -1030,6 +1039,21 @@ private:
 
                 result->success = true;
                 result->message = "Drone landing.";
+            }
+            else if (goal->command_type == "set_origin")
+            {
+                // Set the origin to the current position
+                Stamped3DVector global_position = state_manager_.getGlobalPosition();
+                Stamped3DVector Current_origin = state_manager_.getOrigin();
+                global_position.vector().x() = global_position.vector().x() +  Current_origin.vector().x(); 
+                global_position.vector().y() = global_position.vector().y() + Current_origin.vector().y(); 
+                global_position.vector().z() = global_position.vector().z() + Current_origin.vector().z(); // Keep the current origin height
+
+
+                state_manager_.setOrigin(global_position);
+                RCLCPP_INFO(get_logger(), "Origin set to current position: (%.2f, %.2f, %.2f)", global_position.x(), global_position.y(), global_position.z());
+                result->success = true;
+                result->message = "Origin set to current position.";
             }
             else
             {
