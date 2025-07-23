@@ -14,8 +14,9 @@ float32 battery_current
 float32 battery_percentage  # 0.0 to 100.0
 float32 battery_discharged_mah
 float32 battery_average_current
-
-uint8 arming_state           
+   
+uint8 arming_state  
+     
 uint8 estop          
 int16 flight_mode
 
