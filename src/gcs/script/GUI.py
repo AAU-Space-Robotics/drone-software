@@ -498,7 +498,7 @@ def batteryGraph():
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
     draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
 
-    imgui.set_cursor_pos((1620, 175)); imgui.text(f" Battery Timestamp  {battery_state_timestamp}") # all timestamps are moved 370 for fulscreen
+    imgui.set_cursor_pos((1620, 175)); imgui.text(f" Battery Timestamp  {battery_state_timestamp}") 
 
 def map_value(value, in_min, in_max, out_min, out_max):
     return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -906,6 +906,7 @@ def main(args=None):
         GuiConsoleLogger(node)
         GUIButton.button1(1450, 600, font_small, "Land", "land", node)
         GUIButton.button2(1250, 600, font_small, "Takeoff", "takeoff", node, -1.0)
+        GUIButton.button1(1150, 30, font_small, "Set Origin", "set_origin", node)
         imgui.end()
 
         
