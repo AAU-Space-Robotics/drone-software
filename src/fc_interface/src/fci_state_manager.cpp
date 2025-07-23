@@ -13,6 +13,18 @@ Stamped3DVector FCI_StateManager::getGlobalPosition() {
 
 // ---
 
+void FCI_StateManager::setOrigin(const Stamped3DVector& new_data) {
+    std::lock_guard<std::mutex> lock(origin_mutex_);
+    origin_ = new_data;   
+}
+
+Stamped3DVector FCI_StateManager::getOrigin() {
+    std::lock_guard<std::mutex> lock(origin_mutex_);
+    return origin_;   
+}
+
+// ---
+
 void FCI_StateManager::setGlobalVelocity(const Stamped3DVector& new_data) {
     std::lock_guard<std::mutex> lock(velocity_global_mutex_);
     velocity_global_ = new_data;

@@ -189,6 +189,12 @@ Run this command from the workspace root (e.g., `~/drone-software`). Ensure the 
   ```
   - Switches the controller to listen for manual control inputs on the `drone/in/manual_input` topic. A node in the `gcs` package can publish control values from a PS4 controller.
 
+- **Set New Origin:**
+  ```bash
+  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'set_origin', target_pose: [], yaw: 0.0}"
+  ```
+  - Sets a new origin for the drone. It has to be disarmed to perform this action.
+
 
 ### other stuff
 Information about the RTK system, such as survery time and minimum accuraccy.

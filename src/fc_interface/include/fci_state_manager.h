@@ -206,6 +206,9 @@ public:
     void setGlobalPosition(const Stamped3DVector& new_data);
     Stamped3DVector getGlobalPosition();
 
+    void setOrigin(const Stamped3DVector& new_data);
+    Stamped3DVector getOrigin();
+
     void setGlobalVelocity(const Stamped3DVector& new_data);
     Stamped3DVector getGlobalVelocity();
 
@@ -254,6 +257,7 @@ private:
     std::mutex heartbeat_mutex_;
 
     std::mutex position_global_mutex_;
+    std::mutex origin_mutex_;
     std::mutex velocity_global_mutex_;
     std::mutex acceleration_global_mutex_;
     
@@ -274,6 +278,7 @@ private:
     rclcpp::Time heartbeat_time_;
 
     Stamped3DVector position_global_;
+    Stamped3DVector origin_;
     Stamped3DVector velocity_global_;
     Stamped3DVector acceleration_global_;
     
