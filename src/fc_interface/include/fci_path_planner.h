@@ -64,6 +64,10 @@ public:
         trajectoryMethod method
     );
 
+    bool setLinearVelocity(float linear_velocity);
+
+    bool setAngularVelocity(float angular_velocity);
+
 private:
     double total_time;
     Eigen::Vector3d start_vel;

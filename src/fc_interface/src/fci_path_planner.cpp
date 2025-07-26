@@ -33,14 +33,14 @@ bool FCI_PathPlanner::GenerateTrajectory(
     float current_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(start_quat).x(), 2*M_PI, 0);
     float target_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(end_quat).x(), 2*M_PI, 0);
     float distance_angular = std::fabs(std::atan2(std::sin(target_yaw - current_yaw), std::cos(target_yaw - current_yaw)));
-    float trajectory_duration_cartesian = calculateDuration(distance, current_linear_velocity_, max_linear_velocity_, min_linear_velocity_);
-    float trajectory_duration_angular = calculateDuration(distance_angular, current_angular_velocity_, max_angular_velocity_, min_angular_velocity_);
+    float trajectory_duration_cartesian = calculateDuration(distance, current_linear_velocity_, min_linear_velocity_, max_linear_velocity_);
+    float trajectory_duration_angular = calculateDuration(distance_angular, current_angular_velocity_, min_angular_velocity_, max_angular_velocity_);
     total_time = std::max(trajectory_duration_cartesian, trajectory_duration_angular);
     start_vel = current_velocity;
     start_acc = current_acceleration;
     this->start_quat = start_quat.normalized();
     this->end_quat = end_quat.normalized();
-
+   
     if (method == MIN_SNAP) {
         for (int i = 0; i < 3; ++i) {
             segments[i].coefficient = generatePolynomialCoefficients(
@@ -132,4 +132,21 @@ std::vector<double> FCI_PathPlanner::generatePolynomialCoefficients(
     Eigen::VectorXd coeffs = A.colPivHouseholderQr().solve(b);
 
     return std::vector<double>{coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5], coeffs[6], coeffs[7]};
+}
+
+
+bool FCI_PathPlanner::setLinearVelocity(float linear_velocity) {
+    if (linear_velocity < min_linear_velocity_ || linear_velocity > max_linear_velocity_) {
+        return false; // Invalid velocity
+    }
+    current_linear_velocity_ = linear_velocity;
+    return true;
+}
+
+bool FCI_PathPlanner::setAngularVelocity(float angular_velocity){
+    if (angular_velocity < min_angular_velocity_ || angular_velocity > max_angular_velocity_) {
+        return false; // Invalid velocity
+    }
+    current_angular_velocity_ = angular_velocity;
+    return true;
 }

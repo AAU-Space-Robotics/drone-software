@@ -25,6 +25,16 @@ flight_controller_interface:
         max_linear_velocity: 0.4 # Maximum linear velocity (m/s)
         max_angular_velocity: 0.5 # Maximum angular velocity (rad/s)
 
+    path_planner:
+      default:
+        linear_velocity: 0.4    # Default linear velocity (m/s)
+        angular_velocity: 0.5   # Default angular velocity (rad/s)
+      constraints:
+        min_linear_velocity: 0.1        # Minimum linear velocity (m/s)
+        min_angular_velocity: 0.1       # Minimum angular velocity (rad/s)
+        max_linear_velocity: 1.5        # Maximum linear velocity (m/s)
+        max_angular_velocity: 1.5       # Maximum angular velocity (rad/s)
+
     # Safety Parameters
     safety:
       check_gcs_timeout: false          # Check for ground control station timeout

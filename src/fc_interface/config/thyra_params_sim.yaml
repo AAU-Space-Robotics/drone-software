@@ -24,7 +24,7 @@ flight_controller_interface:
     
     path_planner:
       default:
-        linear_velocity: 0.2    # Default linear velocity (m/s)
+        linear_velocity: 0.4    # Default linear velocity (m/s)
         angular_velocity: 0.5   # Default angular velocity (rad/s)
       constraints:
         min_linear_velocity: 0.1        # Minimum linear velocity (m/s)

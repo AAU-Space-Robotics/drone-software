@@ -473,7 +473,6 @@ private:
         return yaw;
     }
 
-
     // Drone state publisher
     void publish_drone_state()
     {
@@ -501,9 +500,9 @@ private:
         StampedQuaternion attitude = state_manager_.getAttitude();
         Eigen::Vector3d euler = transformations_.quaternionToEuler(attitude.quaternion());
         msg.orientation.resize(3);
-        msg.orientation[0] = euler.x(); // roll
+        msg.orientation[0] = euler.z(); // roll
         msg.orientation[1] = euler.y(); // pitch
-        msg.orientation[2] = euler.z(); // yaw
+        msg.orientation[2] = euler.x(); // yaw
 
         Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
         msg.target_position.resize(3);
@@ -871,7 +870,7 @@ private:
     rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID & /*uuid*/,
                                                    std::shared_ptr<const DroneCommand::Goal> goal)
     {
-        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin"};
+        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed","set_angular_speed"};
         RCLCPP_INFO(get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
 
         DroneState drone_state = state_manager_.getDroneState();
@@ -915,6 +914,16 @@ private:
         {
            
             RCLCPP_WARN(get_logger(), "Rejected: Drone was not disarmed");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+        if (goal->command_type == "set_linear_speed" && (goal->target_pose.size() != 1 || drone_state.arming_state != ArmingState::DISARMED))
+        {
+            RCLCPP_WARN(get_logger(), "Rejected: invalid set_linear_speed parameters or drone not armed.");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+        if (goal->command_type == "set_angular_speed" && (goal->target_pose.size() != 1 || drone_state.arming_state != ArmingState::DISARMED))
+        {
+            RCLCPP_WARN(get_logger(), "Rejected: invalid set_angular_speed parameters or drone not armed.");
             return rclcpp_action::GoalResponse::REJECT;
         }
 
@@ -1084,6 +1093,30 @@ private:
                 RCLCPP_INFO(get_logger(), "Origin set to current position: (%.2f, %.2f, %.2f)", global_position.x(), global_position.y(), global_position.z());
                 result->success = true;
                 result->message = "Origin set to current position.";
+            }
+            else if (goal->command_type == "set_linear_speed")
+            {
+                // Set the linear speed for the drone
+                float linear_speed = goal->target_pose[0];
+                bool velocity_set = path_planner_.setLinearVelocity(linear_speed);
+                result->success = velocity_set;
+                if (velocity_set) {
+                    result->message = "Linear speed set to " + std::to_string(linear_speed) + " m/s.";
+                } else {
+                    result->message = "Failed to set linear speed.";
+                }
+            }
+            else if (goal->command_type == "set_angular_speed")
+            {
+                // Set the angular speed for the drone
+                float angular_speed = goal->target_pose[0];
+                bool velocity_set = path_planner_.setAngularVelocity(angular_speed);
+                result->success = velocity_set;
+                if (velocity_set) {
+                    result->message = "Angular speed set to " + std::to_string(angular_speed) + " rad/s.";
+                } else {
+                    result->message = "Failed to set angular speed.";
+                }
             }
             else
             {
