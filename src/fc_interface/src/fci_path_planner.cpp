@@ -3,20 +3,17 @@
 #include <eigen3/Eigen/Geometry>
 #include <iostream>
 
-FCI_PathPlanner::FCI_PathPlanner() : total_time(0.0) {
+FCI_PathPlanner::FCI_PathPlanner() {
     // start_vel and start_acc are initialized to zero by Vector3d's default constructor
 }
 
-float FCI_PathPlanner::getTotalTime() const {
+double FCI_PathPlanner::getTotalTime() const {
     return total_time;
 }
 
-float FCI_PathPlanner::calculateDuration(float distance, float velocity) const {
-    const float MAX_VELOCITY = 1.5f; // Maximum allowed velocity (m/s)
-    const float MIN_VELOCITY = 0.1f;  // Minimum allowed velocity (m/s)
-
+float FCI_PathPlanner::calculateDuration(float distance, float velocity, float min_velocity, float max_velocity) const {
     // Clamp velocity to valid range
-    float safe_velocity = std::clamp(velocity, MIN_VELOCITY, MAX_VELOCITY);
+    float safe_velocity = std::clamp(velocity, min_velocity, max_velocity);
 
     // Calculate and return duration
     return distance / safe_velocity;
@@ -29,10 +26,16 @@ bool FCI_PathPlanner::GenerateTrajectory(
     const Eigen::Quaterniond& end_quat,
     const Eigen::Vector3d& current_velocity,
     const Eigen::Vector3d& current_acceleration,
-    double time,
     trajectoryMethod method) {
 
-    total_time = time;
+    // Calculate the time required for the trajectory based on distance and velocity
+    float distance = (end_pos - start_pos).norm();
+    float current_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(start_quat).x(), 2*M_PI, 0);
+    float target_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(end_quat).x(), 2*M_PI, 0);
+    float distance_angular = std::fabs(std::atan2(std::sin(target_yaw - current_yaw), std::cos(target_yaw - current_yaw)));
+    float trajectory_duration_cartesian = calculateDuration(distance, current_linear_velocity_, max_linear_velocity_, min_linear_velocity_);
+    float trajectory_duration_angular = calculateDuration(distance_angular, current_angular_velocity_, max_angular_velocity_, min_angular_velocity_);
+    total_time = std::max(trajectory_duration_cartesian, trajectory_duration_angular);
     start_vel = current_velocity;
     start_acc = current_acceleration;
     this->start_quat = start_quat.normalized();
@@ -41,7 +44,7 @@ bool FCI_PathPlanner::GenerateTrajectory(
     if (method == MIN_SNAP) {
         for (int i = 0; i < 3; ++i) {
             segments[i].coefficient = generatePolynomialCoefficients(
-                start_pos(i), end_pos(i), start_vel(i), start_acc(i), time, method);
+                start_pos(i), end_pos(i), start_vel(i), start_acc(i), total_time, method);
         }
     }
     return true;

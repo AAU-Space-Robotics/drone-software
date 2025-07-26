@@ -51,9 +51,7 @@ public:
 
     // Utility function to map normalized values to angles
     double mapNormToAngle(double norm) const;
-
-    float max_linear_velocity_ = 0.01; // Maximum linear velocity constraint
-    float max_angular_velocity_ = 0.01; // Maximum angular velocity constraint
+    
     float ema_filter_alpha_ = 0.01; // Alpha value for EMA filter
 
 private:

@@ -12,7 +12,7 @@
 #include <px4_msgs/msg/vehicle_status.hpp>
 #include <px4_msgs/msg/battery_status.hpp>
 #include <px4_msgs/msg/distance_sensor.hpp>
-
+#include <px4_msgs/msg/actuator_outputs.hpp>
 
 #include <interfaces/action/drone_command.hpp>
 #include <interfaces/msg/manual_control_input.hpp>
@@ -71,15 +71,33 @@ public:
         load_pid_gains("yaw", pid_gains.yaw, 0.1, 0.0, 0.05);
         load_pid_gains("thrust", pid_gains.thrust, 0.8, 0.0, 0.1);
 
-        this->declare_parameter("controller.constraints.max_linear_velocity",0.1);
-        this->get_parameter("controller.constraints.max_linear_velocity", controller_.max_linear_velocity_);
-        this->declare_parameter("controller.constraints.max_angular_velocity",0.1);
-        this->get_parameter("controller.constraints.max_angular_velocity", controller_.max_angular_velocity_);
         this->declare_parameter("controller.ema.alpha",0.0);
         this->get_parameter("controller.ema.alpha", controller_.ema_filter_alpha_);
 
-        RCLCPP_INFO(get_logger(), "Controller constraints: max_linear_velocity=%.2f, max_angular_velocity=%.2f, ema_filter_alpha=%.2f",
-                    controller_.max_linear_velocity_, controller_.max_angular_velocity_ , controller_.ema_filter_alpha_);
+        RCLCPP_INFO(get_logger(), "Controller EMA filter alpha: %.2f", controller_.ema_filter_alpha_);
+
+        this->declare_parameter("path_planner.constraints.min_linear_velocity",0.0);
+        this->declare_parameter("path_planner.constraints.min_angular_velocity",0.0);
+        this->declare_parameter("path_planner.constraints.max_linear_velocity",0.1);
+        this->declare_parameter("path_planner.constraints.max_angular_velocity",0.1);
+        this->declare_parameter("path_planner.default.linear_velocity",0.05);
+        this->declare_parameter("path_planner.default.angular_velocity",0.05);
+
+
+        this->get_parameter("path_planner.constraints.min_linear_velocity", path_planner_.min_linear_velocity_);
+        this->get_parameter("path_planner.constraints.min_angular_velocity", path_planner_.min_angular_velocity_);
+        this->get_parameter("path_planner.constraints.max_linear_velocity", path_planner_.max_linear_velocity_);
+        this->get_parameter("path_planner.constraints.max_angular_velocity", path_planner_.max_angular_velocity_);
+        this->get_parameter("path_planner.default.linear_velocity", path_planner_.current_linear_velocity_);
+        this->get_parameter("path_planner.default.angular_velocity", path_planner_.current_angular_velocity_);
+
+        RCLCPP_INFO(get_logger(), "Path planner constraints: min_linear_velocity=%.2f, min_angular_velocity=%.2f, "
+                    "max_linear_velocity=%.2f, max_angular_velocity=%.2f",
+                    path_planner_.min_linear_velocity_, path_planner_.min_angular_velocity_,
+                    path_planner_.max_linear_velocity_, path_planner_.max_angular_velocity_);
+        RCLCPP_INFO(get_logger(), "Path planner default velocities: linear=%.2f, angular=%.2f",
+                    path_planner_.current_linear_velocity_, path_planner_.current_angular_velocity_);
+
 
         // Set PID gains in controller
         controller_.setPIDGains(pid_gains);
@@ -110,7 +128,6 @@ public:
 
         RCLCPP_INFO(get_logger(), "Lidar offset: %.2f", lidar_offset_);
 
-        
         // Set initial state
         state_manager_.setHeartbeat(get_time());
         state_manager_.setGlobalPosition(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
@@ -165,7 +182,10 @@ public:
             "/thyra/out/distance_sensor", qos,
             [this](const DistanceSensor::SharedPtr msg)
             { GroundDistanceCallback(msg);});
-
+        actuator_output_sub_ = create_subscription<ActuatorOutputs>(
+            "/fmu/out/actuator_outputs", qos,
+            [this](const ActuatorOutputs::SharedPtr msg)
+            { ActuatorOutputCallback(msg);});
 
         // Action server
         drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
@@ -440,6 +460,13 @@ private:
         state_manager_.setManualControlInput(manual_input);
     }
 
+    void ActuatorOutputCallback(const ActuatorOutputs::SharedPtr msg)
+    {
+        // Set the actuator speeds in the state manager
+        Stamped4DVector actuator_speeds(get_time(), msg->output[0], msg->output[1], msg->output[2], msg->output[3]);
+        state_manager_.setActuatorSpeeds(actuator_speeds);
+    }
+
     double unwrapYaw(double yaw) {
         while (yaw > M_PI) yaw -= 2.0 * M_PI;
         while (yaw < -M_PI) yaw += 2.0 * M_PI;
@@ -502,6 +529,17 @@ private:
         FlightMode flightmode = drone_state.flight_mode;
         msg.flight_mode = static_cast<int16_t>(flightmode);
         //RCLCPP_INFO(get_logger(), "Flight mode: %d", static_cast<int>(msg.flight_mode));
+        
+
+        //Acturator speeds
+        Stamped4DVector actuator_speeds = state_manager_.getActuatorSpeeds();
+        msg.actuator_speeds.resize(4);
+        msg.actuator_speeds[0] = actuator_speeds.x();
+        msg.actuator_speeds[1] = actuator_speeds.y();
+        msg.actuator_speeds[2] = actuator_speeds.z();
+        msg.actuator_speeds[3] = actuator_speeds.w();
+
+        //Publish the drone state message
         drone_state_pub_->publish(msg);
     }
 
@@ -621,6 +659,10 @@ private:
 
     void controlLoop()
     {
+
+        // update time in air
+
+
         //Lock the current control mode
         std::lock_guard<std::mutex> lock(current_control_mode_mutex_);
 
@@ -758,11 +800,9 @@ private:
         Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), z_landing}; // Land at z = 0.0
         Eigen::Quaterniond target_quat = takeoff_quat; // Preserve current orientation
 
-        float distance = std::abs(target_position.z() - takeoff_position.z());
-        float landing_time = path_planner_.calculateDuration(distance, controller_.max_linear_velocity_);
-
         // Generate landing trajectory
-        path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, landing_time, trajectoryMethod::MIN_SNAP);
+        path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, trajectoryMethod::MIN_SNAP);
+        float trajectory_duration = path_planner_.getTotalTime();
 
         // Set trajectory start time and update flight mode
         drone_state.flight_mode = FlightMode::LAND_POSITION;
@@ -955,16 +995,15 @@ private:
                 Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], -1.5)};
                 Eigen::Quaterniond target_quat = takeoff_quat; // Preserve current orientation for takeoff
 
-                float distance = std::abs(target_position.z() - takeoff_position.z());
-                float takeoff_time = path_planner_.calculateDuration(distance, controller_.max_linear_velocity_);
-
                 // Generate takeoff trajectory
-                path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, takeoff_time, trajectoryMethod::MIN_SNAP);
+                path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, trajectoryMethod::MIN_SNAP);
+                float trajectory_duration = path_planner_.getTotalTime();
 
                 // Set trajectory start time and activate trajectory mode
                 DroneState drone_state = state_manager_.getDroneState();
                 drone_state.trajectory_start_time_ = get_time();
                 drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
+                drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
                 state_manager_.setDroneState(drone_state);
 
                 result->success = true;
@@ -990,24 +1029,15 @@ private:
                 Eigen::Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
                 Eigen::Quaterniond target_quat = transformations_.eulerToQuaternion(0.0, 0.0, target_yaw).normalized();
 
-                float distance = (target_position - takeoff_position).norm();
-                // Compute shortest angular distance (yaw wraps around 2*pi)
-                float distance_angular = std::fabs(std::atan2(std::sin(target_yaw - current_yaw), std::cos(target_yaw - current_yaw)));
-                RCLCPP_INFO(get_logger(), "target yaw: %.2f, current yaw: %.2f, distance angular: %.2f", target_yaw, current_yaw, distance_angular);
-                float takeoff_time_cartesian = path_planner_.calculateDuration(distance, controller_.max_linear_velocity_);
-                float takeoff_time_angular = path_planner_.calculateDuration(distance_angular, controller_.max_angular_velocity_);
-                float takeoff_time = std::max(takeoff_time_cartesian, takeoff_time_angular);
-                
-                // Print time, and yaw
-                RCLCPP_INFO(get_logger(), "Takeoff time (cartesian): %.2f seconds, Takeoff time (angular): %.2f seconds", takeoff_time_cartesian, takeoff_time_angular);
-
                 // Generate trajectory
-                path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, takeoff_time, trajectoryMethod::MIN_SNAP);
-
+                path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, trajectoryMethod::MIN_SNAP);
+                float trajectory_duration = path_planner_.getTotalTime();
+                
                 // Set trajectory start time
                 DroneState drone_state = state_manager_.getDroneState();
                 drone_state.trajectory_start_time_ = get_time();
                 drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
+                drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
                 state_manager_.setDroneState(drone_state);
 
                 result->success = true;
@@ -1091,12 +1121,14 @@ private:
     rclcpp::Subscription<interfaces::msg::ManualControlInput>::SharedPtr manual_input_sub_;
     rclcpp::Subscription<BatteryStatus>::SharedPtr battery_status_sub_;
     rclcpp::Subscription<DistanceSensor>::SharedPtr ground_distance_sub_;
+    rclcpp::Subscription<ActuatorOutputs>::SharedPtr actuator_output_sub_;
 
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;
     rclcpp::TimerBase::SharedPtr drone_state_timer;
     rclcpp::TimerBase::SharedPtr safety_timer_;
     rclcpp_action::Server<DroneCommand>::SharedPtr drone_command_server_;
+
 
     FCI_Transformations transformations_;
     FCI_StateManager state_manager_;

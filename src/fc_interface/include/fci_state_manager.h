@@ -165,6 +165,8 @@ struct DroneState {
     FlightMode flight_mode = FlightMode::STANDBY;
     TrajectoryMode trajectory_mode = TrajectoryMode::INACTIVE;
     rclcpp::Time trajectory_start_time_;
+    rclcpp::Duration trajectory_duration = rclcpp::Duration(0, 0);
+    rclcpp::Duration flight_time = rclcpp::Duration(0, 0); // Total flight time since takeoff, resets on landing/disarming
 };
 
 // Battery state
@@ -251,6 +253,9 @@ public:
     void setGroundDistanceState(const Stamped3DVector& new_data);
     Stamped3DVector getGroundDistanceState();
 
+    void setActuatorSpeeds(const Stamped4DVector& new_data);
+    Stamped4DVector getActuatorSpeeds();
+
 private:
     
     // Mutexes for thread safety
@@ -271,8 +276,8 @@ private:
     std::mutex acceleration_error_mutex_;
     std::mutex position_error_mutex_;
     std::mutex latest_control_signal_mutex_;
-
     std::mutex battery_state_mutex_;
+    std::mutex actuator_speeds_mutex_;
 
     // Data structures to store state information
     rclcpp::Time heartbeat_time_;
@@ -293,6 +298,7 @@ private:
     AccelerationError acceleration_error_;
     PositionError position_error_;
     Eigen::Vector4d latest_control_signal_ = Eigen::Vector4d::Zero(); // Initialize to zero
+    Stamped4DVector actuator_speeds_ = Stamped4DVector(rclcpp::Time(0, 0), 0.0, 0.0, 0.0, 0.0);
     
 };
 

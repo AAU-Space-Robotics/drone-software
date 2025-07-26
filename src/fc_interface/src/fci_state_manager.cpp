@@ -165,6 +165,8 @@ PositionError FCI_StateManager::getPositionError() {
     return position_error_;   
 }
 
+// ---
+
 void FCI_StateManager::setLatestControlSignal(const Eigen::Vector4d& new_data) {
     std::lock_guard<std::mutex> lock(latest_control_signal_mutex_);
     latest_control_signal_ = new_data;   
@@ -174,6 +176,9 @@ Eigen::Vector4d FCI_StateManager::getLatestControlSignal() {
     return latest_control_signal_;   
 }
 
+// ---
+
+
 void FCI_StateManager::setGroundDistanceState(const Stamped3DVector& new_data) {
     std::lock_guard<std::mutex> lock(ground_distance_state_mutex_);
     ground_distance_state_ = new_data;   
@@ -181,6 +186,17 @@ void FCI_StateManager::setGroundDistanceState(const Stamped3DVector& new_data) {
 Stamped3DVector FCI_StateManager::getGroundDistanceState() {
     std::lock_guard<std::mutex> lock(ground_distance_state_mutex_);
     return ground_distance_state_;   
+}
+
+// ---
+
+void FCI_StateManager::setActuatorSpeeds(const Stamped4DVector& new_data) {
+    std::lock_guard<std::mutex> lock(actuator_speeds_mutex_);
+    actuator_speeds_ = new_data;   
+}
+Stamped4DVector FCI_StateManager::getActuatorSpeeds() {
+    std::lock_guard<std::mutex> lock(actuator_speeds_mutex_);
+    return actuator_speeds_;
 }
 
 // End of Setters & Getters
