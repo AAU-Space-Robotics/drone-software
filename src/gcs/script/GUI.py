@@ -387,7 +387,13 @@ def Goto_field(node):
         if imgui.button("Send",width=70, height=50):
             try:
                 x, y, z, yaw = map(float, text_buffer.strip().split())
+                #if yaw == None:
+                #    yaw = 0.0
                 node.send_command("goto", [x, y, z], yaw)
+                #else:
+                #    yaw = float(text_buffer.strip().split()[-1])
+                #    node.send_command("goto", [x, y, z], yaw)
+                
             except ValueError:
                 node.get_logger().warn("Invalid pose input for goto, please enter x y z yaw values")
     imgui.pop_style_color(3)
@@ -412,10 +418,11 @@ def speed_field(node):
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0))
     with imgui.font(font_small):
-        if imgui.button("Send", width=70, height=50):
+        if imgui.button("Send S", width=70, height=50):
             try:
                 speed = float(speed_buffer.strip())
-                node.send_command("set_linear_speed", [speed])
+                node.send_command("set_linear_speed", [speed])  
+                node.get_logger().info(f"Speed set to {speed}")
             except ValueError as e:
                 node.get_logger().warn(f"Invalid speed input: {e}")
     imgui.pop_style_color(3)
