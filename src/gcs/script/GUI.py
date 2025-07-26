@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
 import glfw
+import warnings
+from glfw import GLFWError
+warnings.filterwarnings("ignore", category=GLFWError, message=".*Wayland: The platform does not support setting the window position.*")
 import imgui
 from imgui.integrations.glfw import GlfwRenderer
 import OpenGL.GL as gl
@@ -17,6 +20,7 @@ from interfaces.action import DroneCommand
 from dataclasses import dataclass
 from decimal import Decimal
 import os
+
 import ament_index_python.packages
 
 import rclpy
@@ -25,6 +29,14 @@ from interfaces.msg import ManualControlInput
 import pygame
 from datetime import datetime
 from collections import deque
+
+import cv2
+import threading
+import queue
+import numpy as np
+from OpenGL.GL import *
+
+
 
 class DroneData:
     position: list = (0.0, 0.0, 0.0)
@@ -57,6 +69,30 @@ class ImGuiLogger:
     def debug(self, message):
         self.log('DEBUG', message)
 
+class GUIButton():
+    def button1(x, y, font, label, command, node):
+        imgui.set_cursor_pos((x, y))
+        imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+        imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
+        imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
+        imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0)) 
+        with imgui.font(font):
+            if imgui.button(label, width=150, height=50):
+                node.send_command(command, [-1.0])  
+        imgui.pop_style_color(3)
+        imgui.pop_style_var() 
+    def button2(x, y, font, label, command, node, coordinates):
+        imgui.set_cursor_pos((x, y))
+        imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+        imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
+        imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
+        imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0)) 
+        with imgui.font(font):
+            if imgui.button(label, width=150, height=50):
+                node.send_command(command, [coordinates])  
+        imgui.pop_style_color(3)
+        imgui.pop_style_var() 
+
 drone_data = DroneData()
 
 button_color = (0.0,0.5,0.0)
@@ -65,7 +101,7 @@ text_buffer = ""
 current_item = 0
 position_x, position_y, position_z = 0, 0, 0
 target_position_x, target_position_y, target_position_z = 0, 0, 0
-roll, pitch, yaw = 0, 0, 0
+roll, pitch, yaw_velocity = 0, 0, 0
 velocity_x, velocity_y, velocity_z = 0, 0, 0
 thrust = 0
 drone_kill = True
@@ -73,6 +109,7 @@ test_slider = 0
 battery_state_timestamp = 0
 position_timestamp = 0
 velocity_timestamp = 0
+takeoff_time = 0
 battery_voltage, battery_current, battery_percentage = 0.0, 0.0, 0.0
 battery_discharge_rate, battery_average_current = 0.0, 0.0
 arming_state = 0
@@ -128,10 +165,10 @@ class DroneGuiNode(Node):
     def state_callback(self, msg):
         global position_x, position_y, position_z, position_timestamp
         global target_position_x, target_position_y, target_position_z
-        global roll, pitch, yaw
+        global roll, pitch, yaw_velocity
         global velocity_x, velocity_y, velocity_z, velocity_timestamp
         global battery_voltage, battery_state_timestamp, battery_current, battery_percentage, battery_discharge_rate, battery_average_current
-        global arming_state, flight_mode
+        global arming_state, flight_mode, takeoff_time
         global GUI_console_logs
 
         if hasattr(self, 'last_arming_state') and self.last_arming_state != msg.arming_state:
@@ -160,7 +197,7 @@ class DroneGuiNode(Node):
         if len(msg.orientation) >= 3:
             roll = msg.orientation[0]
             pitch = msg.orientation[1]
-            yaw = msg.orientation[2]
+            yaw_velocity = msg.orientation[2]
         if len(msg.target_position) >= 3:
             target_position_x = msg.target_position[0]
             target_position_y = msg.target_position[1]
@@ -176,7 +213,8 @@ class DroneGuiNode(Node):
         #self.get_logger().info(f"Arming state: {arming_state}")
         flight_mode = msg.flight_mode
         GUI_console_logs[0] = str(self.get_logger())
-
+        #takeoff_time = msg.takeoff_time
+        #self.imgui_logger.info(f"Takeoff time: {takeoff_time}")
     def send_command(self, command_type, target_pose=None):
         goal_msg = DroneCommand.Goal()
         goal_msg.command_type = command_type
@@ -221,7 +259,7 @@ class DroneGuiNode(Node):
         msg = ManualControlInput()
         msg.roll = float(roll)
         msg.pitch = float(pitch)
-        msg.yaw = float(yaw_velocity)
+        msg.yaw_velocity = float(yaw_velocity)
         msg.thrust = float(thrust)
         self.manual_control_publisher.publish(msg)
 
@@ -288,10 +326,10 @@ def Goto_field(node):
     text_field = ""
     #changed = False
     
-    imgui.set_cursor_pos((450,770)) #moved 100 down y-axis for fullscreen
+    imgui.set_cursor_pos((1250,770)) #moved 100 down y-axis for fullscreen
     with imgui.font(font):
         imgui.text("Target Pose (x y -z):")
-    imgui.set_cursor_pos((450,835))
+    imgui.set_cursor_pos((1250,835))
     imgui.set_next_item_width(300)
     imgui.set_window_font_scale(2.0) 
     changed, text_field= imgui.input_text("", text_buffer, 64)
@@ -301,7 +339,7 @@ def Goto_field(node):
  
   
 
-    imgui.set_cursor_pos((770,825))
+    imgui.set_cursor_pos((1570,825))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0,0.8,0.0))
@@ -371,55 +409,52 @@ def XYZ_Text_Field(msg):
         end_x, end_y = 287, 235      # Ending point of the line (x, y)
         color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
-    imgui.set_cursor_pos((1620, 215)); imgui.text(f" Position Timestamp {position_timestamp}")
+    imgui.set_cursor_pos((23, 265)); imgui.text(f" Position Timestamp {position_timestamp}")
     
 def RPY_Text_Field():
     
     draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
-                                                                #flags is for rounding different corners
-    draw_list.add_rect_filled(20,305, 250,450,color,rounding =10.0, flags=10)
+    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
+    draw_list.add_rect_filled(20,565, 250,710,color,rounding =10.0, flags=10)
     thrust = -(int(test_slider))
 
     with imgui.font(font_small):
-        imgui.set_cursor_pos((23,265)); imgui.text("Orientation:")
+        imgui.set_cursor_pos((23,525)); imgui.text("Orientation:")
     with imgui.font(font_small):
-        # imgui.set_cursor_pos((30,255)); imgui.text("Thrust = ")
-        imgui.set_cursor_pos((30,310)); imgui.text("Roll  = ")
-        imgui.set_cursor_pos((30,365)); imgui.text("Pitch = ")
-        imgui.set_cursor_pos((30,415)); imgui.text("Yaw   = ")
-        #imgui.set_cursor_pos((150,255)); imgui.text(str(thrust)) 
-        imgui.set_cursor_pos((150,308)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((150,363)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((150,413)); imgui.text(f"{Decimal(yaw).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((30,570)); imgui.text("Roll  = ")
+        imgui.set_cursor_pos((30,620)); imgui.text("Pitch = ")
+        imgui.set_cursor_pos((30,670)); imgui.text("Yaw   = ")
+        imgui.set_cursor_pos((150,568)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((150,618)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((150,668)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
 
 def XYZVelocity_Text_Field():
-    
-    global velocity_x, velocity_y, velocity_z, velocity_timestamp
-    
-    draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
-                                                                #flags is for rounding different corners
-    draw_list.add_rect_filled(20,520, 250,665,color,rounding =10.0, flags=10)
 
-    with imgui.font(font_small):
-        imgui.set_cursor_pos((23,480)); imgui.text("Velosity:")
-        imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.0, 0.0, 0.9)
-        imgui.set_cursor_pos((30,525)); imgui.text("X = ")
-        imgui.set_cursor_pos((100,523)); imgui.text(f"{Decimal(velocity_x).quantize(Decimal('0.000'))}")
-        imgui.set_cursor_pos((200,523)); imgui.text("m/s")
-        imgui.pop_style_color()
-        imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 1.0, 0.0, 0.9)
-        imgui.set_cursor_pos((30,575)); imgui.text("Y = ")
-        imgui.set_cursor_pos((100,573)); imgui.text(f"{Decimal(velocity_y).quantize(Decimal('0.000'))}")
-        imgui.set_cursor_pos((200,573)); imgui.text("m/s")
-        imgui.pop_style_color()
-        imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.5, 0.9)
-        imgui.set_cursor_pos((30,625)); imgui.text("Z = ")
-        imgui.set_cursor_pos((100,623)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
-        imgui.set_cursor_pos((200,623)); imgui.text("m/s")
-        imgui.pop_style_color()
-    imgui.set_cursor_pos((1620, 255)); imgui.text(f" Velocity Timestamp {velocity_timestamp}")
+        global velocity_x, velocity_y, velocity_z, velocity_timestamp
+
+        draw_list = imgui.get_window_draw_list()
+        color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
+     
+        draw_list.add_rect_filled(20,335, 250,480,color,rounding =10.0, flags=10)
+
+        with imgui.font(font_small):
+            imgui.set_cursor_pos((23,295)); imgui.text("Velocity:")
+            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.0, 0.0, 0.9)
+            imgui.set_cursor_pos((30,340)); imgui.text("X = ")
+            imgui.set_cursor_pos((100,338)); imgui.text(f"{Decimal(velocity_x).quantize(Decimal('0.000'))}")
+            imgui.set_cursor_pos((200,338)); imgui.text("m/s")
+            imgui.pop_style_color()
+            imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 1.0, 0.0, 0.9)
+            imgui.set_cursor_pos((30,395)); imgui.text("Y = ")
+            imgui.set_cursor_pos((100,393)); imgui.text(f"{Decimal(velocity_y).quantize(Decimal('0.000'))}")
+            imgui.set_cursor_pos((200,393)); imgui.text("m/s")
+            imgui.pop_style_color()
+            imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.5, 0.9)
+            imgui.set_cursor_pos((30,445)); imgui.text("Z = ")
+            imgui.set_cursor_pos((100,443)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
+            imgui.set_cursor_pos((200,443)); imgui.text("m/s")
+            imgui.pop_style_color()
+        imgui.set_cursor_pos((23, 490)); imgui.text(f" Velocity Timestamp {velocity_timestamp}")
     
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
@@ -463,7 +498,7 @@ def batteryGraph():
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
     draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
 
-    imgui.set_cursor_pos((1620, 175)); imgui.text(f" Battery Timestamp  {battery_state_timestamp}") # all timestamps are moved 370 for fulscreen
+    imgui.set_cursor_pos((1620, 175)); imgui.text(f" Battery Timestamp  {battery_state_timestamp}") 
 
 def map_value(value, in_min, in_max, out_min, out_max):
     return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -550,32 +585,8 @@ def Arrows():
         color
         )
 
-def takeoff_button(node):
-    imgui.set_cursor_pos((450, 600))
-    imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
-    imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
-    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
-    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0)) 
-    with imgui.font(font_small):
-        if imgui.button("Takeoff", width=150, height=50):
-            node.send_command("takeoff", [-1.0])  
-    imgui.pop_style_color(3)
-    imgui.pop_style_var() 
-
-def land_button(node):
-    imgui.set_cursor_pos((650, 600))
-    imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
-    imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
-    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
-    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0))  
-    with imgui.font(font_small):
-        if imgui.button("Land", width=150, height=50):
-            node.send_command("land")  
-    imgui.pop_style_color(3)
-    imgui.pop_style_var()
-
 def return_to_home_button(node):
-    imgui.set_cursor_pos((850, 600))
+    imgui.set_cursor_pos((1650, 600))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
@@ -586,7 +597,7 @@ def return_to_home_button(node):
     imgui.pop_style_color(3)
     imgui.pop_style_var()
 
-def manual_aided(node):
+def manual(node):
     imgui.set_cursor_pos((1400, 200))
     button_color = (0.5, 0.5, 0.5)
     hover_color = (0.5, 0.8, 0.5)
@@ -596,15 +607,15 @@ def manual_aided(node):
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *hover_color)
     imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *active_color)  
     with imgui.font(font_small):
-        if imgui.button("Manual Aided", width=200, height=50):
+        if imgui.button("Manual", width=200, height=50):
             try :
                 # Check if joystick is connected
                 if pygame.joystick.get_count() > 0:
                     button_color = (0.0, 0.5, 0.0)  # Green color for connected joystick
                     hover_color = (0.0, 0.8, 0.0)  # Lighter green for hover
                     active_color = (0.0, 0.2, 0.0)
-                    node.send_command("manual_aided")
-                    print("Manual Aided mode activated.")
+                    node.send_command("manual")
+                    GuiConsoleLogger("Manual mode activated.")
                 else:
                     print("Joystick not connected or not initialized.")
             except AttributeError:
@@ -631,7 +642,7 @@ def manual_aided(node):
     elif flight_mode == 5:
         flight_mode_text = "Land position"
     
-    imgui.set_cursor_pos((450, 710))
+    imgui.set_cursor_pos((1250, 710))
     with imgui.font(font_small):
         imgui.text("Flight Mode: " + str(flight_mode_text))
 
@@ -644,39 +655,57 @@ def start_ros(node):
     rclpy.shutdown()
 
 def start_joystick(node):
+    global roll, pitch, yaw_velocity, thrust, arming_state
+    global drone_kill, drone_state
     pygame.init()
     pygame.joystick.init()
 
     if pygame.joystick.get_count() == 0:
         print("No joystick connected.")
         return
+    
+    node.joystick = pygame.joystick.Joystick(0)
+    node.joystick.init()
 
-    joystick = pygame.joystick.Joystick(0)
-    joystick.init()
-    print(f"Initialized joystick: {joystick.get_name()}")
+    print(f"Initialized joystick: {node.joystick.get_name()}")
+    
+    if not node.joystick.get_init():
+        print("Joystick initialization failed.")
+        return
+    
+  
 
     clock = pygame.time.Clock()
+    DEAD_ZONE = 0.05
+    prev_axis_state = None
 
     try:
         while rclpy.ok():
             pygame.event.pump()  # Process internal queue
-
-            # Example axis mapping
-            roll = joystick.get_axis(0) if abs(joystick.get_axis(0)) > 0.05 else 0.0
-            pitch = -joystick.get_axis(1) if abs(joystick.get_axis(1)) > 0.05 else 0.0
-            yaw_velocity = joystick.get_axis(2) if abs(joystick.get_axis(2)) > 0.05 else 0.0
-            thrust = -joystick.get_axis(3) if abs(joystick.get_axis(3)) > 0.05 else 0.0
-         
-
-            node.drone_cmd.arm = int(abs(node.joystick.get_button(3)))
-     
-            node.drone_cmd.estop = node.joystick.get_button(2)
+            #while arming_state == 7:
+            #print(f"Flight mode: {flight_mode}")
+            roll = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
+            pitch = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
+            yaw_velocity = node.joystick.get_axis(2) if abs(node.joystick.get_axis(2)) > DEAD_ZONE else 0.0
+            thrust = -node.joystick.get_axis(3) if abs(node.joystick.get_axis(3)) > DEAD_ZONE else 0.0
+            current_axis_state = int(abs(node.joystick.get_axis(4)))
+            if prev_axis_state is None or current_axis_state != prev_axis_state:
+                if current_axis_state == 1:
+                    node.send_command("disarm")
+                    #print("Arming state changed to: Disarmed (0)")  # Debug
+                elif current_axis_state == 0:
+                    node.send_command("arm")
+                    #print("Arming state changed to: Armed (1)")  # Debug
+                prev_axis_state = current_axis_state
+            #arming_state = -int(abs(node.joystick.get_axis(4)))
+            #print(f"Arming state: {arming_state}")
+            #print(int(abs(node.joystick.get_axis(4))))
         
-            # Optional: Clamp thrust or scale values here if needed
-            node.drone_cmd.estop = node.joystick.get_button(2)
-
+            if( node.joystick.get_button(3) == 1):
+                node.send_command("estop")
+                drone_kill = True
+        
             node.send_manual_control(roll, pitch, yaw_velocity, thrust)
-
             clock.tick(20)  # 20 Hz update rate
     except KeyboardInterrupt:
         pass
@@ -687,7 +716,7 @@ def GuiConsoleLogger(node):
     global font_small
     
     # Position the logger window in the bottom right area
-    imgui.set_cursor_pos((1150, 600))
+    imgui.set_cursor_pos((450, 600))
     
     # Create a child window for the logger
     imgui.begin_child("LoggerWindow", 750, 280, border=True)
@@ -755,6 +784,7 @@ def GuiConsoleLogger(node):
     imgui.end_child()
 
 
+
 def main(args=None):
     rclpy.init()
     global font, font_large, font_small, font_for_meter
@@ -768,20 +798,18 @@ def main(args=None):
     
     # Set window hints for borderless full-screen mode
 
-    
-    # Get primary monitor size
-    #monitor = glfw.get_primary_monitor()
-    #mode = glfw.get_video_mode(monitor)
-    #width, height = mode.size.width, mode.size.height
-    
-    # Create borderless window
-    #window_width, window_height = pygame.display.get_surface().get_size()
     glfw.init()
+    monitor = glfw.get_primary_monitor()
+    video_mode = glfw.get_video_mode(monitor)
+    screen_width = video_mode.size.width
+    screen_height = video_mode.size.height
+    
+
     glfw.window_hint(glfw.RESIZABLE, glfw.TRUE)
     glfw.window_hint(glfw.DECORATED, glfw.TRUE)
     glfw.window_hint(glfw.MAXIMIZED, glfw.TRUE)
 
-    window = glfw.create_window(800, 1000, "THYRA", None, None)
+    window = glfw.create_window(screen_width, screen_height, "THYRA", None, None)
     glfw.set_window_pos(window, 0, 0)
     if not window:
         print("Could not create GLFW window")
@@ -799,7 +827,6 @@ def main(args=None):
     #io.config_flags |= imgui.CONFIG_NAV_ENABLE_KEYBOARD
     
     impl = GlfwRenderer(window)
-    #impl.process_inputs()
     io = imgui.get_io()
     global font, font_large, font_small, font_for_meter
     # Try to find the font in the ROS package share directory
@@ -834,23 +861,7 @@ def main(args=None):
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-    # Load image data (e.g., via PIL)
-    image_dir = os.path.join(
-        ament_index_python.packages.get_package_share_directory("gcs"),
-        "images"
-    )
-    image_path = os.path.join(image_dir, "droneImage.png")
-    image_path = os.path.normpath(image_path)
-    if not os.path.isfile(image_path):
-        print(f"Image file not found: {image_path}")
-        glfw.terminate()
-        return
-    image = Image.open(image_path).convert("RGBA")
-    image_data = image.tobytes()
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, image_data)
-    glBindTexture(GL_TEXTURE_2D, 0)
-    
+   
     
     # Main loop
     while not glfw.window_should_close(window):
@@ -863,8 +874,8 @@ def main(args=None):
       
         # Create UI without windowed mode
         imgui.set_next_window_position(0, 0)
-        window_width, window_height = glfw.get_framebuffer_size(window)
-        imgui.set_next_window_size(window_width, window_height)
+       
+        imgui.set_next_window_size(screen_width, screen_height)
         imgui.begin("wtf", flags=imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_RESIZE | imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_BACKGROUND)
         imgui.set_cursor_pos((20,10))
         with imgui.font(font_small):
@@ -877,8 +888,7 @@ def main(args=None):
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
         #Running different widgets
         drone_visualization()
-        imgui.set_cursor_pos((550,320));imgui.image(texture_id, 250, 250)
-        
+       
         Arm_Button(node)
         Kill_command(node)
         Goto_field(node)
@@ -888,13 +898,15 @@ def main(args=None):
         XYZVelocity_Text_Field()
         
         batteryGraph()
-        Arrows()
-        takeoff_button(node)
-        land_button(node)
+        #Arrows()   
+        #takeoff_button(node)
+        #land_button(node)
         return_to_home_button(node)
-        manual_aided(node)
+        manual(node)
         GuiConsoleLogger(node)
-        
+        GUIButton.button1(1450, 600, font_small, "Land", "land", node)
+        GUIButton.button2(1250, 600, font_small, "Takeoff", "takeoff", node, -1.0)
+        GUIButton.button1(1150, 30, font_small, "Set Origin", "set_origin", node)
         imgui.end()
 
         
@@ -905,9 +917,11 @@ def main(args=None):
         glfw.swap_buffers(window)
     
     # Cleanup
+
     impl.shutdown()
     glfw.terminate()
     node.destroy_node()
+
 if __name__ == "__main__":
     main()
     

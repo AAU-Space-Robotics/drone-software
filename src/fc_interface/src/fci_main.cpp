@@ -523,6 +523,7 @@ private:
         //uint8 arming_state  
         DroneState drone_state = state_manager_.getDroneState();
         msg.arming_state = static_cast<uint8_t>(drone_state.arming_state);
+        //msg.takeoff_timestamp = drone_state.takeoff_timestamp.seconds();
         
         
         //uint8 estop  
