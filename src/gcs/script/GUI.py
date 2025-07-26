@@ -16,6 +16,7 @@ from rclpy.node import Node
 import threading
 from threading import Thread
 from interfaces.msg import DroneState
+from interfaces.msg import GcsHeartbeat
 from interfaces.action import DroneCommand
 from dataclasses import dataclass
 from decimal import Decimal
@@ -92,12 +93,23 @@ class GUIButton():
                 node.send_command(command, [coordinates])  
         imgui.pop_style_color(3)
         imgui.pop_style_var() 
+class graphs():
+    def motor_speed_graph(start_x, width, start_y, height):
+        color = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0)
+        draw_list = imgui.get_window_draw_list()
+        draw_list.add_rect(start_x, width,start_y,height,color, rounding=1.0,flags=15,thickness=3)
+    def battery_graph(x_start, width, y_start, height, x_start2, width2, y_start2, height2):
+        draw_list = imgui.get_window_draw_list()
+        color = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0) 
+        draw_list.add_rect(x_start,width,y_start,height,color, rounding=1.0,flags=15,thickness=3)   #shifted all 320 for fullscreen
+        draw_list.add_rect(x_start2, width2, y_start2, height2,color, rounding=1.0,flags=3,thickness=3)  
 
 drone_data = DroneData()
 
 button_color = (0.0,0.5,0.0)
 killbutton_color = (0.8,0.0,0.0)
 text_buffer = ""
+speed_buffer = ""
 current_item = 0
 position_x, position_y, position_z = 0, 0, 0
 target_position_x, target_position_y, target_position_z = 0, 0, 0
@@ -116,9 +128,9 @@ arming_state = 0
 estop = 0
 drone_state = False
 GUI_console_logs = [""]
-
-
-
+GUI_Heartbeat = 0
+actuator_speeds = [0, 0, 0, 0] # Placeholder for actuator speeds
+yaw = 0.0
 
 class DroneGuiNode(Node):
     def __init__(self):
@@ -129,21 +141,30 @@ class DroneGuiNode(Node):
             self.state_callback,
             10
         )
+        self.publisher_ = self.create_publisher(
+           GcsHeartbeat, 
+           "/thyra/out/gcs_heartbeat",
+             2
+        )
+
+        self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
+        self.heartbeat_timer = self.create_timer(2.0, self.send_heartbeat)  # 2 Hz
+        self.counter = 0.0
+        self.get_logger().info('GUI Publisher Started')
         self.imgui_logger = ImGuiLogger()
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.manual_control_publisher = self.create_publisher(ManualControlInput, '/thyra/in/manual_control_input', 10)
-        self._action_client = ActionClient(self, DroneCommand, '/thyra/in/drone_command')
-
+        self._action_client = ActionClient(self, DroneCommand, '/thyra/in/drone_command')   
         self.imgui_logger.info('DroneCommand client initialized, waiting for action server...')
         self._action_client.wait_for_server()
-        self.goal_handle = None
-
+        self.goal_handle = None 
         self.log_filters = {
             'show_info': True,
             'show_warn': True,
             'show_error': True,
             'show_debug': False
         }
+    
     
     def timer_callback(self):
         # Example of different log levels
@@ -170,6 +191,7 @@ class DroneGuiNode(Node):
         global battery_voltage, battery_state_timestamp, battery_current, battery_percentage, battery_discharge_rate, battery_average_current
         global arming_state, flight_mode, takeoff_time
         global GUI_console_logs
+        global actuator_speed
 
         if hasattr(self, 'last_arming_state') and self.last_arming_state != msg.arming_state:
             self.imgui_logger.warn(f"Arming state changed: {self.last_arming_state} -> {msg.arming_state}")
@@ -209,18 +231,32 @@ class DroneGuiNode(Node):
         battery_percentage = msg.battery_percentage
         battery_discharge_rate = msg.battery_discharged_mah
         battery_average_current = msg.battery_average_current
+
+        if len(msg.actuator_speeds) >= 4:
+            actuator_speeds[0] = msg.actuator_speeds[0]  
+            actuator_speeds[1] = msg.actuator_speeds[1]  
+            actuator_speeds[2] = msg.actuator_speeds[2]  
+            actuator_speeds[3] = msg.actuator_speeds[3]  
+       
+
+
+
         arming_state = msg.arming_state
         #self.get_logger().info(f"Arming state: {arming_state}")
         flight_mode = msg.flight_mode
         GUI_console_logs[0] = str(self.get_logger())
         #takeoff_time = msg.takeoff_time
         #self.imgui_logger.info(f"Takeoff time: {takeoff_time}")
-    def send_command(self, command_type, target_pose=None):
+
+
+    def send_command(self, command_type, target_pose=None, yaw=None):
         goal_msg = DroneCommand.Goal()
         goal_msg.command_type = command_type
         if target_pose is not None:
             goal_msg.target_pose = target_pose
-        log_msg = f'Sending command: {command_type}, target_pose: {target_pose}'
+        if yaw is not None:
+            goal_msg.yaw = yaw
+        log_msg = f'Sending command: {command_type}, target_pose: {target_pose} yaw: {yaw}'
         self.get_logger().info(log_msg)
         self.imgui_logger.info(log_msg)
         future = self._action_client.send_goal_async(
@@ -228,7 +264,7 @@ class DroneGuiNode(Node):
             feedback_callback=self.feedback_callback
         )
         future.add_done_callback(self.goal_response_callback)
-
+    
     def goal_response_callback(self, future):
         self.goal_handle = future.result()
         if not self.goal_handle.accepted:
@@ -262,6 +298,12 @@ class DroneGuiNode(Node):
         msg.yaw_velocity = float(yaw_velocity)
         msg.thrust = float(thrust)
         self.manual_control_publisher.publish(msg)
+    def send_heartbeat(self):
+        msg = GcsHeartbeat()
+        msg.timestamp = float(self.get_clock().now().nanoseconds) / 1e9
+        msg.gcs_nominal = 1
+        self.publisher_.publish(msg)
+        
 
 def Arm_Button(node):
     global button_color, drone_kill, drone_state
@@ -307,7 +349,7 @@ def Arm_Button(node):
 
 def Kill_command(node):
     global killbutton_color, drone_kill
-    imgui.set_cursor_pos((1450, 30))
+    imgui.set_cursor_pos((1110, 30))  # Changed x-coordinate to 1130
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *killbutton_color)
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 1.0, 0.0, 0.0, 1.0)  # Fixed: Added alpha
@@ -321,18 +363,15 @@ def Kill_command(node):
     return drone_kill
 
 def Goto_field(node):
-
-    global text_buffer
+    global text_buffer, yaw
     text_field = ""
-    #changed = False
-    
     imgui.set_cursor_pos((1250,770)) #moved 100 down y-axis for fullscreen
     with imgui.font(font):
-        imgui.text("Target Pose (x y -z):")
+        imgui.text("Target Pose (x y -z yaw):")
     imgui.set_cursor_pos((1250,835))
     imgui.set_next_item_width(300)
     imgui.set_window_font_scale(2.0) 
-    changed, text_field= imgui.input_text("", text_buffer, 64)
+    changed, text_field= imgui.input_text("##goto_input", text_buffer, 64)
     if changed:
         text_buffer = text_field
     imgui.set_window_font_scale(1.0)
@@ -347,13 +386,42 @@ def Goto_field(node):
     with imgui.font(font_small):
         if imgui.button("Send",width=70, height=50):
             try:
-                x, y, z = map(float, text_buffer.strip().split())
-                node.send_command("goto", [x, y, z])
+                x, y, z, yaw = map(float, text_buffer.strip().split())
+                node.send_command("goto", [x, y, z], yaw)
             except ValueError:
-                node.get_logger().warn("Invalid pose input for goto, please enter x y z values")
+                node.get_logger().warn("Invalid pose input for goto, please enter x y z yaw values")
     imgui.pop_style_color(3)
     imgui.pop_style_var()
 
+def speed_field(node):
+    global speed_buffer
+    speed_text_field = ""
+    imgui.set_cursor_pos((1250, 650))  
+    with imgui.font(font):
+        imgui.text("Speed (m/s):")
+    imgui.set_cursor_pos((1250, 715))
+    imgui.set_next_item_width(300)
+    imgui.set_window_font_scale(2.0)
+    changed, speed_text_field = imgui.input_text("##speed_input", speed_buffer, 64)
+    if changed:
+        speed_buffer = speed_text_field
+    imgui.set_window_font_scale(1.0)
+    imgui.set_cursor_pos((1570, 705))
+    imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+    imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
+    imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0))
+    with imgui.font(font_small):
+        if imgui.button("Send", width=70, height=50):
+            try:
+                speed = float(speed_buffer.strip())
+                node.send_command("set_linear_speed", [speed])
+            except ValueError as e:
+                node.get_logger().warn(f"Invalid speed input: {e}")
+    imgui.pop_style_color(3)
+    imgui.pop_style_var()
+
+    
 def Dropdown_Menu():
     global current_item
 
@@ -459,10 +527,11 @@ def XYZVelocity_Text_Field():
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
-    draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0) 
-    draw_list.add_rect(1845,40,1885,110,color, rounding=1.0,flags=15,thickness=3)   #shifted all 320 for fullscreen
-    draw_list.add_rect(1852,31,1877,38,color, rounding=1.0,flags=3,thickness=3)  
+    #draw_list = imgui.get_window_draw_list()
+    #color = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0) 
+    #draw_list.add_rect(1845,40,1885,110,color, rounding=1.0,flags=15,thickness=3)   #shifted all 320 for fullscreen
+    #draw_list.add_rect(1852,31,1877,38,color, rounding=1.0,flags=3,thickness=3)  
+    graphs.battery_graph(1845, 40, 1885, 110, 1852, 31, 1877, 38)
     if(battery_percentage > 0.5):
         battery_color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0)
         
@@ -473,6 +542,7 @@ def batteryGraph():
     imgui.set_cursor_pos((1844, 116)); imgui.text(f"{Decimal(100*battery_percentage).quantize(Decimal('0.00'))} %")
     #draw_list.add_rect_filled(1465,31,1432+(battery_percentage*25),38,color, rounding=1.0,flags=3)
     #print(battery_voltage)
+    draw_list = imgui.get_window_draw_list()
     draw_list.add_rect_filled(1848,106,1882,(battery_progressbar),battery_color, rounding=1.0,flags=15)
 
     imgui.set_cursor_pos((1640, 30)); imgui.text(f"Voltage:          {Decimal(battery_voltage).quantize(Decimal('0.0'))} V")
@@ -586,7 +656,7 @@ def Arrows():
         )
 
 def return_to_home_button(node):
-    imgui.set_cursor_pos((1650, 600))
+    imgui.set_cursor_pos((1650, 580))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
@@ -783,8 +853,48 @@ def GuiConsoleLogger(node):
     imgui.end_child()
     imgui.end_child()
 
+def motor_speed():
+    global actuator_speeds   
+    actuator_speeds_slider_bar1 = map_value(actuator_speeds[0], 0, 1000, 106, 54)
+    actuator_speeds_slider_bar2 = map_value(actuator_speeds[1], 0, 1000, 106, 54)
+    actuator_speeds_slider_bar3 = map_value(actuator_speeds[2], 0, 1000, 106, 54)
+    actuator_speeds_slider_bar4 = map_value(actuator_speeds[3], 0, 1000, 106, 54)
+    graphs.motor_speed_graph(1300, 50, 1360, 110) 
+    graphs.motor_speed_graph(1380, 50, 1440, 110)
+    graphs.motor_speed_graph(1460, 50, 1520, 110)
+    graphs.motor_speed_graph(1540, 50, 1600, 110) 
+    standardcolor = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0)
+    color1 = standardcolor
+    color2 = standardcolor
+    color3 = standardcolor
+    color4 = standardcolor
+    if actuator_speeds[0] > 900:
+        color1 = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
+    if actuator_speeds[1] > 900:
+        color2 = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
+    if actuator_speeds[2] > 900:
+        color3 = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
+    if actuator_speeds[3] > 900:
+        color4 = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
+    draw_list = imgui.get_window_draw_list()
+    draw_list.add_rect_filled(1303,106,1357,actuator_speeds_slider_bar1,color1, rounding=1.0,flags=15)   
+    imgui.set_cursor_pos((1304, 120)); imgui.text(f"{Decimal(actuator_speeds[0]).quantize(Decimal('0.00'))}")
+    draw_list = imgui.get_window_draw_list()
+    draw_list.add_rect_filled(1383,106,1437,actuator_speeds_slider_bar2,color2, rounding=1.0,flags=15)
+    imgui.set_cursor_pos((1384, 120)); imgui.text(f"{Decimal(actuator_speeds[1]).quantize(Decimal('0.00'))}")
+    draw_list = imgui.get_window_draw_list()
+    draw_list.add_rect_filled(1463,106,1517,actuator_speeds_slider_bar3,color3, rounding=1.0,flags=15)
+    imgui.set_cursor_pos((1464, 120)); imgui.text(f"{Decimal(actuator_speeds[2]).quantize(Decimal('0.00'))}")
+    draw_list = imgui.get_window_draw_list()
+    draw_list.add_rect_filled(1543,106,1597,actuator_speeds_slider_bar4,color4, rounding=1.0,flags=15)
+    imgui.set_cursor_pos((1544, 120)); imgui.text(f"{Decimal(actuator_speeds[3]).quantize(Decimal('0.00'))}")
+    with imgui.font(font_small):
+        imgui.set_cursor_pos((1320, 20)); imgui.text("M1")
+        imgui.set_cursor_pos((1400, 20)); imgui.text("M2")
+        imgui.set_cursor_pos((1480, 20)); imgui.text("M3")
+        imgui.set_cursor_pos((1560, 20)); imgui.text("M4")
 
-
+    
 def main(args=None):
     rclpy.init()
     global font, font_large, font_small, font_for_meter
@@ -892,21 +1002,23 @@ def main(args=None):
         Arm_Button(node)
         Kill_command(node)
         Goto_field(node)
+        speed_field(node)
         Dropdown_Menu()
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
         XYZVelocity_Text_Field()
         
         batteryGraph()
+        motor_speed()
         #Arrows()   
         #takeoff_button(node)
         #land_button(node)
         return_to_home_button(node)
-        manual(node)
+        #manual(node) #to be continued
         GuiConsoleLogger(node)
-        GUIButton.button1(1450, 600, font_small, "Land", "land", node)
-        GUIButton.button2(1250, 600, font_small, "Takeoff", "takeoff", node, -1.0)
-        GUIButton.button1(1150, 30, font_small, "Set Origin", "set_origin", node)
+        GUIButton.button1(1450, 580, font_small, "Land", "land", node)
+        GUIButton.button2(1250, 580, font_small, "Takeoff", "takeoff", node, -1.0)
+        GUIButton.button1(1250, 490, font_small, "Set Origin", "set_origin", node)
         imgui.end()
 
         
