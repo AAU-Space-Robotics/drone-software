@@ -134,21 +134,28 @@ yaw = 0.0
 
 class DroneGuiNode(Node):
     def __init__(self):
+        qos = rclpy.qos.QoSProfile(
+            depth=10,
+            reliability=rclpy.qos.QoSReliabilityPolicy.BEST_EFFORT,
+            durability=rclpy.qos.QoSDurabilityPolicy.TRANSIENT_LOCAL
+        )
+        
         super().__init__('thyra_gui_node')
         self.subscription = self.create_subscription(
             DroneState,
             "thyra/out/drone_state",
             self.state_callback,
             10
+            
         )
         self.publisher_ = self.create_publisher(
            GcsHeartbeat, 
-           "/thyra/out/gcs_heartbeat",
-             2
+           "/thyra/in/gcs_heartbeat",
+           qos
         )
 
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
-        self.heartbeat_timer = self.create_timer(2.0, self.send_heartbeat)  # 2 Hz
+        self.heartbeat_timer = self.create_timer(0.5, self.send_heartbeat)  # 2 Hz
         self.counter = 0.0
         self.get_logger().info('GUI Publisher Started')
         self.imgui_logger = ImGuiLogger()
