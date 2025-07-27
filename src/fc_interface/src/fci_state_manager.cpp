@@ -83,14 +83,14 @@ StampedQuaternion FCI_StateManager::getTargetAttitude() {
 
 // ---
 
-void FCI_StateManager::setHeartbeat(const rclcpp::Time& new_data) {
+void FCI_StateManager::setHeartbeat(const GCSHeartbeat& new_data) {
     std::lock_guard<std::mutex> lock(heartbeat_mutex_);
-    heartbeat_time_ = new_data;   
+    gcs_heartbeat_ = new_data;   
 }
 
-rclcpp::Time FCI_StateManager::getHeartbeat() {
+GCSHeartbeat FCI_StateManager::getHeartbeat() {
     std::lock_guard<std::mutex> lock(heartbeat_mutex_);
-    return heartbeat_time_;   
+    return gcs_heartbeat_;   
 }
 
 // ---

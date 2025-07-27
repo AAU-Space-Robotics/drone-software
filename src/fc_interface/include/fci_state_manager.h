@@ -155,6 +155,18 @@ struct DroneCmdAck {
     uint8_t result = 0;
 };
 
+struct GCSHeartbeat {
+    // default constructor
+    GCSHeartbeat() = default;
+
+    // constructor with timestamp and nominal state
+    GCSHeartbeat(const rclcpp::Time& ts, int8_t nominal)
+        : timestamp(ts), gcs_nominal(nominal) {}
+
+    rclcpp::Time timestamp = rclcpp::Time(0, 0);
+    int8_t gcs_nominal = 0; // 0: not nominal, 1: nominal
+};
+
 // Drone state
 struct DroneState {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
@@ -226,8 +238,8 @@ public:
     void setTargetAttitude(const StampedQuaternion& new_data);
     StampedQuaternion getTargetAttitude();
 
-    void setHeartbeat(const rclcpp::Time& new_data);
-    rclcpp::Time getHeartbeat();
+    void setHeartbeat(const GCSHeartbeat& new_data);
+    GCSHeartbeat getHeartbeat();
 
     void setDroneCmdAck(const DroneCmdAck& new_data);
     DroneCmdAck getDroneCmdAck();
@@ -280,7 +292,7 @@ private:
     std::mutex actuator_speeds_mutex_;
 
     // Data structures to store state information
-    rclcpp::Time heartbeat_time_;
+    GCSHeartbeat gcs_heartbeat_;
 
     Stamped3DVector position_global_;
     Stamped3DVector origin_;
