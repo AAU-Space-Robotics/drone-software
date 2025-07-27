@@ -386,16 +386,21 @@ def Goto_field(node):
     with imgui.font(font_small):
         if imgui.button("Send",width=70, height=50):
             try:
-                x, y, z, yaw = map(float, text_buffer.strip().split())
-                #if yaw == None:
-                #    yaw = 0.0
-                node.send_command("goto", [x, y, z], yaw)
-                #else:
-                #    yaw = float(text_buffer.strip().split()[-1])
-                #    node.send_command("goto", [x, y, z], yaw)
+                try:
+                    x, y, z, yaw = map(float, text_buffer.strip().split())
+                    node.send_command("goto", [x, y, z], yaw)
+                    node.imgui_logger.info(f"Going to position: x={x}, y={y}, z={z}, yaw={yaw}")
+
+                except ValueError:
+                    x, y, z =map(float, text_buffer.strip().split())
+                    node.send_command("goto", [x, y, z], yaw)
+                    node.imgui_logger.info(f"Going to position: x={x}, y={y}, z={z}")
+            except:
+                node.get_logger().warn("Invalid input for goto, please enter x y z yaw values")
+                node.imgui_logger.warn("Invalid input for goto, please enter x y z yaw values")
+
+            
                 
-            except ValueError:
-                node.get_logger().warn("Invalid pose input for goto, please enter x y z yaw values")
     imgui.pop_style_color(3)
     imgui.pop_style_var()
 
@@ -423,8 +428,10 @@ def speed_field(node):
                 speed = float(speed_buffer.strip())
                 node.send_command("set_linear_speed", [speed])  
                 node.get_logger().info(f"Speed set to {speed}")
+                node.imgui_logger.info(f"Speed set to {speed}")
             except ValueError as e:
                 node.get_logger().warn(f"Invalid speed input: {e}")
+                node.imgui_logger.warn(f"Invalid speed input: {e}")
     imgui.pop_style_color(3)
     imgui.pop_style_var()
 
