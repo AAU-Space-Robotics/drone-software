@@ -129,7 +129,7 @@ public:
         RCLCPP_INFO(get_logger(), "Lidar offset: %.2f", lidar_offset_);
 
         // Set initial state
-        state_manager_.setHeartbeat(get_time());
+        state_manager_.setHeartbeat(GCSHeartbeat(get_time(),0));
         state_manager_.setGlobalPosition(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setOrigin(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         state_manager_.setGlobalVelocity(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
@@ -267,7 +267,7 @@ private:
 
         // --- Calculate velocity ---
         float ground_distance_velocity = 0.0f;
-        double dt_sec_vel = 0.0; // Declare dt_sec_vel in a broader scope
+        double dt_sec_vel = 0.0;
         bool valid_velocity = false;
         if (valid_readings_ >= 2) {
             rclcpp::Duration dt_vel = ground_distance_timestamps_[max_ground_distance_readings_ - 1] -
@@ -308,14 +308,12 @@ private:
         // Set the ground distance state in the state manager
         Stamped3DVector ground_distance_state(get_time(), avg_ground_distance, ground_distance_velocity, ground_distance_acceleration);
         state_manager_.setGroundDistanceState(ground_distance_state);
-        // RCLCPP_INFO(get_logger(), "Ground distance: %.2f m, Velocity: %.2f m/s, Acceleration: %.2f m/s²",
-        //             avg_ground_distance, ground_distance_velocity, ground_distance_acceleration);
     }
 
     void gcsHeartbeatCallback(const interfaces::msg::GcsHeartbeat::SharedPtr msg)
     {
         // Use the arrival time of the GCS heartbeat message as the heartbeat time
-        state_manager_.setHeartbeat(get_time());
+        state_manager_.setHeartbeat(GCSHeartbeat(get_time(), msg->gcs_nominal));
     }
     
     void safetyCheckCallback()
@@ -337,7 +335,7 @@ private:
         // Check GCS input freshness
         if (check_gcs_timeout_ && !landing_position_mode)
         {
-            gcs_stale_ = (get_time() - state_manager_.getHeartbeat()).seconds() > gcs_timeout_threshold_;
+            gcs_stale_ = (get_time() - state_manager_.getHeartbeat().timestamp).seconds() > gcs_timeout_threshold_;
             if (gcs_stale_)
             {
                 RCLCPP_WARN(get_logger(), "No GCS input received in the last %.2f seconds!", gcs_timeout_threshold_);
@@ -808,6 +806,7 @@ private:
         drone_state.flight_mode = FlightMode::LAND_POSITION;
         drone_state.trajectory_start_time_ = get_time();
         drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
+        drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
         state_manager_.setDroneState(drone_state);
     }
     }
@@ -1031,7 +1030,6 @@ private:
                 Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 Eigen::Quaterniond takeoff_quat = attitude.quaternion().normalized();
                 float target_yaw = transformations_.unwrapAngle(goal->yaw, 2*M_PI, 0);
-                float current_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(takeoff_quat).x(), 2*M_PI, 0);
                 Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
                 Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
 
