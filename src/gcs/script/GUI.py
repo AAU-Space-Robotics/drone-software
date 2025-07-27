@@ -21,7 +21,6 @@ from interfaces.action import DroneCommand
 from dataclasses import dataclass
 from decimal import Decimal
 import os
-
 import ament_index_python.packages
 
 import rclpy
@@ -37,7 +36,7 @@ import queue
 import numpy as np
 from OpenGL.GL import *
 
-
+import math
 
 class DroneData:
     position: list = (0.0, 0.0, 0.0)
@@ -441,8 +440,7 @@ def speed_field(node):
                 node.imgui_logger.warn(f"Invalid speed input: {e}")
     imgui.pop_style_color(3)
     imgui.pop_style_var()
-
-    
+ 
 def Dropdown_Menu():
     global current_item
 
@@ -601,8 +599,34 @@ def drone_visualization():
     draw_list.add_rect(450,150, 1100,560,color,rounding =10.0, flags=15,thickness=6)
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
-                                                                #flags is for rounding different corners
+                                                                
     draw_list.add_rect_filled(453,153, 1097,567,color,rounding =10.0, flags=15)
+
+def grid():
+    global position_x, position_y
+    dot_position_x = map_value(position_x, 10, -10, 449, 1107)
+    dot_position_y = map_value(position_y, 10, -10, 155, 561)
+    drawlist = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(0.2, 0.6, 0.9, 1.0)  # Light blue color
+    for x in range(467, 1100, 31):
+        drawlist.add_line(x, 155, x, 563, color, 2.0)
+    for y in range(157, 560, 20):
+        drawlist.add_line(455, y, 1095, y, color, 2.0)
+    
+    imgui.set_cursor_pos((462, 570)); imgui.text("10   9   8    7   6   5    4   3    2   1   0   -1   -2  -3  -4   -5  -6   -7  -8  -9  -10")
+    j = 10
+    for i in range(50, 470, 20):
+            imgui.set_cursor_pos((1110, 103+i)); imgui.text(f"{j}")
+            j -= 1
+
+    draw_list = imgui.get_window_draw_list()
+    draw_list.add_circle_filled(dot_position_x, dot_position_y, 4, imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0))  # Red dot at the center Center of the grid 778, 358
+    # max 449 1107 x
+    # max 155 561 y
+    
+
+
+
           
 def Arrows():
     slider_value = 0.0  # default
@@ -745,6 +769,7 @@ def start_ros(node):
     node.destroy_node()
     rclpy.shutdown()
 
+
 def start_joystick(node):
     global roll, pitch, yaw_velocity, thrust, arming_state
     global drone_kill, drone_state
@@ -884,7 +909,7 @@ def motor_speed():
     graphs.motor_speed_graph(1380, 50, 1440, 110)
     graphs.motor_speed_graph(1460, 50, 1520, 110)
     graphs.motor_speed_graph(1540, 50, 1600, 110) 
-    standardcolor = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0)
+    standardcolor = imgui.get_color_u32_rgba(0.7, 0.9, 1.0, 1.0)
     color1 = standardcolor
     color2 = standardcolor
     color3 = standardcolor
@@ -915,10 +940,35 @@ def motor_speed():
         imgui.set_cursor_pos((1480, 20)); imgui.text("M3")
         imgui.set_cursor_pos((1560, 20)); imgui.text("M4")
 
+def load_image_to_texture(image_path):
+    try:
+        # Load image using Pillow
+        img = Image.open(image_path).convert("RGBA")
+        width, height = img.size
+        pixels = img.tobytes()  # Get RGBA pixel data
+
+        # Generate OpenGL texture
+        texture_id = gl.glGenTextures(1)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
+        gl.glTexImage2D(
+            gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, width, height, 0,
+            gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, pixels
+        )
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE)
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+        
+        return texture_id, width, height
+    except Exception as e:
+        print(f"Error loading image: {e}")
+        return None, 0, 0
     
 def main(args=None):
     rclpy.init()
     global font, font_large, font_small, font_for_meter
+    global position_x, position_y, yaw_velocity
     node = DroneGuiNode()  # Create node once
     Thread(target=start_ros, args=(node,), daemon=True).start()
     Thread(target=start_joystick, args=(node,), daemon=True).start()
@@ -959,20 +1009,25 @@ def main(args=None):
     
     impl = GlfwRenderer(window)
     io = imgui.get_io()
-    global font, font_large, font_small, font_for_meter
     # Try to find the font in the ROS package share directory
     
     try:
         font_dir = os.path.join(
             ament_index_python.packages.get_package_share_directory("gcs"),
             "fonts", "source-code-pro"
+        
         )
+        image_dir = os.path.join(
+            ament_index_python.packages.get_package_share_directory("gcs"),
+            "images"
+        )
+        image_path = os.path.join(image_dir, "droneImage.png")
         font_path = os.path.join(font_dir, "SourceCodePro-Black.otf")
     except Exception as e:
         print(f"Could not find gcs package share directory: {e}")
         glfw.terminate()
         return
-    font_path = os.path.normpath(font_path)
+    #font_path = os.path.normpath(font_path)
     if not os.path.isfile(font_path):
         print(f"Font file not found: {font_path}")
         glfw.terminate()
@@ -982,30 +1037,33 @@ def main(args=None):
     font_small = io.fonts.add_font_from_file_ttf(font_path, 30)
     font_for_meter = io.fonts.add_font_from_file_ttf(font_path, 20)
     impl.refresh_font_texture()
-
-
-    texture_id = glGenTextures(1)
-    glBindTexture(GL_TEXTURE_2D, texture_id)
     
-    # Set texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-   
-    
+
+    #texture_id = glGenTextures(1)
+    #glBindTexture(GL_TEXTURE_2D, texture_id)
+    #
+    ## Set texture parameters
+    #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+    #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+    #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+
+    if image_path and os.path.exists(image_path):
+        texture_id, img_width, img_height = load_image_to_texture(image_path)
+    else:
+        print(f"Image file not found at: {image_path}")
+        texture_id, img_width, img_height = None, 0, 0
     # Main loop
     while not glfw.window_should_close(window):
         glfw.poll_events()
         impl.process_inputs()
-        clear_color = (0.0, 0.0, 0.12, 0.0)  # RGBA 
+        clear_color = (0.0, 0.0, 0.12, 0.0)  # Background color
         gl.glClearColor(*clear_color)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         imgui.new_frame()
       
         # Create UI without windowed mode
         imgui.set_next_window_position(0, 0)
-       
         imgui.set_next_window_size(screen_width, screen_height)
         imgui.begin("wtf", flags=imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_RESIZE | imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_BACKGROUND)
         imgui.set_cursor_pos((20,10))
@@ -1018,8 +1076,9 @@ def main(args=None):
         color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
         #Running different widgets
-        drone_visualization()
        
+        drone_visualization()
+        grid()
         Arm_Button(node)
         Kill_command(node)
         Goto_field(node)
@@ -1028,7 +1087,6 @@ def main(args=None):
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
         XYZVelocity_Text_Field()
-        
         batteryGraph()
         motor_speed()
         #Arrows()   
@@ -1040,6 +1098,29 @@ def main(args=None):
         GUIButton.button1(1450, 580, font_small, "Land", "land", node)
         GUIButton.button2(1250, 580, font_small, "Takeoff", "takeoff", node, -1.0)
         GUIButton.button1(1250, 490, font_small, "Set Origin", "set_origin", node)
+        if texture_id:
+            dot_position_x = map_value(position_x, 10, -10, 449, 1107)
+            dot_position_y = map_value(position_y, 10, -10, 155, 561)
+            img = Image.open(image_path).convert("RGBA")
+       
+            # Apply a dead zone to yaw_velocity to prevent sudden jumps between 6.28 and 0
+            if abs(yaw_velocity) < 0.05 or abs(yaw_velocity - 2 * math.pi) < 0.05:
+                angle = 0
+            else:
+                angle = yaw_velocity * 57.4358  # Convert 0-2π to degrees
+            rotated_img = img.rotate(angle, expand=False, center=(img.width/2, img.height/2))
+            pixels = rotated_img.tobytes()
+            gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
+            gl.glTexImage2D(
+                gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, img_width, img_height, 0,
+                gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, pixels
+            )
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            imgui.set_cursor_pos((dot_position_x-50, dot_position_y-50))  # Position the image
+            imgui.image(texture_id, 100, 100)
+        else:
+            imgui.text("Failed to load droneimage.png")
+
         imgui.end()
 
         
@@ -1050,7 +1131,8 @@ def main(args=None):
         glfw.swap_buffers(window)
     
     # Cleanup
-
+    if texture_id:
+        gl.glDeleteTextures([texture_id])
     impl.shutdown()
     glfw.terminate()
     node.destroy_node()
