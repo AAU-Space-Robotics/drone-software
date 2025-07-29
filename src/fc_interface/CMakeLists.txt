@@ -45,7 +45,7 @@ ament_python_install_package(${PROJECT_NAME})
 
 # Install Python executables (adjust as needed)
 install(PROGRAMS
-  #scripts/example.py
+  #src/dds_test.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -62,4 +62,4 @@ install(DIRECTORY
 )
 
 # Mark the package as complete
-ament_package()
+ament_package() 
