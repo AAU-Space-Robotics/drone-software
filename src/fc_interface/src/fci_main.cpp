@@ -413,8 +413,8 @@ private:
     void batteryStatusCallback(const BatteryStatus::SharedPtr msg)
     {
 
-        RCLCPP(get_logger(), "Battery status: cell_count=%d, voltage=%.2f V, remaining=%.2f%%, discharged_mah=%d, current_a=%.2f A",
-                 msg->cell_count, msg->voltage_v, msg->remaining, msg->discharged_mah, msg->current_a);
+        //RCLCPP(get_logger(), "Battery status: cell_count=%d, voltage=%.2f V, remaining=%.2f%%, discharged_mah=%d, current_a=%.2f A",
+          //       msg->cell_count, msg->voltage_v, msg->remaining, msg->discharged_mah, msg->current_a);
 
         BatteryState battery_state;
         battery_state.timestamp = get_time();

@@ -29,7 +29,7 @@ from interfaces.msg import ManualControlInput
 import pygame
 from datetime import datetime
 from collections import deque
-
+import time
 import cv2
 import threading
 import queue
@@ -71,6 +71,7 @@ class ImGuiLogger:
 
 class GUIButton():
     def button1(x, y, font, label, command, node):
+        
         imgui.set_cursor_pos((x, y))
         imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
         imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
@@ -78,7 +79,8 @@ class GUIButton():
         imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0)) 
         with imgui.font(font):
             if imgui.button(label, width=150, height=50):
-                node.send_command(command, [-1.0])  
+                node.send_command(command, [-1.0])
+                
         imgui.pop_style_color(3)
         imgui.pop_style_var() 
     def button2(x, y, font, label, command, node, coordinates):
@@ -130,6 +132,11 @@ GUI_console_logs = [""]
 GUI_Heartbeat = 0
 actuator_speeds = [0, 0, 0, 0] # Placeholder for actuator speeds
 yaw = 0.0
+mouse_x_buffer, mouse_y_buffer = 0,0
+effect = False
+effect_begin = False
+duration = 0.3 
+start_time = None
 
 class DroneGuiNode(Node):
     def __init__(self):
@@ -264,7 +271,7 @@ class DroneGuiNode(Node):
             goal_msg.yaw = yaw
         log_msg = f'Sending command: {command_type}, target_pose: {target_pose} yaw: {yaw}'
         self.get_logger().info(log_msg)
-        self.imgui_logger.info(log_msg)
+        #self.imgui_logger.info(log_msg)
         future = self._action_client.send_goal_async(
             goal_msg,
             feedback_callback=self.feedback_callback
@@ -371,10 +378,10 @@ def Kill_command(node):
 def Goto_field(node):
     global text_buffer, yaw
     text_field = ""
-    imgui.set_cursor_pos((1250,770)) #moved 100 down y-axis for fullscreen
+    imgui.set_cursor_pos((1270,820)) #moved 100 down y-axis for fullscreen
     with imgui.font(font):
         imgui.text("Target Pose (x y -z yaw):")
-    imgui.set_cursor_pos((1250,835))
+    imgui.set_cursor_pos((1270,885))
     imgui.set_next_item_width(300)
     imgui.set_window_font_scale(2.0) 
     changed, text_field= imgui.input_text("##goto_input", text_buffer, 64)
@@ -384,7 +391,7 @@ def Goto_field(node):
  
   
 
-    imgui.set_cursor_pos((1570,825))
+    imgui.set_cursor_pos((1590,875))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0,0.8,0.0))
@@ -395,12 +402,12 @@ def Goto_field(node):
                 try:
                     x, y, z, yaw = map(float, text_buffer.strip().split())
                     node.send_command("goto", [x, y, z], yaw)
-                    node.imgui_logger.info(f"Going to position: x={x}, y={y}, z={z}, yaw={yaw}")
+                    node.imgui_logger.info(f"Going to position: x = {x}, y = {y}, z = {z}, yaw = {yaw}")
 
                 except ValueError:
                     x, y, z =map(float, text_buffer.strip().split())
                     node.send_command("goto", [x, y, z], yaw)
-                    node.imgui_logger.info(f"Going to position: x={x}, y={y}, z={z}")
+                    node.imgui_logger.info(f"Going to position: x = {x}, y = {y}, z = {z}")
             except:
                 node.get_logger().warn("Invalid input for goto, please enter x y z yaw values")
                 node.imgui_logger.warn("Invalid input for goto, please enter x y z yaw values")
@@ -413,17 +420,17 @@ def Goto_field(node):
 def speed_field(node):
     global speed_buffer
     speed_text_field = ""
-    imgui.set_cursor_pos((1250, 650))  
+    imgui.set_cursor_pos((1270, 700))  
     with imgui.font(font):
         imgui.text("Speed (m/s):")
-    imgui.set_cursor_pos((1250, 715))
+    imgui.set_cursor_pos((1270, 765))
     imgui.set_next_item_width(300)
     imgui.set_window_font_scale(2.0)
     changed, speed_text_field = imgui.input_text("##speed_input", speed_buffer, 64)
     if changed:
         speed_buffer = speed_text_field
     imgui.set_window_font_scale(1.0)
-    imgui.set_cursor_pos((1570, 705))
+    imgui.set_cursor_pos((1590, 755))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
@@ -480,9 +487,10 @@ def XYZ_Text_Field(msg):
         imgui.set_cursor_pos((313,93)); imgui.text(f"{Decimal(target_position_x).quantize(Decimal('0.000'))}")
         imgui.set_cursor_pos((313,143)); imgui.text(f"{Decimal(target_position_y).quantize(Decimal('0.000'))}")
         imgui.set_cursor_pos((313,193)); imgui.text(f"{(Decimal(target_position_z).quantize(Decimal('0.000')))}")
-    with imgui.font(font_for_meter):
-        imgui.set_cursor_pos((240,240)); imgui.text("*measure in meters")
-        imgui.set_cursor_pos((405,42)); imgui.text("*")
+        imgui.set_cursor_pos((23, 245)); imgui.text(f"[m]")
+    #with imgui.font(font_for_meter):
+    #    imgui.set_cursor_pos((240,240)); imgui.text("*measure in meters")
+    #    imgui.set_cursor_pos((405,42)); imgui.text("*")
 
             # Ending point of the line (x, y)
         draw_list = imgui.get_window_draw_list()
@@ -496,24 +504,7 @@ def XYZ_Text_Field(msg):
         end_x, end_y = 287, 235      # Ending point of the line (x, y)
         color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
-    imgui.set_cursor_pos((23, 265)); imgui.text(f" Position Timestamp {position_timestamp}")
-    
-def RPY_Text_Field():
-    
-    draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
-    draw_list.add_rect_filled(20,565, 250,710,color,rounding =10.0, flags=10)
-    thrust = -(int(test_slider))
-
-    with imgui.font(font_small):
-        imgui.set_cursor_pos((23,525)); imgui.text("Orientation:")
-    with imgui.font(font_small):
-        imgui.set_cursor_pos((30,570)); imgui.text("Roll  = ")
-        imgui.set_cursor_pos((30,620)); imgui.text("Pitch = ")
-        imgui.set_cursor_pos((30,670)); imgui.text("Yaw   = ")
-        imgui.set_cursor_pos((150,568)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((150,618)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((150,668)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
+    imgui.set_cursor_pos((103, 255)); imgui.text(f" TS: {position_timestamp}")
 
 def XYZVelocity_Text_Field():
 
@@ -521,28 +512,38 @@ def XYZVelocity_Text_Field():
 
         draw_list = imgui.get_window_draw_list()
         color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
-     
-        draw_list.add_rect_filled(20,335, 250,480,color,rounding =10.0, flags=10)
+         
+        # Move up y axis by 50
+        draw_list.add_rect_filled(20, 335, 250, 480, color, rounding=10.0, flags=10)
 
         with imgui.font(font_small):
-            imgui.set_cursor_pos((23,295)); imgui.text("Velocity:")
-            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.0, 0.0, 0.9)
-            imgui.set_cursor_pos((30,340)); imgui.text("X = ")
-            imgui.set_cursor_pos((100,338)); imgui.text(f"{Decimal(velocity_x).quantize(Decimal('0.000'))}")
-            imgui.set_cursor_pos((200,338)); imgui.text("m/s")
-            imgui.pop_style_color()
-            imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 1.0, 0.0, 0.9)
-            imgui.set_cursor_pos((30,395)); imgui.text("Y = ")
-            imgui.set_cursor_pos((100,393)); imgui.text(f"{Decimal(velocity_y).quantize(Decimal('0.000'))}")
-            imgui.set_cursor_pos((200,393)); imgui.text("m/s")
-            imgui.pop_style_color()
-            imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.5, 0.9)
-            imgui.set_cursor_pos((30,445)); imgui.text("Z = ")
-            imgui.set_cursor_pos((100,443)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
-            imgui.set_cursor_pos((200,443)); imgui.text("m/s")
-            imgui.pop_style_color()
-        imgui.set_cursor_pos((23, 490)); imgui.text(f" Velocity Timestamp {velocity_timestamp}")
+            imgui.set_cursor_pos((23, 295)); imgui.text("Velocity:")
+            imgui.set_cursor_pos((60, 340)); imgui.text("X   = ")
+            imgui.set_cursor_pos((150, 338)); imgui.text(f"{Decimal(velocity_x).quantize(Decimal('0.000'))}")
+            imgui.set_cursor_pos((60, 390)); imgui.text("Y   = ")
+            imgui.set_cursor_pos((150, 388)); imgui.text(f"{Decimal(velocity_y).quantize(Decimal('0.000'))}")
+            imgui.set_cursor_pos((60, 440)); imgui.text("Z   = ")
+            imgui.set_cursor_pos((150, 438)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
+            imgui.set_cursor_pos((23, 490)); imgui.text(f"[m/s]")
+        imgui.set_cursor_pos((103, 500)); imgui.text(f" TS: {velocity_timestamp}")
     
+def RPY_Text_Field():
+    
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
+    # Move up y axis by 50
+    draw_list.add_rect_filled(20, 580, 250, 725, color, rounding=10.0, flags=10)
+
+    with imgui.font(font_small):
+        imgui.set_cursor_pos((23, 540)); imgui.text("Orientation:")
+        imgui.set_cursor_pos((30, 590)); imgui.text("Roll  = ")
+        imgui.set_cursor_pos((150, 588)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((30, 640)); imgui.text("Pitch = ")
+        imgui.set_cursor_pos((150, 638)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((30, 690)); imgui.text("Yaw   = ")
+        imgui.set_cursor_pos((150, 688)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((23, 735)); imgui.text(f"[r]")
+
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
@@ -559,8 +560,7 @@ def batteryGraph():
     else:
         battery_color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
     imgui.set_cursor_pos((1844, 116)); imgui.text(f"{Decimal(100*battery_percentage).quantize(Decimal('0.00'))} %")
-    #draw_list.add_rect_filled(1465,31,1432+(battery_percentage*25),38,color, rounding=1.0,flags=3)
-    #print(battery_voltage)
+
     draw_list = imgui.get_window_draw_list()
     draw_list.add_rect_filled(1848,106,1882,(battery_progressbar),battery_color, rounding=1.0,flags=15)
 
@@ -587,7 +587,7 @@ def batteryGraph():
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
     draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
 
-    imgui.set_cursor_pos((1620, 175)); imgui.text(f" Battery Timestamp  {battery_state_timestamp}") 
+    imgui.set_cursor_pos((1720, 175)); imgui.text(f" TS:  {battery_state_timestamp}") 
 
 def map_value(value, in_min, in_max, out_min, out_max):
     return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -596,38 +596,35 @@ def drone_visualization():
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
                                                                 #flags is for rounding different corners
-    draw_list.add_rect(450,150, 1100,560,color,rounding =10.0, flags=15,thickness=6)
+    draw_list.add_rect(450,140, 1260,620,color,rounding =10.0, flags=15,thickness=6) #earlier 450 150 1100 560 Scale diff = x1.145 y1.101 (only one)
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
                                                                 
-    draw_list.add_rect_filled(453,153, 1097,567,color,rounding =10.0, flags=15)
+    draw_list.add_rect_filled(453,143, 1256,624,color,rounding =10.0, flags=15) #e 453 153 1097 567
 
 def grid():
     global position_x, position_y
-    dot_position_x = map_value(position_x, 10, -10, 449, 1107)
-    dot_position_y = map_value(position_y, 10, -10, 155, 561)
+    dot_position_x = map_value(position_x, 10, -10, 467, 1228) #e 1107
+    dot_position_y = map_value(position_y, 10, -10, 158, 599) #e 155 561
     drawlist = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.2, 0.6, 0.9, 1.0)  # Light blue color
-    for x in range(467, 1100, 31):
-        drawlist.add_line(x, 155, x, 563, color, 2.0)
-    for y in range(157, 560, 20):
-        drawlist.add_line(455, y, 1095, y, color, 2.0)
-    
-    imgui.set_cursor_pos((462, 570)); imgui.text("10   9   8    7   6   5    4   3    2   1   0   -1   -2  -3  -4   -5  -6   -7  -8  -9  -10")
-    j = 10
-    for i in range(50, 470, 20):
-            imgui.set_cursor_pos((1110, 103+i)); imgui.text(f"{j}")
-            j -= 1
+    color = imgui.get_color_u32_rgba(0.2, 0.6, 0.9, 0.8)  # Light blue color
+    for x in range(467, 1256, 38):
+        drawlist.add_line(x, 145, x, 620, color, 1.5) #e 145 563
+    for y in range(157, 618, 22): #e 157 560 20
+        drawlist.add_line(455, y, 1254, y, color, 1.5) #e 455 1095
 
+    imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.0, 1.0)
+    imgui.set_cursor_pos((462, 610)); imgui.text("10   9    8     7    6     5     4    3     2    1    0    -1    -2   -3   -4   -5    -6    -7    -8    -9   -10") #e 462 570
+    j = 10
+    for i in range(40, 482, 22): #e 50 470
+            imgui.set_cursor_pos((1235, 105+i)); imgui.text(f"{j}")
+            j -= 1
+    imgui.pop_style_color()
     draw_list = imgui.get_window_draw_list()
     draw_list.add_circle_filled(dot_position_x, dot_position_y, 4, imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0))  # Red dot at the center Center of the grid 778, 358
     # max 449 1107 x
     # max 155 561 y
-    
-
-
-
-          
+              
 def Arrows():
     slider_value = 0.0  # default
 
@@ -701,7 +698,7 @@ def Arrows():
         )
 
 def return_to_home_button(node):
-    imgui.set_cursor_pos((1650, 580))
+    imgui.set_cursor_pos((684, 635))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
@@ -769,7 +766,6 @@ def start_ros(node):
     node.destroy_node()
     rclpy.shutdown()
 
-
 def start_joystick(node):
     global roll, pitch, yaw_velocity, thrust, arming_state
     global drone_kill, drone_state
@@ -832,10 +828,10 @@ def GuiConsoleLogger(node):
     global font_small
     
     # Position the logger window in the bottom right area
-    imgui.set_cursor_pos((450, 600))
+    imgui.set_cursor_pos((450, 690))
     
     # Create a child window for the logger
-    imgui.begin_child("LoggerWindow", 750, 280, border=True)
+    imgui.begin_child("LoggerWindow", 810, 240, border=True)
     
     # Header
     with imgui.font(font_small):
@@ -964,7 +960,61 @@ def load_image_to_texture(image_path):
     except Exception as e:
         print(f"Error loading image: {e}")
         return None, 0, 0
-    
+
+def mouse_placement():
+    global mouse_x_buffer, mouse_y_buffer
+    mouse_x, mouse_y = imgui.get_mouse_pos()
+    if 449 < mouse_x < 1260 and 155 < mouse_y < 620:  
+        if imgui.is_mouse_clicked(imgui.MOUSE_BUTTON_LEFT):
+            mouse_x_buffer = mouse_x
+            mouse_y_buffer = mouse_y
+            print(f"{mouse_x} and {mouse_y} ")
+
+def send_map_pos(node):
+    global mouse_x_buffer, mouse_y_buffer, yaw, position_z
+    global effect, effect_begin, duration, start_time
+
+   
+    mouse_placement()
+    mouse_x, mouse_y = imgui.get_mouse_pos()
+    if 449 < mouse_x < 1260 and 155 < mouse_y < 620:  
+        if imgui.is_mouse_clicked(imgui.MOUSE_BUTTON_LEFT):
+            mouse_x_buffer = mouse_x
+            mouse_y_buffer = mouse_y
+            picked_x = map_value(mouse_x_buffer, 468, 1228, 10, -10) #e 
+            picked_y = map_value(mouse_y_buffer, 159, 598, 10, -10)
+            if imgui.is_mouse_clicked(imgui.MOUSE_BUTTON_LEFT):
+                try:
+                    x, y , z = float(picked_x), float(picked_y), position_z
+                    node.send_command("goto", [x, y, z], yaw)
+                    node.imgui_logger.info(f"Going to position: x = {Decimal(x).quantize(Decimal('0.000'))}, y = {Decimal(y).quantize(Decimal('0.000'))}, z = {Decimal(z).quantize(Decimal('0.000'))}")
+                    effect = True
+                except ValueError:
+                    pass
+    draw_list = imgui.get_window_draw_list()
+    draw_list.add_circle_filled(mouse_x_buffer, mouse_y_buffer, 4, imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0))
+
+    if effect:
+        start_time = time.time()
+        effect_begin = True
+        effect = False
+
+    if effect_begin and start_time is not None:
+        elapsed = time.time() - start_time
+        t = min(elapsed / duration, 1.0)  # Clamp to [0,1]
+        ## Interpolate radius from 30 to 12
+        current_radius = 60 - (60 - 12) * (t)
+
+        ## Draw shrinking circle
+        draw_list.add_circle(mouse_x_buffer, mouse_y_buffer,current_radius,imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0),thickness=2.0)
+
+    # Stop effect once finished
+        if t >= 1.0:
+            effect_begin = False
+            start_time = None
+    else:
+        draw_list.add_circle(mouse_x_buffer, mouse_y_buffer, 12,imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0), thickness=2.0 )
+
 def main(args=None):
     rclpy.init()
     global font, font_large, font_small, font_for_meter
@@ -1068,7 +1118,7 @@ def main(args=None):
         imgui.begin("wtf", flags=imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_RESIZE | imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_BACKGROUND)
         imgui.set_cursor_pos((20,10))
         with imgui.font(font_small):
-            imgui.text("THYRA state monitor")
+            imgui.text("THYRA GCS")
         #Creating a line for seperation
         draw_list = imgui.get_window_draw_list()
         start_x, start_y = 430, 0  # Starting point of the line (x, y)
@@ -1095,12 +1145,16 @@ def main(args=None):
         return_to_home_button(node)
         #manual(node) #to be continued
         GuiConsoleLogger(node)
-        GUIButton.button1(1450, 580, font_small, "Land", "land", node)
-        GUIButton.button2(1250, 580, font_small, "Takeoff", "takeoff", node, -1.0)
-        GUIButton.button1(1250, 490, font_small, "Set Origin", "set_origin", node)
+        GUIButton.button1(876, 635, font_small, "Land", "land", node)
+        GUIButton.button2( 492, 635, font_small, "Takeoff", "takeoff", node, -1.0)
+        GUIButton.button1(1068, 635, font_small, "Set Origin", "set_origin", node)
+
+        send_map_pos(node)
+
+        #Todo move to function
         if texture_id:
-            dot_position_x = map_value(position_x, 10, -10, 449, 1107)
-            dot_position_y = map_value(position_y, 10, -10, 155, 561)
+            dot_position_x = map_value(position_x, 10, -10, 467, 1228) #e 1107
+            dot_position_y = map_value(position_y, 10, -10, 158, 599)
             img = Image.open(image_path).convert("RGBA")
        
             # Apply a dead zone to yaw_velocity to prevent sudden jumps between 6.28 and 0
@@ -1116,8 +1170,8 @@ def main(args=None):
                 gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, pixels
             )
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            imgui.set_cursor_pos((dot_position_x-50, dot_position_y-50))  # Position the image
-            imgui.image(texture_id, 100, 100)
+            imgui.set_cursor_pos((dot_position_x-60, dot_position_y-60))  # Position the image
+            imgui.image(texture_id, 120, 120)
         else:
             imgui.text("Failed to load droneimage.png")
 
