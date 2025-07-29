@@ -17,3 +17,4 @@ src/px4_msgs
 src/px4_msgs_thyra
 imgui.ini
 src/realsense-ros
+src/matlab_msg_gen
