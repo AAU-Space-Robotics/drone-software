@@ -224,6 +224,6 @@ src/modules/simulation/simulator_mavlink/sitl_targets_gazebo-classic.cmake
 
 Tools/simulation/gz/worlds/erc.sdf
 
-
-
+https://github.com/IntelRealSense/realsense-ros
+ros2 run realsense2_camera realsense2_camera_node
 
