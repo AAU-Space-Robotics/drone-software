@@ -227,3 +227,6 @@ Tools/simulation/gz/worlds/erc.sdf
 https://github.com/IntelRealSense/realsense-ros
 ros2 run realsense2_camera realsense2_camera_node
 
+
+
+colcon build --cmake-args -DBUILD_PROBE_PERCEPTION=ON

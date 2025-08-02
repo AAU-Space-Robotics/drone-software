@@ -49,6 +49,8 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
   GIT_TAG        master
 )
+# Disable testing for tinyxml2
+set(BUILD_TESTING OFF CACHE BOOL "Disable tinyxml2 tests" FORCE)
 FetchContent_MakeAvailable(tinyxml2)
 
 # Ensure tinyxml2 is built with -fPIC
