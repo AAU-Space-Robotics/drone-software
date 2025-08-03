@@ -31,11 +31,10 @@ from datetime import datetime
 from collections import deque
 import time
 import cv2
-import threading
 import queue
 import numpy as np
 from OpenGL.GL import *
-
+import re
 import math
 
 class DroneData:
@@ -94,6 +93,24 @@ class GUIButton():
                 node.send_command(command, [coordinates])  
         imgui.pop_style_color(3)
         imgui.pop_style_var() 
+    def button_Plan(x, y, font, label):
+        state = False
+        imgui.set_window_font_scale(0.75)
+        imgui.set_cursor_pos((x, y))
+        imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+        imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
+        imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
+        imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0)) 
+        with imgui.font(font):
+            if imgui.button(label, width=120, height=40):
+                state = True
+                
+        imgui.pop_style_color(3)
+        imgui.pop_style_var() 
+        imgui.set_window_font_scale(1.0)
+        return state
+
+
 class graphs():
     def motor_speed_graph(start_x, width, start_y, height):
         color = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0)
@@ -109,7 +126,7 @@ drone_data = DroneData()
 
 button_color = (0.0,0.5,0.0)
 killbutton_color = (0.8,0.0,0.0)
-text_buffer = ""
+text_buffer, text_buffer_plan = "", ""
 speed_buffer = ""
 current_item = 0
 position_x, position_y, position_z = 0, 0, 0
@@ -133,10 +150,19 @@ GUI_Heartbeat = 0
 actuator_speeds = [0, 0, 0, 0] # Placeholder for actuator speeds
 yaw = 0.0
 mouse_x_buffer, mouse_y_buffer = 0,0
-effect = False
-effect_begin = False
-duration = 0.3 
+effect1, effect2 = False, False
+effect_begin1, effect_begin2, begin_execute = False, False, False
+orange_effect_going = [0,0,0,0,0]
+duration, plan_duration = 0.3, 5 
 start_time = None
+change_x, change_y_1, change_y_2 = 0,0, 0
+permant_y, card_y_buffer = 190, 190
+flight_plan = [0,0,0,0,0,0,0,0,0,0]
+# Initialize a 2D array for flight_plan_coord with 10 rows and 4 columns, all set to 0.0
+flight_plan_coord = [[""] for _ in range(10)]
+flight_plan_numb, execute_route_numb, visual_card_numb = 0 , 0, 0
+current_step, tep_start_time = 0, 0
+command_sent, waiting_for_completion = False, False
 
 class DroneGuiNode(Node):
     def __init__(self):
@@ -972,7 +998,7 @@ def mouse_placement():
 
 def send_map_pos(node):
     global mouse_x_buffer, mouse_y_buffer, yaw, position_z
-    global effect, effect_begin, duration, start_time
+    global effect1
 
    
     mouse_placement()
@@ -988,33 +1014,341 @@ def send_map_pos(node):
                     x, y , z = float(picked_x), float(picked_y), position_z
                     node.send_command("goto", [x, y, z], yaw)
                     node.imgui_logger.info(f"Going to position: x = {Decimal(x).quantize(Decimal('0.000'))}, y = {Decimal(y).quantize(Decimal('0.000'))}, z = {Decimal(z).quantize(Decimal('0.000'))}")
-                    effect = True
+                    effect1 = True
                 except ValueError:
                     pass
     draw_list = imgui.get_window_draw_list()
     draw_list.add_circle_filled(mouse_x_buffer, mouse_y_buffer, 4, imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0))
+    effect_class.circle_effect_green(imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0),mouse_x_buffer,mouse_y_buffer)
+    
 
-    if effect:
-        start_time = time.time()
-        effect_begin = True
-        effect = False
+def route_planner(node):
+    global change_y_1, change_y_2, permant_y, card_y_buffer
+    global flight_plan, text_buffer_plan, flight_plan_numb, flight_plan_coord
+    global effect2, execute_route_numb
+    text_field = ""
+    mouse_x, mouse_y = imgui.get_mouse_pos()
+    imgui.set_cursor_pos((1690, 260))
+    imgui.set_window_font_scale(2.0)
+    imgui.set_next_item_width(180)
+    changed, text_field= imgui.input_text("##goto_input_plan", text_buffer_plan, 20)
+    if changed:
+        text_buffer_plan = text_field
+    imgui.set_window_font_scale(1.0) 
+    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
+    draw_list = imgui.get_window_draw_list()
+    draw_list.add_rect_filled(1285,140, 1556, 624,color,rounding =10.0, flags=15) #e 1505
+    draw_list.add_line(1285,180,1556, 180,imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9), 5)
 
-    if effect_begin and start_time is not None:
-        elapsed = time.time() - start_time
-        t = min(elapsed / duration, 1.0)  # Clamp to [0,1]
-        ## Interpolate radius from 30 to 12
-        current_radius = 60 - (60 - 12) * (t)
+    with imgui.font(font_small):
+        imgui.set_cursor_pos((1338,145)); imgui.text("Flight Plan")
 
-        ## Draw shrinking circle
-        draw_list.add_circle(mouse_x_buffer, mouse_y_buffer,current_radius,imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0),thickness=2.0)
 
-    # Stop effect once finished
-        if t >= 1.0:
-            effect_begin = False
-            start_time = None
+    if GUIButton.button_Plan(1562, 316, font_small, "Takeoff##plan1"):
+        
+        for i, val in enumerate(flight_plan):
+            if val == 0:
+                flight_plan[i] = 1
+                flight_plan_numb += 1
+                break
+    if GUIButton.button_Plan(1562, 376, font_small, "Land##plan2"):
+        
+        for i, val in enumerate(flight_plan):
+            if val == 0:
+                flight_plan[i] = 2
+                flight_plan_numb += 1
+                break
+    if GUIButton.button_Plan(1562, 256, font_small, "Goto##plan3"):
+        
+        for i, val in enumerate(flight_plan):
+            if val == 0:
+                flight_plan[i] = 3
+                try:
+                    flight_plan_coord[flight_plan_numb] = [text_buffer_plan]
+                    print(flight_plan_numb)
+                    print(flight_plan_coord[flight_plan_numb][0])
+                    flight_plan_numb += 1
+                    
+                    text_buffer_plan = ""
+                    text_field = ""
+                except ValueError:
+                     node.imgui_logger.warn("Invalid input for goto, please enter x y z yaw values")
+                
+                break
+    if GUIButton.button_Plan(1436,635,font_small, "Clear##plan4"):
+        for i in range(6):
+            flight_plan[i] = 0
+            flight_plan_numb = 0
+            flight_plan_coord[i][0] = ""
+            execute_route_numb = 0
+   
+    
+    #print(f"First command = {flight_plan[0]} and second = {flight_plan[1]} and so forth = {flight_plan[2]} + {flight_plan[3]}")
+    #if imgui.is_mouse_down(imgui.MOUSE_BUTTON_LEFT):
+    #    if 1297 < mouse_x < 1565 and 190 < mouse_y < 624:  
+    #        card_y_buffer = mouse_y -25
+    #        #change_y_1 = mouse_y -40
+    #        #change_y_2 = mouse_y + 40
+    #        
+    #        permant_y = card_y_buffer
+    #
+    #else:
+    #    permant_y = card_y_buffer
+            
+    #plan_card.goto_card(1287, 400, node)
+def is_T_close(target_pos_x, target_pos_y):
+    global position_x, permant_y, position_z
+    pos_vector_length = math.sqrt(math.pow(position_x, 2)+ math.pow(position_y,2))
+    t_vector_length = math.sqrt(math.pow(target_pos_x, 2)+ math.pow(target_pos_y,2))
+    e = t_vector_length - pos_vector_length
+    if e <= 0.5:
+        return True
     else:
-        draw_list.add_circle(mouse_x_buffer, mouse_y_buffer, 12,imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0), thickness=2.0 )
+        return False
+    
+def execute_route(node):
+    global flight_plan, flight_plan_coord
+    global start_time, plan_duration, begin_execute
+    global execute_route_numb
+    global position_x, position_y, position_z
+    global current_step, step_start_time, command_sent, waiting_for_completion
 
+    if GUIButton.button_Plan(1285, 635, font_small, "Excecute##plan4"):
+        begin_execute = True
+        current_step = 0
+        step_start_time = 0
+        command_sent = False
+        waiting_for_completion = False
+        
+        print(f"First command = {flight_plan[0]} and second = {flight_plan[1]} and third = {flight_plan[2]} and fourth = {flight_plan[3]} and fifth = {flight_plan[4]} and sixth = {flight_plan[5]}")
+    if begin_execute and current_step < len(flight_plan) and flight_plan[current_step] != 0:
+        current_time = time.time()
+        
+        # Initialize step timing if we just started this step
+        if step_start_time == 0:
+            step_start_time = current_time
+            command_sent = False
+            waiting_for_completion = False
+        
+        elapsed = current_time - step_start_time
+       
+        
+        match flight_plan[current_step]:
+            case 1:  
+                if not command_sent:
+                    node.send_command("arm")
+                    command_sent = True
+                    #print("Armed drone")
+                
+              
+                if elapsed >= plan_duration - 1 and not waiting_for_completion:
+                    node.send_command("takeoff", [-1.0])
+                    waiting_for_completion = True
+                    #print("Takeoff command sent")
+                
+         
+                if waiting_for_completion and elapsed >= plan_duration + 5:
+                    #print("Takeoff completed, moving to next step")
+                    current_step += 1
+                    step_start_time = 0
+                    execute_route_numb += 1
+            
+            case 2:  
+                if not command_sent:
+                    #print("Starting landing sequence")
+                    node.send_command("land", [-1.0])
+                    command_sent = True
+                
+   
+                if elapsed >= 1.0:  
+                    #print("Landing command completed")
+                    current_step += 1
+                    step_start_time = 0
+            
+            case 3:  
+                if not command_sent:
+                    try:
+                        print(execute_route_numb)
+                        print(f"here i am {flight_plan_coord[execute_route_numb][0]}")
+                        x, y, z, yaw = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
+                        print(f"x = {x} y = {y} z = {z} and yaw = {yaw}")
+                        node.send_command("goto", [x, y, z], yaw)
+                        node.imgui_logger.info(f"Going to position: x = {x}, y = {y}, z = {z}, yaw = {yaw}")
+                        command_sent = True
+                        waiting_for_completion = True
+                    except ValueError:
+                        node.get_logger().warn("Invalid input for goto, please enter x y z yaw values")
+                        node.imgui_logger.warn("Invalid input for goto, please enter x y z yaw values")
+                        current_step += 1  #may need to change, skips step
+                        step_start_time = 0
+                        
+                
+                if waiting_for_completion:
+                    try:
+                        x, y, z, yaw = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
+                        if is_T_close(x, y):
+                            #print("Reached target position")
+                            execute_route_numb += 1
+                            current_step += 1
+                            step_start_time = 0
+                        elif elapsed > 30.0:  
+                            #print("Timeout waiting to reach position, moving to next step")
+                            execute_route_numb += 1
+                            current_step += 1
+                            step_start_time = 0
+                    except (ValueError, IndexError):
+                        current_step += 1
+                        step_start_time = 0
+        
+    
+    elif begin_execute and (current_step >= len(flight_plan) or flight_plan[current_step] == 0):
+
+        #print("Flight plan execution completed")
+        begin_execute = False
+        current_step = 0
+        step_start_time = 0
+        command_sent = False
+        waiting_for_completion = False
+    
+    # Always display the plan cards
+    plan_card.goto_card(1288, 190, node, flight_plan[0], flight_plan_coord[0], 0)
+    plan_card.goto_card(1288, 250, node, flight_plan[1], flight_plan_coord[1], 1)
+    plan_card.goto_card(1288, 310, node, flight_plan[2], flight_plan_coord[2], 2)
+    plan_card.goto_card(1288, 370, node, flight_plan[3], flight_plan_coord[3], 3)
+    plan_card.goto_card(1288, 430, node, flight_plan[4], flight_plan_coord[4], 4)
+        
+class effect_class:
+    def circle_effect_green(color, pos_x, pos_y):
+        global effect1,effect_begin1, duration, start_time
+        t = 0
+        draw_list = imgui.get_window_draw_list()
+        if effect1:
+            start_time = time.time()
+            effect_begin1 = True
+            effect1 = False
+        if effect_begin1 and start_time is not None:
+            elapsed = time.time() - start_time
+            t = min(elapsed / duration, 1.0)  # Clamp to [0,1]
+            ## Interpolate radius from 30 to 12
+            current_radius = 60 - (60 - 12) * (t)
+            ## Draw shrinking circle
+            draw_list.add_circle(pos_x, pos_y,current_radius,color,thickness=2.0)
+         # Stop effect once finished
+        if t >= 1.0:
+            effect_begin1 = False
+            start_time = None
+        else:
+            draw_list.add_circle(pos_x, pos_y, 12,color, thickness=2.0 ) 
+    def circle_effect_orange(color, pos_x, pos_y, numb):
+        global effect2, effect_begin2, duration, start_time
+        global orange_effect_going
+        
+        t = 0
+        draw_list = imgui.get_window_draw_list()
+        if effect2:
+            start_time = time.time()
+            effect_begin2 = True
+            effect2 = False
+        if effect_begin2 and start_time is not None:
+            elapsed = time.time() - start_time
+            t = min(elapsed / duration, 1.0)  # Clamp to [0,1]
+            ## Interpolate radius from 30 to 12
+            current_radius = 60 - (60 - 12) * (t)
+            ## Draw shrinking circle
+            draw_list.add_circle(pos_x, pos_y,current_radius,color,thickness=2.0)
+         # Stop effect once finished
+        if t >= 1.0:
+            effect_begin2 = False
+            start_time = None
+            orange_effect_going[numb] = 2
+        
+           
+        
+
+class plan_card:
+    def goto_card(card_pos_x, card_pos_y, node, type,text, numb):
+        global flight_plan_numb, flight_plan_coord, execute_route_numb
+        global effect2, effect_begin2, orange_effect_going
+        match type:
+            case 0:
+                color1 = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
+                color2 = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
+                draw_list = imgui.get_window_draw_list()
+                draw_list.add_rect_filled(card_pos_x,card_pos_y, card_pos_x + 265, card_pos_y+50,color1,rounding =10.0, flags=15)
+                draw_list.add_rect_filled(card_pos_x+2,card_pos_y+2, card_pos_x + 263, card_pos_y+48,color2,rounding =10.0, flags=15)
+            case 1:
+                color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
+                draw_list = imgui.get_window_draw_list()
+                draw_list.add_rect_filled(card_pos_x,card_pos_y, card_pos_x + 265, card_pos_y+50,color,rounding =10.0, flags=15)
+                imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.0, 1.0)
+                imgui.set_cursor_pos((card_pos_x+35,card_pos_y+20)); imgui.text(f"Takeoff")
+
+                with imgui.font(font):
+
+                    imgui.set_cursor_pos((card_pos_x+230,card_pos_y-6)); imgui.text("-")
+                    imgui.set_cursor_pos((card_pos_x+230,card_pos_y+4)); imgui.text("-")
+                    imgui.set_cursor_pos((card_pos_x+230,card_pos_y+14)); imgui.text("-")
+
+                imgui.pop_style_color()
+            case 2:
+                color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
+                draw_list = imgui.get_window_draw_list()
+                draw_list.add_rect_filled(card_pos_x,card_pos_y, card_pos_x + 265, card_pos_y+50,color,rounding =10.0, flags=15)
+                imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.0, 1.0)
+                imgui.set_cursor_pos((card_pos_x+35,card_pos_y+20)); imgui.text(f"Land")
+
+                with imgui.font(font):
+
+                    imgui.set_cursor_pos((card_pos_x+230,card_pos_y-6)); imgui.text("-")
+                    imgui.set_cursor_pos((card_pos_x+230,card_pos_y+4)); imgui.text("-")
+                    imgui.set_cursor_pos((card_pos_x+230,card_pos_y+14)); imgui.text("-")
+
+                imgui.pop_style_color()
+            case 3:
+                text = str(text)
+                clean_text = re.sub(r"[^\d.\s\-+]", " ", text)
+                clean_text = " ".join(clean_text.split())
+
+                # Draw card background
+                color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
+                draw_list = imgui.get_window_draw_list()
+                draw_list.add_rect_filled(card_pos_x, card_pos_y, card_pos_x + 265, card_pos_y + 50, color, rounding=10.0, flags=15)
+
+                imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.0, 1.0)
+                imgui.set_cursor_pos((card_pos_x + 35, card_pos_y + 20))
+                imgui.text(f"Going to: {clean_text}")
+
+                with imgui.font(font):
+                    imgui.set_cursor_pos((card_pos_x + 230, card_pos_y - 6)); imgui.text("-")
+                    imgui.set_cursor_pos((card_pos_x + 230, card_pos_y + 4)); imgui.text("-")
+                    imgui.set_cursor_pos((card_pos_x + 230, card_pos_y + 14)); imgui.text("-")
+                imgui.pop_style_color()
+                try:
+                    temp_x, temp_y, temp_z, temp_yaw = map(float, flight_plan_coord[numb][0].strip().split())
+                    circle_x = map_value(temp_x, 10, -10, 467, 1228)
+                    circle_y = map_value(temp_y, 10, -10, 158, 599)
+                    if orange_effect_going[numb] == 0 and not effect_begin2: 
+                    
+                        effect2 = True
+                        orange_effect_going[numb] = 1
+                        return  # Skip rest of logic for this frame
+
+                    draw_list.add_circle(circle_x, circle_y, 12,imgui.get_color_u32_rgba(0.9, 0.8, 0.0, 1.0), thickness=2.0 ) 
+                    draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.9, 0.8, 0.0, 1.0))
+                    if orange_effect_going[numb] == 1:
+
+                        effect_class.circle_effect_orange(imgui.get_color_u32_rgba(0.9, 0.8, 0.0, 1.0),circle_x,circle_y, numb)
+                        return  # Wait for effect to finish
+                    draw_list.add_circle(circle_x, circle_y, 12,imgui.get_color_u32_rgba(0.9, 0.8, 0.0, 1.0), thickness=2.0 ) 
+                    draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.9, 0.8, 0.0, 1.0))
+                except:
+                    flight_plan_coord[numb][0] = ""
+
+
+                
+                # --- Effect setup only once ---
+               
+        
 def main(args=None):
     rclpy.init()
     global font, font_large, font_small, font_for_meter
@@ -1148,8 +1482,13 @@ def main(args=None):
         GUIButton.button1(876, 635, font_small, "Land", "land", node)
         GUIButton.button2( 492, 635, font_small, "Takeoff", "takeoff", node, -1.0)
         GUIButton.button1(1068, 635, font_small, "Set Origin", "set_origin", node)
-
+        
+        
         send_map_pos(node)
+        route_planner(node)
+        execute_route(node)
+     
+
 
         #Todo move to function
         if texture_id:
