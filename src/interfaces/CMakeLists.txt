@@ -30,6 +30,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/DroneState.msg"
 "msg/DroneScope.msg"
 "msg/GcsHeartbeat.msg"
+"msg/ProbeLocations.msg"
+"msg/ProbeSegmentation.msg"
 DEPENDENCIES builtin_interfaces geometry_msgs std_msgs sensor_msgs action_msgs)
 
 
