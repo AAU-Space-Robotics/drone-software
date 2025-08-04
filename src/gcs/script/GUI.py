@@ -513,7 +513,7 @@ def XYZ_Text_Field(msg):
         imgui.set_cursor_pos((313,93)); imgui.text(f"{Decimal(target_position_x).quantize(Decimal('0.000'))}")
         imgui.set_cursor_pos((313,143)); imgui.text(f"{Decimal(target_position_y).quantize(Decimal('0.000'))}")
         imgui.set_cursor_pos((313,193)); imgui.text(f"{(Decimal(target_position_z).quantize(Decimal('0.000')))}")
-        imgui.set_cursor_pos((23, 245)); imgui.text(f"[m]")
+        imgui.set_cursor_pos((23, 240)); imgui.text(f"[m]")
     #with imgui.font(font_for_meter):
     #    imgui.set_cursor_pos((240,240)); imgui.text("*measure in meters")
     #    imgui.set_cursor_pos((405,42)); imgui.text("*")
@@ -530,7 +530,7 @@ def XYZ_Text_Field(msg):
         end_x, end_y = 287, 235      # Ending point of the line (x, y)
         color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
-    imgui.set_cursor_pos((103, 255)); imgui.text(f" TS: {position_timestamp}")
+    imgui.set_cursor_pos((103, 250)); imgui.text(f" TS: {position_timestamp}")
 
 def XYZVelocity_Text_Field():
 
@@ -539,37 +539,53 @@ def XYZVelocity_Text_Field():
         draw_list = imgui.get_window_draw_list()
         color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
          
-        # Move up y axis by 50
-        draw_list.add_rect_filled(20, 335, 250, 480, color, rounding=10.0, flags=10)
+        # Move down y axis by 25 (all y values + 25)
+        draw_list.add_rect_filled(20, 310, 250, 455, color, rounding=10.0, flags=10)
 
         with imgui.font(font_small):
-            imgui.set_cursor_pos((23, 295)); imgui.text("Velocity:")
-            imgui.set_cursor_pos((60, 340)); imgui.text("X   = ")
-            imgui.set_cursor_pos((150, 338)); imgui.text(f"{Decimal(velocity_x).quantize(Decimal('0.000'))}")
-            imgui.set_cursor_pos((60, 390)); imgui.text("Y   = ")
-            imgui.set_cursor_pos((150, 388)); imgui.text(f"{Decimal(velocity_y).quantize(Decimal('0.000'))}")
-            imgui.set_cursor_pos((60, 440)); imgui.text("Z   = ")
-            imgui.set_cursor_pos((150, 438)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
-            imgui.set_cursor_pos((23, 490)); imgui.text(f"[m/s]")
-        imgui.set_cursor_pos((103, 500)); imgui.text(f" TS: {velocity_timestamp}")
+            imgui.set_cursor_pos((23, 270)); imgui.text("Velocity:")
+            imgui.set_cursor_pos((60, 315)); imgui.text("X   = ")
+            imgui.set_cursor_pos((150, 313)); imgui.text(f"{Decimal(velocity_x).quantize(Decimal('0.000'))}")
+            imgui.set_cursor_pos((60, 365)); imgui.text("Y   = ")
+            imgui.set_cursor_pos((150, 363)); imgui.text(f"{Decimal(velocity_y).quantize(Decimal('0.000'))}")
+            imgui.set_cursor_pos((60, 415)); imgui.text("Z   = ")
+            imgui.set_cursor_pos((150, 413)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
+            imgui.set_cursor_pos((23, 460)); imgui.text(f"[m/s]")
+        imgui.set_cursor_pos((103, 470)); imgui.text(f" TS: {velocity_timestamp}")
     
 def RPY_Text_Field():
     
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
-    # Move up y axis by 50
-    draw_list.add_rect_filled(20, 580, 250, 725, color, rounding=10.0, flags=10)
+    # Move down y axis by 20 (all y values + 20)
+    draw_list.add_rect_filled(20, 530, 250, 675, color, rounding=10.0, flags=10)
 
     with imgui.font(font_small):
-        imgui.set_cursor_pos((23, 540)); imgui.text("Orientation:")
-        imgui.set_cursor_pos((30, 590)); imgui.text("Roll  = ")
-        imgui.set_cursor_pos((150, 588)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((30, 640)); imgui.text("Pitch = ")
-        imgui.set_cursor_pos((150, 638)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((30, 690)); imgui.text("Yaw   = ")
-        imgui.set_cursor_pos((150, 688)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((23, 735)); imgui.text(f"[r]")
+        imgui.set_cursor_pos((23, 490)); imgui.text("Orientation:")
+        imgui.set_cursor_pos((30, 540)); imgui.text("Roll  = ")
+        imgui.set_cursor_pos((150, 538)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((30, 590)); imgui.text("Pitch = ")
+        imgui.set_cursor_pos((150, 588)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((30, 640)); imgui.text("Yaw   = ")
+        imgui.set_cursor_pos((150, 638)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((23, 680)); imgui.text(f"[r]")
+def probe_Field():
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
+    # Move up 30 on y axis (was 780-925, now 750-895)
 
+    
+    draw_list.add_rect_filled(20, 750, 420, 895, color, rounding=10.0, flags=10)
+
+    with imgui.font(font_small):
+        imgui.set_cursor_pos((23, 710)); imgui.text("Probe info:")
+        imgui.set_cursor_pos((60, 760)); imgui.text("X  = ")
+        imgui.set_cursor_pos((150, 758)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((60, 810)); imgui.text("Y  = ")
+        imgui.set_cursor_pos((150, 808)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((60, 860)); imgui.text("Z  = ")
+        imgui.set_cursor_pos((150, 858)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
+     
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
@@ -1470,6 +1486,7 @@ def main(args=None):
         Dropdown_Menu()
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
+        probe_Field()
         XYZVelocity_Text_Field()
         batteryGraph()
         motor_speed()
