@@ -32,6 +32,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/GcsHeartbeat.msg"
 "msg/ProbeLocations.msg"
 "msg/ProbeSegmentation.msg"
+"msg/ProbeGlobalLocations.msg"
 DEPENDENCIES builtin_interfaces geometry_msgs std_msgs sensor_msgs action_msgs)
 
 
