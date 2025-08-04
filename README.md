@@ -227,6 +227,9 @@ Tools/simulation/gz/worlds/erc.sdf
 https://github.com/IntelRealSense/realsense-ros
 ros2 run realsense2_camera realsense2_camera_node
 
+ros2 launch realsense2_camera rs_launch.py depth_module.profile:=640x480x30 rgb_camera.profile:=640x480x30 align_depth.enable:=true
+ros2 launch realsense2_camera rs_launch.py depth_module.profile:=640x480x30 rgb_camera.profile:=640x480x30
+
 
 
 colcon build --cmake-args -DBUILD_PROBE_PERCEPTION=ON
