@@ -48,5 +48,11 @@ install(DIRECTORY include/
   DESTINATION include/${PROJECT_NAME}
 )
 
+# Install launch files
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}/
+)
+
 # Mark the package as complete
 ament_package()

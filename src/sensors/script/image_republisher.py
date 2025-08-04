@@ -6,7 +6,7 @@ from sensor_msgs.msg import Image, CompressedImage
 import message_filters
 import cv2
 import numpy as np
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge, CvBridgeError
 
 class CompressedImageRepublisher(Node):
     def __init__(self):
@@ -36,9 +36,9 @@ class CompressedImageRepublisher(Node):
         
         # Publishers for compressed topics
         self.color_pub = self.create_publisher(
-            CompressedImage, '/camera/camera/color/image_raw/compressed', qos)
+            CompressedImage, '/thyra/out/color_image/compressed', qos)
         self.depth_pub = self.create_publisher(
-            CompressedImage, '/camera/camera/depth/image_rect_raw/compressed', qos)
+            CompressedImage, '/thyra/out/depth_image/compressed', qos)
         
         # Timer for 5 Hz publishing
         self.timer = self.create_timer(1.0 / 5.0, self.timer_callback)
@@ -49,6 +49,9 @@ class CompressedImageRepublisher(Node):
         self.get_logger().info('Republishing synchronized compressed color (JPEG) and depth (PNG) images with Best Effort QoS at 5 Hz')
 
     def image_callback(self, color_msg, depth_msg):
+        # Log received encodings
+        #self.get_logger().info(f'Received color image encoding: {color_msg.encoding}, depth image encoding: {depth_msg.encoding}')
+        
         # Store the latest synchronized messages only if they are new
         if self.last_published_timestamp is None or \
            (color_msg.header.stamp.sec > self.last_published_timestamp.sec or \
@@ -66,18 +69,25 @@ class CompressedImageRepublisher(Node):
                 (self.latest_color_msg.header.stamp.sec == self.last_published_timestamp.sec and \
                  self.latest_color_msg.header.stamp.nanosec > self.last_published_timestamp.nanosec)):
                 try:
-                    # Convert color image to JPEG
-                    color_cv = self.bridge.imgmsg_to_cv2(self.latest_color_msg, desired_encoding='bgr8')
-                    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 20]  # JPEG quality: 20
-                    _, color_buffer = cv2.imencode('.jpg', color_cv, encode_param)
+                    # Convert and compress color image to JPEG
+                    color_cv = self.bridge.imgmsg_to_cv2(self.latest_color_msg, desired_encoding='rgb8')
+                    # Convert from RGB to BGR for OpenCV JPEG encoding
+                    color_cv_bgr = cv2.cvtColor(color_cv, cv2.COLOR_RGB2BGR)
+                    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 20]
+                    success, color_buffer = cv2.imencode('.jpg', color_cv_bgr, encode_param)
+                    if not success:
+                        self.get_logger().error('Failed to compress color image to JPEG')
+                        return
                     color_compressed = CompressedImage()
                     color_compressed.header = self.latest_color_msg.header
                     color_compressed.format = 'jpeg'
-                    color_compressed.data = color_buffer.tobytes()
-                    
-                    # Convert depth image to PNG
-                    depth_cv = self.bridge.imgmsg_to_cv2(self.latest_depth_msg, desired_encoding='mono16')
-                    _, depth_buffer = cv2.imencode('.png', depth_cv)
+                    color_compressed.data = color_buffer.tobytes()                    
+                    # Convert and compress depth image to PNG
+                    depth_cv = self.bridge.imgmsg_to_cv2(self.latest_depth_msg, desired_encoding='16UC1')
+                    success, depth_buffer = cv2.imencode('.png', depth_cv)
+                    if not success:
+                        self.get_logger().error('Failed to compress depth image to PNG')
+                        return
                     depth_compressed = CompressedImage()
                     depth_compressed.header = self.latest_depth_msg.header
                     depth_compressed.format = 'png'
@@ -87,14 +97,16 @@ class CompressedImageRepublisher(Node):
                     self.color_pub.publish(color_compressed)
                     self.depth_pub.publish(depth_compressed)
                     self.last_published_timestamp = self.latest_color_msg.header.stamp
-                    self.get_logger().info(f'Published new compressed image pair at timestamp {self.last_published_timestamp.sec}.{self.last_published_timestamp.nanosec}')
+                    #self.get_logger().info(f'Published new compressed image pair at timestamp {self.last_published_timestamp.sec}.{self.last_published_timestamp.nanosec}')
                     
                     # Clear messages to prevent republishing
                     self.latest_color_msg = None
                     self.latest_depth_msg = None
                     
+                except CvBridgeError as e:
+                    self.get_logger().error(f'CvBridge error: {str(e)}')
                 except Exception as e:
-                    self.get_logger().error(f'Error compressing images: {str(e)}')
+                    self.get_logger().error(f'Unexpected error compressing images: {str(e)}')
 
 def main(args=None):
     rclpy.init(args=args)
