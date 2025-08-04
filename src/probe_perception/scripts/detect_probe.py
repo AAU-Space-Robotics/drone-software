@@ -13,6 +13,25 @@ import os
 from ament_index_python.packages import get_package_share_directory
 import struct
 
+# Intrinsic parameters for RealSense D435 (depth stream, e.g., 640x480)
+CAMERA_INTRINSIC_MATRIX = np.array([
+    [462.0,   0.0, 320.0],  # fx, 0, cx
+    [0.0,   462.0, 240.0],  # 0, fy, cy
+    [0.0,     0.0,   1.0]
+], dtype=np.float64)
+
+# Distortion coefficients (assuming undistorted depth stream)
+CAMERA_DISTORTION_COEFFS = np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)  # k1, k2, p1, p2, k3
+
+# Extrinsic parameters (identity, assuming point cloud in camera frame)
+CAMERA_EXTRINSIC_ROTATION = np.array([
+    [1.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0],
+    [0.0, 0.0, 1.0]
+], dtype=np.float64).flatten('F')  # Column-major flattened
+
+CAMERA_EXTRINSIC_ROTATION_MATRIX = CAMERA_EXTRINSIC_ROTATION.reshape((3, 3), order='F')
+CAMERA_EXTRINSIC_TRANSLATION = np.array([0.0, 0.0, 0.0], dtype=np.float64)
 
 class SegmentationNode(Node):
     def __init__(self):
@@ -25,8 +44,8 @@ class SegmentationNode(Node):
         self.depth_image = None
         
         # Inside SegmentationNode.__init__()
-        self.rgb_sub = Subscriber(self, CompressedImage, '/zed/zed_node/rgb/image_rect_color/compressed')    
-        self.depth_sub = Subscriber(self, PointCloud2, '/zed/zed_node/point_cloud/cloud_registered')
+        self.rgb_sub = Subscriber(self, CompressedImage, '/thyra/out/color_image/compressed')    
+        self.depth_sub = Subscriber(self, CompressedImage, '/thyra/out/depth_image/compressed')
 
         # Approximate Time Synchronizer
         self.ts = ApproximateTimeSynchronizer([self.rgb_sub, self.depth_sub], queue_size=10, slop=0.1)
@@ -79,18 +98,17 @@ class SegmentationNode(Node):
             np_arr = np.frombuffer(rgb_msg.data, np.uint8)
             rgb_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-            # Convert pointcloud2
-            point_cloud = self.pointcloud2_to_array(depth_msg)
-            
+            # Convert depth image
+            np_arr_depth = np.frombuffer(depth_msg.data, np.uint8)
+            depth_image = cv2.imdecode(np_arr_depth, cv2.IMREAD_UNCHANGED)
+
             # Run YOLO inference
             probe_boxes, probe_masks, probe_confidences = self.infer_yolo(rgb_image)
             
             # If probes are detected, process them
             if probe_masks:
                 # Compute locations with confidences
-                probe_locations = self.compute_probe_locations(probe_masks, point_cloud, rgb_image, probe_confidences)
-
-                probe_locations = self.compute_probe_locations(probe_masks, point_cloud, rgb_image, probe_confidences)
+                probe_locations = self.compute_probe_locations(probe_masks, depth_image, rgb_image, probe_confidences)
             
                 if probe_locations:
                     sorted_locations = sorted(probe_locations, key=lambda x: x["confidence"], reverse=True)
@@ -122,24 +140,19 @@ class SegmentationNode(Node):
         except Exception as e:
             self.get_logger().error(f"Unexpected error in image_handler: {e}")
 
-    def compute_probe_locations(self, probe_masks: List[np.ndarray], point_cloud: np.ndarray, rgb_image: np.ndarray, probe_confidences: List[float]) -> List[dict]:
+    def compute_probe_locations(self, probe_masks: List[np.ndarray], depth_image: np.ndarray, rgb_image: np.ndarray, probe_confidences: List[float]) -> List[dict]:
         """Compute 3D locations of probes using depth data."""
         probe_locations = []
         
         # print rgb image size and depth image size
         self.get_logger().info(f"RGB Image Size: {rgb_image.shape}")
-        self.get_logger().info(f"Depth Image Size: {point_cloud.shape}")
-        
-        # extract depth image from point cloud
-        x_image = point_cloud[:, :, 0]  # Depth channel
-        y_image = point_cloud[:, :, 1]
-        z_image = point_cloud[:, :, 2]
-        
+        self.get_logger().info(f"Depth Image Size: {depth_image.shape}")
+               
         for i, mask in enumerate(probe_masks):
             try:
                 position = []    
                 # resize mask to match the depth image size
-                mask = cv2.resize(mask, (x_image.shape[1], x_image.shape[0]), interpolation=cv2.INTER_LINEAR)
+                mask = cv2.resize(mask, (depth_image.shape[1], depth_image.shape[0]), interpolation=cv2.INTER_LINEAR)
                         
                 # Normalize mask to binary (0 or 1)
                 binary_mask = (mask > 0.5).astype(np.uint8)
@@ -150,33 +163,13 @@ class SegmentationNode(Node):
                     centroid_x = int(np.mean(x))
                     centroid_y = int(np.mean(y))
                     
-                    # Extract a 3x3 kernel around the centroid
-                    kernel_size = 3
-                    half_kernel = kernel_size // 2
-                    x_min = max(centroid_x - half_kernel, 0)
-                    x_max = min(centroid_x + half_kernel + 1, x_image.shape[1])
-                    y_min = max(centroid_y - half_kernel, 0)
-                    y_max = min(centroid_y + half_kernel + 1, x_image.shape[0])
-                    kernel = binary_mask[y_min:y_max, x_min:x_max]
-                    kernel = kernel.astype(np.uint8)
+                    point_cloud_segment = self.depth_to_pointcloud(depth_image, (centroid_x, centroid_y), kernel_size=5)
                     
-                    position_kernel = np.array([x_image[y_min:y_max, x_min:x_max], y_image[y_min:y_max, x_min:x_max], z_image[y_min:y_max, x_min:x_max]])
+                    #sort out the points in the point cloud segment that are nan or inf
+                    valid_points = point_cloud_segment[~np.isnan(point_cloud_segment).any(axis=1) & ~np.isinf(point_cloud_segment).any(axis=1)]
                     
-                    #calculate the meadian of the kernel, excluding NaN and Inf values
-                    valid_x = position_kernel[0][kernel == 1]
-                    valid_y = position_kernel[1][kernel == 1]
-                    valid_z = position_kernel[2][kernel == 1]
-                
-                    valid_x = valid_x[np.isfinite(valid_x)]
-                    valid_y = valid_y[np.isfinite(valid_y)]
-                    valid_z = valid_z[np.isfinite(valid_z)]
-
-                    median_x = np.nanmedian(valid_x)
-                    median_y = np.nanmedian(valid_y)
-                    median_z = np.nanmedian(valid_z)
-                    
-                    #Position is the median of the kernel
-                    position = np.array([median_x, median_y, median_z])
+                    # Position is the median of the kernel (x, y, z)
+                    position = np.nanmedian(valid_points, axis=0)
 
                     # Check if the position is valid (not NaN or Inf)
                     if np.isnan(position).any() or np.isinf(position).any():
@@ -202,7 +195,7 @@ class SegmentationNode(Node):
 
 
         # publish the depth values next to the probe in the rgb image
-        resized_rgb = cv2.resize(rgb_image, (x_image.shape[1], x_image.shape[0]), interpolation=cv2.INTER_LINEAR)
+        resized_rgb = cv2.resize(rgb_image, (depth_image.shape[1], depth_image.shape[0]), interpolation=cv2.INTER_LINEAR)
         for loc in probe_locations:
             centroid_x = loc["centroid_x"]
             centroid_y = loc["centroid_y"]
@@ -221,6 +214,8 @@ class SegmentationNode(Node):
 
 
         return probe_locations
+
+
 
     def infer_yolo(self, rgb_image: np.ndarray) -> Tuple[np.ndarray, List[np.ndarray], np.ndarray]:
         probe_boxes = []
@@ -269,6 +264,65 @@ class SegmentationNode(Node):
 
         return probe_boxes, probe_masks, probe_confidences
     
+    def depth_to_pointcloud(depth_image: np.ndarray, position: tuple, kernel_size: int) -> np.ndarray:
+        """
+        Convert a region of a depth image to a point cloud using D435 camera parameters.
+        
+        Args:
+            depth_image: np.ndarray of shape (height, width) representing depth values in millimeters (uint16).
+            position: Tuple (u, v) specifying the pixel position (column, row) to center the kernel.
+            kernel_size: Integer specifying the size of the square kernel (e.g., 5 for a 5x5 patch).
+            
+        Returns:
+            point_cloud: np.ndarray of shape (N, 3) where N is the number of valid points,
+                        and each point is [x, y, z] coordinates in meters (in camera frame).
+        """
+        # Get image dimensions
+        h, w = depth_image.shape
+        u, v = position
+        
+        # Ensure kernel_size is positive
+        if kernel_size < 1:
+            raise ValueError("Kernel size must be positive")
+        
+        # Calculate patch boundaries, ensuring they stay within image
+        half_kernel = kernel_size // 2
+        u_min = max(0, u - half_kernel)
+        u_max = min(w, u + half_kernel + 1)
+        v_min = max(0, v - half_kernel)
+        v_max = min(h, v + half_kernel + 1)
+        
+        # Extract patch from depth image
+        depth_patch = depth_image[v_min:v_max, u_min:u_max]
+        
+        # Create pixel coordinate grids for the patch
+        u_patch, v_patch = np.meshgrid(np.arange(u_min, u_max), np.arange(v_min, v_max))
+        
+        # Extract intrinsic parameters
+        fx, fy = CAMERA_INTRINSIC_MATRIX[0, 0], CAMERA_INTRINSIC_MATRIX[1, 1]
+        cx, cy = CAMERA_INTRINSIC_MATRIX[0, 2], CAMERA_INTRINSIC_MATRIX[1, 2]
+        
+        # Convert depth to meters (D435 depth is in millimeters)
+        depth = depth_patch.astype(np.float64) / 1000.0
+        
+        # Unproject to 3D coordinates in camera frame
+        x = (u_patch - cx) * depth / fx
+        y = (v_patch - cy) * depth / fy
+        z = depth
+        
+        # Stack into point cloud (patch_height, patch_width, 3)
+        point_cloud = np.stack((x, y, z), axis=-1).astype(np.float32)
+        
+        # Apply extrinsic transformation
+        points = point_cloud.reshape(-1, 3)
+        points = (CAMERA_EXTRINSIC_ROTATION_MATRIX @ points.T).T + CAMERA_EXTRINSIC_TRANSLATION
+        
+        # Filter out invalid points (depth == 0)
+        valid = (depth > 0).reshape(-1)
+        point_cloud = points[valid]
+        
+        return point_cloud
+
     def pointcloud2_to_array(self, msg):
         """
         Convert a sensor_msgs/PointCloud2 message to a 3D array of x, y, z coordinates.
