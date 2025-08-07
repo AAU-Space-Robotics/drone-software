@@ -38,9 +38,20 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  script/image_republisher.py
+  DESTINATION lib/${PROJECT_NAME}/scripts
+)
+
 # Install header files
 install(DIRECTORY include/
   DESTINATION include/${PROJECT_NAME}
+)
+
+# Install launch files
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}/
 )
 
 # Mark the package as complete
