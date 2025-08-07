@@ -125,8 +125,11 @@ public:
         // Load setup parameters
         this->declare_parameter("setup.lidar_offset", 0.0);
         this->get_parameter("setup.lidar_offset", lidar_offset_);
+        this->declare_parameter("setup.takeoff_height_", -0.5);
+        this->get_parameter("setup.takeoff_height_", takeoff_height_);
 
         RCLCPP_INFO(get_logger(), "Lidar offset: %.2f", lidar_offset_);
+        RCLCPP_INFO(get_logger(), "Takeoff height: %.2f", takeoff_height_);
 
         // Set initial state
         state_manager_.setHeartbeat(GCSHeartbeat(get_time(),0));
@@ -1004,7 +1007,7 @@ private:
                 Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
 
                 // Set the target takeoff goal, at least 1.5m above current position with current orientation
-                Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], -1.5)};
+                Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], takeoff_height_ + target_profile.z())};
                 Eigen::Quaterniond target_quat = takeoff_quat; // Preserve current orientation for takeoff
 
                 // Generate takeoff trajectory
@@ -1200,6 +1203,7 @@ private:
     double timeout_threshold_;
     int current_control_mode_;
     std::mutex current_control_mode_mutex_;
+    float takeoff_height_;
 };
 
 int main(int argc, char *argv[])

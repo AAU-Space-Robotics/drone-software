@@ -45,3 +45,4 @@ flight_controller_interface:
     # Setup Parameters
     setup:
       lidar_offset: 0.177 # Lidar offset for zero height calibration (meters)
+      takeoff_height_: -1.5 # Default takeoff height (meters)

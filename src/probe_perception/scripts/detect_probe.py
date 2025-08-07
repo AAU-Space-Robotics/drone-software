@@ -2,8 +2,9 @@
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy, QoSHistoryPolicy
 from sensor_msgs.msg import Image, CompressedImage, PointCloud2
-from interfaces.msg import ProbeSegmentation, ProbeLocations 
+from interfaces.msg import ProbeSegmentation, ProbeLocations
 from cv_bridge import CvBridge, CvBridgeError
 from ultralytics import YOLO
 from typing import Tuple, List
@@ -20,22 +21,25 @@ CAMERA_INTRINSIC_MATRIX = np.array([
     [0.0,     0.0,   1.0]
 ], dtype=np.float64)
 
-# Distortion coefficients (assuming undistorted depth stream)
-CAMERA_DISTORTION_COEFFS = np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)  # k1, k2, p1, p2, k3
-
-# Extrinsic parameters (identity, assuming point cloud in camera frame)
+CAMERA_DISTORTION_COEFFS = np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)
 CAMERA_EXTRINSIC_ROTATION = np.array([
     [1.0, 0.0, 0.0],
     [0.0, 1.0, 0.0],
     [0.0, 0.0, 1.0]
-], dtype=np.float64).flatten('F')  # Column-major flattened
-
+], dtype=np.float64).flatten('F')
 CAMERA_EXTRINSIC_ROTATION_MATRIX = CAMERA_EXTRINSIC_ROTATION.reshape((3, 3), order='F')
 CAMERA_EXTRINSIC_TRANSLATION = np.array([0.0, 0.0, 0.0], dtype=np.float64)
 
 class SegmentationNode(Node):
     def __init__(self):
         super().__init__('segmentation_node')
+
+        qos = QoSProfile(
+            depth=10,
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            history=QoSHistoryPolicy.KEEP_LAST
+        )
         
         self.previous_time = 0
         self.fps = 1
@@ -43,29 +47,16 @@ class SegmentationNode(Node):
         self.rgb_image = None
         self.depth_image = None
         
-        # Inside SegmentationNode.__init__()
-        self.rgb_sub = Subscriber(self, CompressedImage, '/thyra/out/color_image/compressed')    
-        self.depth_sub = Subscriber(self, CompressedImage, '/thyra/out/depth_image/compressed')
-
-        # Approximate Time Synchronizer
+        self.rgb_sub = Subscriber(self, CompressedImage, '/thyra/out/color_image/compressed', qos_profile=qos)
+        self.depth_sub = Subscriber(self, CompressedImage, '/thyra/out/depth_image/compressed', qos_profile=qos)
         self.ts = ApproximateTimeSynchronizer([self.rgb_sub, self.depth_sub], queue_size=10, slop=0.1)
-        self.ts.registerCallback(self.image_handler)    
+        self.ts.registerCallback(self.image_handler)
         
-        # Publisher for segmented image
-        self.image_publisher = self.create_publisher(
-            Image,
-            '/probe_detector/segmented_image',
-            10)
-        
-        self.probe_publisher = self.create_publisher(
-            ProbeLocations,
-            '/probe_detector/probe_locations',
-            10
-        )
+        self.image_publisher = self.create_publisher(Image, '/probe_detector/segmented_image', 10)
+        self.probe_publisher = self.create_publisher(ProbeLocations, '/probe_detector/probe_locations', 10)
                    
         self.bridge = CvBridge()
         
-        # Load YOLO model
         package_name = 'probe_perception'
         try:
             package_share_dir = get_package_share_directory(package_name)
@@ -74,54 +65,38 @@ class SegmentationNode(Node):
                 raise FileNotFoundError(f"Model file not found at: {self.model_path}")
             self.model = YOLO(self.model_path)
             self.get_logger().info(f"Loaded YOLO model from {self.model_path}")
-
         except Exception as e:
             self.get_logger().error(f"Failed to initialize model: {e}")
             raise
 
     def image_handler(self, rgb_msg, depth_msg):
-        """Handles synchronized RGB and depth images."""
         try:
-            # Extract timestamps for debugging
             rgb_time = rgb_msg.header.stamp.sec + rgb_msg.header.stamp.nanosec * 1e-9
             depth_time = depth_msg.header.stamp.sec + depth_msg.header.stamp.nanosec * 1e-9
 
-            # skip frames if the time difference is too small
             if self.previous_time + (1 / self.fps) > rgb_time:
                 return
-            else:
-                self.previous_time = rgb_time
+            self.previous_time = rgb_time
 
             self.get_logger().info(f"Synchronized RGB Time: {rgb_time}, Depth Time: {depth_time}")
 
-            # Convert RGB image
             np_arr = np.frombuffer(rgb_msg.data, np.uint8)
             rgb_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-            # Convert depth image
             np_arr_depth = np.frombuffer(depth_msg.data, np.uint8)
             depth_image = cv2.imdecode(np_arr_depth, cv2.IMREAD_UNCHANGED)
 
-            # Run YOLO inference
             probe_boxes, probe_masks, probe_confidences = self.infer_yolo(rgb_image)
             
-            # If probes are detected, process them
             if probe_masks:
-                # Compute locations with confidences
                 probe_locations = self.compute_probe_locations(probe_masks, depth_image, rgb_image, probe_confidences)
-            
+                
                 if probe_locations:
                     sorted_locations = sorted(probe_locations, key=lambda x: x["confidence"], reverse=True)
-
-                    # Debugging output
-                    print(f"Probe Locations: {sorted_locations}")
-                    
                     probe_confidences = [float(np.float32(loc["confidence"])) for loc in sorted_locations]
                     probe_list = [float(np.float32(coord)) for loc in sorted_locations for coord in (loc["x"], loc["y"], loc["z"])]
                     probe_centroid_x = [float(np.float32(loc["centroid_x"])) for loc in sorted_locations]
                     probe_centroid_y = [float(np.float32(loc["centroid_y"])) for loc in sorted_locations]
        
-                    # Create and publish ProbeLocations message
                     probe_msg = ProbeLocations()
                     probe_msg.header = rgb_msg.header
                     probe_msg.classification_confidence = probe_confidences
@@ -130,10 +105,8 @@ class SegmentationNode(Node):
                     probe_msg.centroid_x = probe_centroid_x
                     probe_msg.centroid_y = probe_centroid_y
 
-                    # Publish the message (assuming a publisher exists)
                     self.probe_publisher.publish(probe_msg)
                     self.get_logger().info(f"Published {probe_msg.num_probes} probe locations")
-
         
         except CvBridgeError as e:
             self.get_logger().error(f"Failed to process image: {e}")
@@ -141,41 +114,24 @@ class SegmentationNode(Node):
             self.get_logger().error(f"Unexpected error in image_handler: {e}")
 
     def compute_probe_locations(self, probe_masks: List[np.ndarray], depth_image: np.ndarray, rgb_image: np.ndarray, probe_confidences: List[float]) -> List[dict]:
-        """Compute 3D locations of probes using depth data."""
         probe_locations = []
-        
-        # print rgb image size and depth image size
         self.get_logger().info(f"RGB Image Size: {rgb_image.shape}")
         self.get_logger().info(f"Depth Image Size: {depth_image.shape}")
                
         for i, mask in enumerate(probe_masks):
             try:
-                position = []    
-                # resize mask to match the depth image size
                 mask = cv2.resize(mask, (depth_image.shape[1], depth_image.shape[0]), interpolation=cv2.INTER_LINEAR)
-                        
-                # Normalize mask to binary (0 or 1)
                 binary_mask = (mask > 0.5).astype(np.uint8)
-                                                                    
-                # compute the center of the mask
                 y, x = np.where(binary_mask == 1)
                 if x.size > 0 and y.size > 0:
                     centroid_x = int(np.mean(x))
                     centroid_y = int(np.mean(y))
-                    
-                    point_cloud_segment = self.depth_to_pointcloud(depth_image, (centroid_x, centroid_y), kernel_size=5)
-                    
-                    #sort out the points in the point cloud segment that are nan or inf
+                    point_cloud_segment = self.depth_to_pointcloud(depth_image, (centroid_x, centroid_y), 5)
                     valid_points = point_cloud_segment[~np.isnan(point_cloud_segment).any(axis=1) & ~np.isinf(point_cloud_segment).any(axis=1)]
-                    
-                    # Position is the median of the kernel (x, y, z)
                     position = np.nanmedian(valid_points, axis=0)
-
-                    # Check if the position is valid (not NaN or Inf)
                     if np.isnan(position).any() or np.isinf(position).any():
                         continue
                 else:
-                    #jump out of current forloop iteration, and continue with the next mask
                     continue  
                            
                 probe_location = {
@@ -192,19 +148,16 @@ class SegmentationNode(Node):
                 self.get_logger().error(f"Error processing mask {i}: {e}")
                 continue
 
-
-
-        # publish the depth values next to the probe in the rgb image
         resized_rgb = cv2.resize(rgb_image, (depth_image.shape[1], depth_image.shape[0]), interpolation=cv2.INTER_LINEAR)
         for loc in probe_locations:
             centroid_x = loc["centroid_x"]
             centroid_y = loc["centroid_y"]
             position = [loc["x"], loc["y"], loc["z"]]
             confidence = loc["confidence"]
-            cv2.circle(resized_rgb, (centroid_x, centroid_y), 3, (0, 0, 255), -1)  # Red dot
+            cv2.circle(resized_rgb, (centroid_x, centroid_y), 3, (0, 0, 255), -1)
             cv2.putText(resized_rgb, f"conf={confidence:.2f}, x={position[0]:.2f}, y={position[1]:.2f}, z={position[2]:.2f}", 
-                (centroid_x + 5, centroid_y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    
+                        (centroid_x + 5, centroid_y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            print(f"Probe {i}: Centroid ({centroid_x}, {centroid_y}), Position ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}), Confidence {confidence:.2f}")
     
         try:
             segmented_msg = self.bridge.cv2_to_imgmsg(resized_rgb, "bgr8")
@@ -212,10 +165,7 @@ class SegmentationNode(Node):
         except CvBridgeError as e:
             self.get_logger().error(f"Failed to publish segmented image: {e}")
 
-
         return probe_locations
-
-
 
     def infer_yolo(self, rgb_image: np.ndarray) -> Tuple[np.ndarray, List[np.ndarray], np.ndarray]:
         probe_boxes = []
@@ -230,28 +180,16 @@ class SegmentationNode(Node):
                 device=0 
             )
             
-            # Publish to ros2 the segmented image
-            # annotated_image = results[0].plot()
-            # try:
-            #     segmented_msg = self.bridge.cv2_to_imgmsg(annotated_image, "bgr8")
-            #     self.image_publisher.publish(segmented_msg)
-            # except CvBridgeError as e:
-            #     self.get_logger().error(f"Failed to publish segmented image: {e}")
-            
-            
             if results[0].boxes is not None and results[0].masks is not None:
                 for i, (box, mask) in enumerate(zip(results[0].boxes, results[0].masks)):
                     try:
                         box_xyxy = box.xyxy[0].cpu().numpy()
                         mask_data = mask.data[0].cpu().numpy()
-
                         if rgb_image is not None:
                             mask_data = cv2.resize(mask_data, (rgb_image.shape[1], rgb_image.shape[0]))
-
                         probe_boxes.append(box_xyxy)
                         probe_masks.append(mask_data)
                         probe_confidences.append(float(box.conf.cpu()))
-                        
                     except Exception as e:
                         self.get_logger().error(f"Error processing detection {i}: {e}")
                         continue
@@ -263,123 +201,32 @@ class SegmentationNode(Node):
             self.get_logger().error(f"Error in YOLO inference: {e}")
 
         return probe_boxes, probe_masks, probe_confidences
-    
-    def depth_to_pointcloud(depth_image: np.ndarray, position: tuple, kernel_size: int) -> np.ndarray:
-        """
-        Convert a region of a depth image to a point cloud using D435 camera parameters.
-        
-        Args:
-            depth_image: np.ndarray of shape (height, width) representing depth values in millimeters (uint16).
-            position: Tuple (u, v) specifying the pixel position (column, row) to center the kernel.
-            kernel_size: Integer specifying the size of the square kernel (e.g., 5 for a 5x5 patch).
-            
-        Returns:
-            point_cloud: np.ndarray of shape (N, 3) where N is the number of valid points,
-                        and each point is [x, y, z] coordinates in meters (in camera frame).
-        """
-        # Get image dimensions
+
+    def depth_to_pointcloud(self, depth_image: np.ndarray, position: tuple, kernel_size: int) -> np.ndarray:
         h, w = depth_image.shape
         u, v = position
-        
-        # Ensure kernel_size is positive
         if kernel_size < 1:
             raise ValueError("Kernel size must be positive")
-        
-        # Calculate patch boundaries, ensuring they stay within image
         half_kernel = kernel_size // 2
         u_min = max(0, u - half_kernel)
         u_max = min(w, u + half_kernel + 1)
         v_min = max(0, v - half_kernel)
         v_max = min(h, v + half_kernel + 1)
-        
-        # Extract patch from depth image
         depth_patch = depth_image[v_min:v_max, u_min:u_max]
-        
-        # Create pixel coordinate grids for the patch
         u_patch, v_patch = np.meshgrid(np.arange(u_min, u_max), np.arange(v_min, v_max))
-        
-        # Extract intrinsic parameters
         fx, fy = CAMERA_INTRINSIC_MATRIX[0, 0], CAMERA_INTRINSIC_MATRIX[1, 1]
         cx, cy = CAMERA_INTRINSIC_MATRIX[0, 2], CAMERA_INTRINSIC_MATRIX[1, 2]
-        
-        # Convert depth to meters (D435 depth is in millimeters)
         depth = depth_patch.astype(np.float64) / 1000.0
-        
-        # Unproject to 3D coordinates in camera frame
         x = (u_patch - cx) * depth / fx
         y = (v_patch - cy) * depth / fy
         z = depth
-        
-        # Stack into point cloud (patch_height, patch_width, 3)
         point_cloud = np.stack((x, y, z), axis=-1).astype(np.float32)
-        
-        # Apply extrinsic transformation
         points = point_cloud.reshape(-1, 3)
         points = (CAMERA_EXTRINSIC_ROTATION_MATRIX @ points.T).T + CAMERA_EXTRINSIC_TRANSLATION
-        
-        # Filter out invalid points (depth == 0)
         valid = (depth > 0).reshape(-1)
         point_cloud = points[valid]
-        
         return point_cloud
-
-    def pointcloud2_to_array(self, msg):
-        """
-        Convert a sensor_msgs/PointCloud2 message to a 3D array of x, y, z coordinates.
-        
-        Args:
-            msg: sensor_msgs.msg.PointCloud2 message
-            
-        Returns:
-            pointcloud_array: np.array of shape (height, width, 3) where:
-                - First dimension: height (rows, vertical axis)
-                - Second dimension: width (columns, horizontal axis)
-                - Third dimension: [x, y, z] coordinates
-        """
-        # Check if the message is organized
-        if msg.height == 1:
-            self.get_logger().warn('Point cloud is unstructured (height=1), treating as 1D array')
-        
-        # Total number of points
-        n_points = msg.height * msg.width
-        
-        # Extract raw data
-        data = msg.data  # Byte array
-        
-        # Verify data length matches expected size
-        expected_size = msg.row_step * msg.height
-        if len(data) != expected_size:
-            self.get_logger().error(f'Data size mismatch: expected {expected_size}, got {len(data)}')
-            return None
-
-        # Initialize 3D array for point cloud
-        height, width = msg.height, msg.width
-        pointcloud_array = np.zeros((height, width, 3), dtype=np.float32)  # Shape: (height, width, 3)
-
-        # Parse the data
-        for i in range(n_points):
-            # Calculate byte offset for this point
-            offset = i * msg.point_step
-            
-            # Extract x, y, z (float32, little-endian)
-            x = struct.unpack_from('<f', data, offset + 0)[0]
-            y = struct.unpack_from('<f', data, offset + 4)[0]
-            z = struct.unpack_from('<f', data, offset + 8)[0]
-            
-            # Map to (row, col) in the array
-            row = i // msg.width  # Row index (height dimension, vertical axis)
-            col = i % msg.width   # Column index (width dimension, horizontal axis)
-            
-            # Store x, y, z in the third dimension
-            pointcloud_array[row, col, 0] = x
-            pointcloud_array[row, col, 1] = y
-            pointcloud_array[row, col, 2] = z
-
-            # Coordinate system is defined as per ros2 convention. X is forward, Y is left, Z is up. Defined on the left lens
-
-        return pointcloud_array
-
-
+    
 def main(args=None):
     rclpy.init(args=args)
     try:    

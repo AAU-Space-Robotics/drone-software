@@ -234,6 +234,7 @@ ros2 launch realsense2_camera rs_launch.py depth_module.profile:=640x480x30 rgb_
 
 colcon build --cmake-args -DBUILD_PROBE_PERCEPTION=ON
 
+docker build -t probe_perception:latest -f docker/dockerfile_perception .
 
 %Vertiual enviroment
 source ~/drone-software/venv/bin/activate
