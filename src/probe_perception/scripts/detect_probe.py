@@ -13,14 +13,14 @@ import os
 from ament_index_python.packages import get_package_share_directory
 import struct
 
-# Intrinsic parameters for RealSense D435 (depth stream, e.g., 640x480)
+# Intrinsic parameters for RealSense D435 (from provided calibration data)
 CAMERA_INTRINSIC_MATRIX = np.array([
-    [462.0,   0.0, 320.0],  # fx, 0, cx
-    [0.0,   462.0, 240.0],  # 0, fy, cy
-    [0.0,     0.0,   1.0]
+    [425.8813171386719, 0.0, 430.5101623535156],  # fx, 0, cx
+    [0.0, 425.8813171386719, 238.53343200683594],  # 0, fy, cy
+    [0.0, 0.0, 1.0]
 ], dtype=np.float64)
 
-# Distortion coefficients (assuming undistorted depth stream)
+# Distortion coefficients (plumb_bob model, no distortion)
 CAMERA_DISTORTION_COEFFS = np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)  # k1, k2, p1, p2, k3
 
 # Extrinsic parameters (identity, assuming point cloud in camera frame)
@@ -31,6 +31,7 @@ CAMERA_EXTRINSIC_ROTATION = np.array([
 ], dtype=np.float64).flatten('F')  # Column-major flattened
 
 CAMERA_EXTRINSIC_ROTATION_MATRIX = CAMERA_EXTRINSIC_ROTATION.reshape((3, 3), order='F')
+
 CAMERA_EXTRINSIC_TRANSLATION = np.array([0.0, 0.0, 0.0], dtype=np.float64)
 
 class SegmentationNode(Node):
