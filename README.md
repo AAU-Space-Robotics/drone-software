@@ -201,7 +201,7 @@ Information about the RTK system, such as survery time and minimum accuraccy.
 - https://hamishwillee.github.io/px4_vuepress/en/gps_compass/rtk_gps.html#rtk-connection-process
 
 Check for available devices on network
-- nmap -sP 192.168.0.1/23
+- nmap -sP 192.168.10.1/23
 
 Issues with px4 agent:
 -https://discuss.px4.io/t/issue-with-attitude-target-thrust-and-quaternions-are-conflicting/43515/10
@@ -233,3 +233,7 @@ ros2 launch realsense2_camera rs_launch.py depth_module.profile:=640x480x30 rgb_
 
 
 colcon build --cmake-args -DBUILD_PROBE_PERCEPTION=ON
+
+
+%Vertiual enviroment
+source ~/drone-software/venv/bin/activate
