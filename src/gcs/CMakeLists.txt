@@ -95,6 +95,7 @@ install(PROGRAMS
   script/MotionCaptureReceiver.py
   script/gcs_heartbeat.py
   script/fft.py
+  script/probe_tester.py
   DESTINATION lib/${PROJECT_NAME}/scripts
 )
 

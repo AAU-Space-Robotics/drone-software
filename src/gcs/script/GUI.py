@@ -17,6 +17,7 @@ import threading
 from threading import Thread
 from interfaces.msg import DroneState
 from interfaces.msg import GcsHeartbeat
+from interfaces.msg import ProbeLocations
 from interfaces.action import DroneCommand
 from dataclasses import dataclass
 from decimal import Decimal
@@ -150,19 +151,22 @@ GUI_Heartbeat = 0
 actuator_speeds = [0, 0, 0, 0] # Placeholder for actuator speeds
 yaw = 0.0
 mouse_x_buffer, mouse_y_buffer = 0,0
-effect1, effect2 = False, False
-effect_begin1, effect_begin2, begin_execute = False, False, False
-orange_effect_going = [0,0,0,0,0]
+effect1, effect2, effect3 = False, False, False
+effect_begin1, effect_begin2, begin_execute, effect_begin3 = False, False, False, False
+orange_effect_going = [0,0,0,0,0,0,0,0,0,0]
 duration, plan_duration = 0.3, 5 
 start_time = None
 change_x, change_y_1, change_y_2 = 0,0, 0
 permant_y, card_y_buffer = 190, 190
 flight_plan = [0,0,0,0,0,0,0,0,0,0]
-# Initialize a 2D array for flight_plan_coord with 10 rows and 4 columns, all set to 0.0
 flight_plan_coord = [[""] for _ in range(10)]
 flight_plan_numb, execute_route_numb, visual_card_numb = 0 , 0, 0
 current_step, tep_start_time = 0, 0
 command_sent, waiting_for_completion = False, False
+probes = []
+probe_classification = 0
+probe_numb = 0
+temp_y_arrow, start_y_arrow = 0, 0
 
 class DroneGuiNode(Node):
     def __init__(self):
@@ -177,6 +181,13 @@ class DroneGuiNode(Node):
             DroneState,
             "thyra/out/drone_state",
             self.state_callback,
+            10
+            
+        )
+        self.subscription = self.create_subscription(
+            ProbeLocations,
+            '/thyra/out/probe_locations_global',
+            self.probe_callback,
             10
             
         )
@@ -232,6 +243,7 @@ class DroneGuiNode(Node):
         global GUI_console_logs
         global actuator_speed
 
+
         if hasattr(self, 'last_arming_state') and self.last_arming_state != msg.arming_state:
             self.imgui_logger.warn(f"Arming state changed: {self.last_arming_state} -> {msg.arming_state}")
         
@@ -286,6 +298,17 @@ class DroneGuiNode(Node):
         GUI_console_logs[0] = str(self.get_logger())
         #takeoff_time = msg.takeoff_time
         #self.imgui_logger.info(f"Takeoff time: {takeoff_time}")
+
+    def probe_callback(self, msg):
+        global probes
+        global probe_numb, probe_classification
+
+        probe_numb = msg.num_probes 
+
+        probe_classification = msg.classification_confidence
+
+        probes = msg.probes
+
 
 
     def send_command(self, command_type, target_pose=None, yaw=None):
@@ -569,7 +592,10 @@ def RPY_Text_Field():
         imgui.set_cursor_pos((30, 640)); imgui.text("Yaw   = ")
         imgui.set_cursor_pos((150, 638)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
         imgui.set_cursor_pos((23, 680)); imgui.text(f"[r]")
-def probe_Field():
+
+def probe_Field(node):
+    global probes
+    global probe_classification, probe_numb
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
     # Move up 30 on y axis (was 780-925, now 750-895)
@@ -577,15 +603,91 @@ def probe_Field():
     
     draw_list.add_rect_filled(20, 750, 420, 895, color, rounding=10.0, flags=10)
 
+
+    start_x, start_y = 80, 750  # Line after ID
+    end_x, end_y = 80, 895      
+    color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
+    draw_list.add_line(start_x,start_y, end_x, end_y, color_line, 5.0)
+
+    start_x, start_y = 165, 750  # Line after X
+    end_x, end_y = 165, 895      
+    color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
+    draw_list.add_line(start_x,start_y, end_x, end_y, color_line, 5.0)
+
+    start_x, start_y = 250, 750  # Line after Y
+    end_x, end_y = 250, 895      
+    color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
+    draw_list.add_line(start_x,start_y, end_x, end_y, color_line, 5.0)
+
+    start_x, start_y = 335, 750  # Line after Z
+    end_x, end_y = 335, 895      
+    color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
+    draw_list.add_line(start_x,start_y, end_x, end_y, color_line, 5.0)
+
     with imgui.font(font_small):
         imgui.set_cursor_pos((23, 710)); imgui.text("Probe info:")
-        imgui.set_cursor_pos((60, 760)); imgui.text("X  = ")
-        imgui.set_cursor_pos((150, 758)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((60, 810)); imgui.text("Y  = ")
-        imgui.set_cursor_pos((150, 808)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((60, 860)); imgui.text("Z  = ")
-        imgui.set_cursor_pos((150, 858)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
-     
+        imgui.set_cursor_pos((30, 755)); imgui.text("ID")
+        imgui.set_cursor_pos((115, 755)); imgui.text("X")
+        imgui.set_cursor_pos((200, 755)); imgui.text("Y")
+        imgui.set_cursor_pos((285, 755)); imgui.text("Z")
+        imgui.set_cursor_pos((370, 755)); imgui.text("C")
+    try:
+        i = 0
+        if probe_numb == 1:
+            plan_card.probe_cards(0,1,probes,i,node)
+        if probe_numb == 2:
+            plan_card.probe_cards(0,1,probes,i,node)
+            plan_card.probe_cards(20,2,probes,i+3,node)
+        if  probe_numb == 3:
+            plan_card.probe_cards(0,1,probes,i,node)
+            plan_card.probe_cards(20,2,probes,i+3,node)
+            plan_card.probe_cards(40,3,probes,i+6,node)
+        if probe_numb == 4:
+            plan_card.probe_cards(0,1,probes,i,node)
+            plan_card.probe_cards(20,2,probes,i+3,node)
+            plan_card.probe_cards(40,3,probes,i+6,node)
+            plan_card.probe_cards(60,4,probes,i+9,node)
+        if probe_numb >= 5:
+            plan_card.probe_cards(0,1,probes,i,node)
+            plan_card.probe_cards(20,2,probes,i+3,node)
+            plan_card.probe_cards(40,3,probes,i+6,node)
+            plan_card.probe_cards(60,4,probes,i+9,node)
+            plan_card.probe_cards(80,5,probes,i+12,node)
+        #        imgui.set_cursor_pos((30, 790)); imgui.text("1")
+        #        imgui.set_cursor_pos((100, 790)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
+        #        imgui.set_cursor_pos((185, 790)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
+        #        imgui.set_cursor_pos((270, 790)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
+        #        imgui.set_cursor_pos((365, 790)); imgui.text(f"wack")
+        #i = 3
+        #imgui.set_cursor_pos((30, 810)); imgui.text("2")
+        #imgui.set_cursor_pos((100, 810)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((185, 810)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((270, 810)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((365, 810)); imgui.text(f"wack")
+#
+        #i = 6
+        #imgui.set_cursor_pos((30, 830)); imgui.text("3")
+        #imgui.set_cursor_pos((100, 830)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((185, 830)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((270, 830)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((365, 830)); imgui.text(f"wack")
+#
+        #i = 9
+        #imgui.set_cursor_pos((30, 850)); imgui.text("4")
+        #imgui.set_cursor_pos((100, 850)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((185, 850)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((270, 850)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((365, 850)); imgui.text(f"wack")
+#
+        #i = 12
+        #imgui.set_cursor_pos((30, 870)); imgui.text("5")
+        #imgui.set_cursor_pos((100, 870)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((185, 870)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((270, 870)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
+        #imgui.set_cursor_pos((365, 870)); imgui.text(f"wack")
+    except:
+        pass
+
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
@@ -752,7 +854,7 @@ def return_to_home_button(node):
     imgui.pop_style_var()
 
 def manual(node):
-    imgui.set_cursor_pos((1400, 200))
+    imgui.set_cursor_pos((1562, 200))
     button_color = (0.5, 0.5, 0.5)
     hover_color = (0.5, 0.8, 0.5)
     active_color = (0.5, 1, 0.5)
@@ -769,7 +871,8 @@ def manual(node):
                     hover_color = (0.0, 0.8, 0.0)  # Lighter green for hover
                     active_color = (0.0, 0.2, 0.0)
                     node.send_command("manual")
-                    GuiConsoleLogger("Manual mode activated.")
+                    #GuiConsoleLogger("Manual mode activated.")
+                    node.imgui_logger.info("Manual mode activated")
                 else:
                     print("Joystick not connected or not initialized.")
             except AttributeError:
@@ -796,7 +899,7 @@ def manual(node):
     elif flight_mode == 5:
         flight_mode_text = "Land position"
     
-    imgui.set_cursor_pos((1250, 710))
+    imgui.set_cursor_pos((1562, 710))
     with imgui.font(font_small):
         imgui.text("Flight Mode: " + str(flight_mode_text))
 
@@ -838,26 +941,31 @@ def start_joystick(node):
             pygame.event.pump()  # Process internal queue
             #while arming_state == 7:
             #print(f"Flight mode: {flight_mode}")
+            left_trigger = ((node.joystick.get_axis(2) + 1.0)/2.0)
+            right_trigger = (node.joystick.get_axis(5) + 1.0)/2.0
+            yaw_value = right_trigger - left_trigger
             roll = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
             pitch = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
-            yaw_velocity = node.joystick.get_axis(2) if abs(node.joystick.get_axis(2)) > DEAD_ZONE else 0.0
-            thrust = -node.joystick.get_axis(3) if abs(node.joystick.get_axis(3)) > DEAD_ZONE else 0.0
+            yaw_velocity = yaw_value if abs(yaw_value) > DEAD_ZONE else 0.0
+            thrust = -node.joystick.get_axis(4) if abs(node.joystick.get_axis(4)) > DEAD_ZONE else 0.0
             current_axis_state = int(abs(node.joystick.get_axis(4)))
-            if prev_axis_state is None or current_axis_state != prev_axis_state:
-                if current_axis_state == 1:
-                    node.send_command("disarm")
-                    #print("Arming state changed to: Disarmed (0)")  # Debug
-                elif current_axis_state == 0:
-                    node.send_command("arm")
-                    #print("Arming state changed to: Armed (1)")  # Debug
-                prev_axis_state = current_axis_state
-            #arming_state = -int(abs(node.joystick.get_axis(4)))
-            #print(f"Arming state: {arming_state}")
-            #print(int(abs(node.joystick.get_axis(4))))
-        
-            if( node.joystick.get_button(3) == 1):
-                node.send_command("estop")
-                drone_kill = True
+
+
+            #if prev_axis_state is None or current_axis_state != prev_axis_state:
+            #    if current_axis_state == 1:
+            #        node.send_command("disarm")
+            #        #print("Arming state changed to: Disarmed (0)")  # Debug
+            #    elif current_axis_state == 0:
+            #        node.send_command("arm")
+            #        #print("Arming state changed to: Armed (1)")  # Debug
+            #    prev_axis_state = current_axis_state
+            ##arming_state = -int(abs(node.joystick.get_axis(4)))
+            ##print(f"Arming state: {arming_state}")
+            ##print(int(abs(node.joystick.get_axis(4))))
+        #
+            #if( node.joystick.get_button(3) == 1):
+            #    node.send_command("estop")
+            #    drone_kill = True
         
             node.send_manual_control(roll, pitch, yaw_velocity, thrust)
             clock.tick(20)  # 20 Hz update rate
@@ -939,10 +1047,10 @@ def GuiConsoleLogger(node):
 
 def motor_speed():
     global actuator_speeds   
-    actuator_speeds_slider_bar1 = map_value(actuator_speeds[0], 0, 1000, 106, 54)
-    actuator_speeds_slider_bar2 = map_value(actuator_speeds[1], 0, 1000, 106, 54)
-    actuator_speeds_slider_bar3 = map_value(actuator_speeds[2], 0, 1000, 106, 54)
-    actuator_speeds_slider_bar4 = map_value(actuator_speeds[3], 0, 1000, 106, 54)
+    actuator_speeds_slider_bar1 = map_value(actuator_speeds[0], 1000, 1900, 106, 54)
+    actuator_speeds_slider_bar2 = map_value(actuator_speeds[1], 1000, 1900, 106, 54)
+    actuator_speeds_slider_bar3 = map_value(actuator_speeds[2], 1000, 1900, 106, 54)
+    actuator_speeds_slider_bar4 = map_value(actuator_speeds[3], 1000, 1900, 106, 54)
     graphs.motor_speed_graph(1300, 50, 1360, 110) 
     graphs.motor_speed_graph(1380, 50, 1440, 110)
     graphs.motor_speed_graph(1460, 50, 1520, 110)
@@ -1037,11 +1145,10 @@ def send_map_pos(node):
     draw_list.add_circle_filled(mouse_x_buffer, mouse_y_buffer, 4, imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0))
     effect_class.circle_effect_green(imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0),mouse_x_buffer,mouse_y_buffer)
     
-
 def route_planner(node):
     global change_y_1, change_y_2, permant_y, card_y_buffer
     global flight_plan, text_buffer_plan, flight_plan_numb, flight_plan_coord
-    global effect2, execute_route_numb
+    global effect2, execute_route_numb, temp_y_arrow, start_y_arrow 
     text_field = ""
     mouse_x, mouse_y = imgui.get_mouse_pos()
     imgui.set_cursor_pos((1690, 260))
@@ -1081,8 +1188,6 @@ def route_planner(node):
                 flight_plan[i] = 3
                 try:
                     flight_plan_coord[flight_plan_numb] = [text_buffer_plan]
-                    print(flight_plan_numb)
-                    print(flight_plan_coord[flight_plan_numb][0])
                     flight_plan_numb += 1
                     
                     text_buffer_plan = ""
@@ -1092,11 +1197,13 @@ def route_planner(node):
                 
                 break
     if GUIButton.button_Plan(1436,635,font_small, "Clear##plan4"):
-        for i in range(6):
+        for i in range(7):
             flight_plan[i] = 0
             flight_plan_numb = 0
             flight_plan_coord[i][0] = ""
             execute_route_numb = 0
+            temp_y_arrow = 0
+            start_y_arrow = 0
    
     
     #print(f"First command = {flight_plan[0]} and second = {flight_plan[1]} and so forth = {flight_plan[2]} + {flight_plan[3]}")
@@ -1112,6 +1219,7 @@ def route_planner(node):
     #    permant_y = card_y_buffer
             
     #plan_card.goto_card(1287, 400, node)
+
 def is_T_close(target_pos_x, target_pos_y):
     global position_x, permant_y, position_z
     pos_vector_length = math.sqrt(math.pow(position_x, 2)+ math.pow(position_y,2))
@@ -1125,7 +1233,7 @@ def is_T_close(target_pos_x, target_pos_y):
 def execute_route(node):
     global flight_plan, flight_plan_coord
     global start_time, plan_duration, begin_execute
-    global execute_route_numb
+    global execute_route_numb, effect3
     global position_x, position_y, position_z
     global current_step, step_start_time, command_sent, waiting_for_completion
 
@@ -1136,7 +1244,7 @@ def execute_route(node):
         command_sent = False
         waiting_for_completion = False
         
-        print(f"First command = {flight_plan[0]} and second = {flight_plan[1]} and third = {flight_plan[2]} and fourth = {flight_plan[3]} and fifth = {flight_plan[4]} and sixth = {flight_plan[5]}")
+        #print(f"First command = {flight_plan[0]} and second = {flight_plan[1]} and third = {flight_plan[2]} and fourth = {flight_plan[3]} and fifth = {flight_plan[4]} and sixth = {flight_plan[5]}")
     if begin_execute and current_step < len(flight_plan) and flight_plan[current_step] != 0:
         current_time = time.time()
         
@@ -1165,9 +1273,11 @@ def execute_route(node):
          
                 if waiting_for_completion and elapsed >= plan_duration + 5:
                     #print("Takeoff completed, moving to next step")
+                    effect3 = True
                     current_step += 1
                     step_start_time = 0
                     execute_route_numb += 1
+                    
             
             case 2:  
                 if not command_sent:
@@ -1178,16 +1288,18 @@ def execute_route(node):
    
                 if elapsed >= 1.0:  
                     #print("Landing command completed")
+                    effect3 = True
                     current_step += 1
                     step_start_time = 0
+                    
             
             case 3:  
                 if not command_sent:
                     try:
-                        print(execute_route_numb)
-                        print(f"here i am {flight_plan_coord[execute_route_numb][0]}")
+                        
+                        #print(f"here i am {flight_plan_coord[execute_route_numb][0]}")
                         x, y, z, yaw = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
-                        print(f"x = {x} y = {y} z = {z} and yaw = {yaw}")
+                        #print(f"x = {x} y = {y} z = {z} and yaw = {yaw}")
                         node.send_command("goto", [x, y, z], yaw)
                         node.imgui_logger.info(f"Going to position: x = {x}, y = {y}, z = {z}, yaw = {yaw}")
                         command_sent = True
@@ -1195,6 +1307,7 @@ def execute_route(node):
                     except ValueError:
                         node.get_logger().warn("Invalid input for goto, please enter x y z yaw values")
                         node.imgui_logger.warn("Invalid input for goto, please enter x y z yaw values")
+                        effect3 = True
                         current_step += 1  #may need to change, skips step
                         step_start_time = 0
                         
@@ -1203,16 +1316,19 @@ def execute_route(node):
                     try:
                         x, y, z, yaw = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
                         if is_T_close(x, y):
+                            effect3 = True
                             #print("Reached target position")
                             execute_route_numb += 1
                             current_step += 1
                             step_start_time = 0
-                        elif elapsed > 30.0:  
+                        elif elapsed > 50.0:  
                             #print("Timeout waiting to reach position, moving to next step")
+                            effect3 = True
                             execute_route_numb += 1
                             current_step += 1
                             step_start_time = 0
                     except (ValueError, IndexError):
+                        effect3 = True
                         current_step += 1
                         step_start_time = 0
         
@@ -1228,10 +1344,13 @@ def execute_route(node):
     
     # Always display the plan cards
     plan_card.goto_card(1288, 190, node, flight_plan[0], flight_plan_coord[0], 0)
-    plan_card.goto_card(1288, 250, node, flight_plan[1], flight_plan_coord[1], 1)
-    plan_card.goto_card(1288, 310, node, flight_plan[2], flight_plan_coord[2], 2)
-    plan_card.goto_card(1288, 370, node, flight_plan[3], flight_plan_coord[3], 3)
-    plan_card.goto_card(1288, 430, node, flight_plan[4], flight_plan_coord[4], 4)
+    plan_card.goto_card(1288, 242, node, flight_plan[1], flight_plan_coord[1], 1)
+    plan_card.goto_card(1288, 294, node, flight_plan[2], flight_plan_coord[2], 2)
+    plan_card.goto_card(1288, 346, node, flight_plan[3], flight_plan_coord[3], 3)
+    plan_card.goto_card(1288, 398, node, flight_plan[4], flight_plan_coord[4], 4)
+    plan_card.goto_card(1288, 450, node, flight_plan[5], flight_plan_coord[5], 5)
+    plan_card.goto_card(1288, 502, node, flight_plan[6], flight_plan_coord[6], 6)
+    effect_class.arrow_effect(execute_route_numb)
         
 class effect_class:
     def circle_effect_green(color, pos_x, pos_y):
@@ -1276,11 +1395,40 @@ class effect_class:
         if t >= 1.0:
             effect_begin2 = False
             start_time = None
-            orange_effect_going[numb] = 2
-        
-           
-        
+            orange_effect_going[numb] = 2   
+    def arrow_effect(numb):
+        global effect_begin3, effect3
+        global duration, start_time, temp_y_arrow, start_y_arrow
+        global flight_plan
+        draw_list = imgui.get_window_draw_list()
+        color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 0.9)
+        if flight_plan[numb] != 0:
+            t = 0
+            draw_list = imgui.get_window_draw_list()
+            if effect3:
+                start_time = time.time()
+                effect_begin3 = True
+                effect3 = False
+                start_y_arrow = temp_y_arrow 
 
+
+           
+            if effect_begin3 and start_time is not None:
+                elapsed = time.time() - start_time
+                t = min(elapsed / duration, 1.0)
+                temp_y_arrow = start_y_arrow + (52 * t)
+
+                #draw_list.add_triangle_filled(1266, 201+(temp_y), 1266, 231+(temp_y), 1282, 216+(temp_y), color)
+            #draw_list.add_triangle_filled(830, 450, 830, 475, 855, 462.5, color) #move y axis 52
+            if t >= 1.0:
+                effect_begin3 = False
+                start_time = None
+                temp_y_arrow = start_y_arrow + 52
+
+            draw_list.add_triangle_filled(1266, 201+(temp_y_arrow ), 1266, 231+(temp_y_arrow ), 1282, 216+(temp_y_arrow ), color)
+                #draw_list.add_triangle_filled(1266, 201+(temp_y), 1266, 231+(temp_y), 1282, 216+(temp_y), color)
+        else:
+            draw_list.add_triangle_filled(1266, 201+(temp_y_arrow), 1266, 231+(temp_y_arrow), 1282, 216+(temp_y_arrow), color)
 class plan_card:
     def goto_card(card_pos_x, card_pos_y, node, type,text, numb):
         global flight_plan_numb, flight_plan_coord, execute_route_numb
@@ -1363,6 +1511,12 @@ class plan_card:
 
                 
                 # --- Effect setup only once ---
+    def probe_cards(y_add, id, probes, i, node):
+        imgui.set_cursor_pos((30, 790+y_add)); imgui.text(f"{id}")
+        imgui.set_cursor_pos((100, 790+y_add)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((185, 790+y_add)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((270, 790+y_add)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((365, 790+y_add)); imgui.text(f"wack")
                
         
 def main(args=None):
@@ -1476,7 +1630,7 @@ def main(args=None):
         color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
         #Running different widgets
-       
+        
         drone_visualization()
         grid()
         Arm_Button(node)
@@ -1486,7 +1640,7 @@ def main(args=None):
         Dropdown_Menu()
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
-        probe_Field()
+        probe_Field(node)
         XYZVelocity_Text_Field()
         batteryGraph()
         motor_speed()
@@ -1494,13 +1648,13 @@ def main(args=None):
         #takeoff_button(node)
         #land_button(node)
         return_to_home_button(node)
-        #manual(node) #to be continued
+        
         GuiConsoleLogger(node)
         GUIButton.button1(876, 635, font_small, "Land", "land", node)
         GUIButton.button2( 492, 635, font_small, "Takeoff", "takeoff", node, -1.0)
         GUIButton.button1(1068, 635, font_small, "Set Origin", "set_origin", node)
         
-        
+        #manual(node) #to be continued
         send_map_pos(node)
         route_planner(node)
         execute_route(node)
