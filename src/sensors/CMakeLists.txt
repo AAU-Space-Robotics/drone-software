@@ -40,7 +40,7 @@ install(TARGETS
 
 install(PROGRAMS
   script/image_republisher.py
-  DESTINATION lib/${PROJECT_NAME}/scripts
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 # Install header files
