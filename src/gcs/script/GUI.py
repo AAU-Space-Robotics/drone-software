@@ -203,7 +203,7 @@ class DroneGuiNode(Node):
         self.get_logger().info('GUI Publisher Started')
         self.imgui_logger = ImGuiLogger()
         self.timer = self.create_timer(0.1, self.timer_callback)
-        self.manual_control_publisher = self.create_publisher(ManualControlInput, '/thyra/in/manual_control_input', 10)
+        self.manual_control_publisher = self.create_publisher(ManualControlInput, '/thyra/in/manual_input',qos)
         self._action_client = ActionClient(self, DroneCommand, '/thyra/in/drone_command')   
         self.imgui_logger.info('DroneCommand client initialized, waiting for action server...')
         self._action_client.wait_for_server()
@@ -914,6 +914,7 @@ def start_ros(node):
 def start_joystick(node):
     global roll, pitch, yaw_velocity, thrust, arming_state
     global drone_kill, drone_state
+    global current_item
     pygame.init()
     pygame.joystick.init()
 
@@ -923,9 +924,11 @@ def start_joystick(node):
     
     node.joystick = pygame.joystick.Joystick(0)
     node.joystick.init()
-
+    if node.joystick.get_name() == "Sony Interactive Entertainment Wireless Controller":
+        current_item = 1
     print(f"Initialized joystick: {node.joystick.get_name()}")
-    
+    if node.joystick.get_name() == "OpenTX RM TX16S Joystick":
+        current_item = 2
     if not node.joystick.get_init():
         print("Joystick initialization failed.")
         return
@@ -935,44 +938,84 @@ def start_joystick(node):
     clock = pygame.time.Clock()
     DEAD_ZONE = 0.05
     prev_axis_state = None
+    match current_item:
+        case 1:
+            try:
+                while rclpy.ok():
+                    pygame.event.pump()  # Process internal queue
+                    #while arming_state == 7:
+                    #print(f"Flight mode: {flight_mode}")
+                    left_trigger = ((node.joystick.get_axis(2) + 1.0)/2.0)
+                    right_trigger = (node.joystick.get_axis(5) + 1.0)/2.0
+                    yaw_value = right_trigger - left_trigger
+                    roll_m = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
+                    pitch_m = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
+                    yaw_velocity_m = yaw_value if abs(yaw_value) > DEAD_ZONE else 0.0
+                    thrust = -node.joystick.get_axis(4) if abs(node.joystick.get_axis(4)) > DEAD_ZONE else 0.0
+                    current_axis_state = int(abs(node.joystick.get_axis(4)))
 
-    try:
-        while rclpy.ok():
-            pygame.event.pump()  # Process internal queue
-            #while arming_state == 7:
-            #print(f"Flight mode: {flight_mode}")
-            left_trigger = ((node.joystick.get_axis(2) + 1.0)/2.0)
-            right_trigger = (node.joystick.get_axis(5) + 1.0)/2.0
-            yaw_value = right_trigger - left_trigger
-            roll = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
-            pitch = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
-            yaw_velocity = yaw_value if abs(yaw_value) > DEAD_ZONE else 0.0
-            thrust = -node.joystick.get_axis(4) if abs(node.joystick.get_axis(4)) > DEAD_ZONE else 0.0
-            current_axis_state = int(abs(node.joystick.get_axis(4)))
+
+                    #if prev_axis_state is None or current_axis_state != prev_axis_state:
+                    #    if current_axis_state == 1:
+                    #        node.send_command("disarm")
+                    #        #print("Arming state changed to: Disarmed (0)")  # Debug
+                    #    elif current_axis_state == 0:
+                    #        node.send_command("arm")
+                    #        #print("Arming state changed to: Armed (1)")  # Debug
+                    #    prev_axis_state = current_axis_state
+                    ##arming_state = -int(abs(node.joystick.get_axis(4)))
+                    ##print(f"Arming state: {arming_state}")
+                    ##print(int(abs(node.joystick.get_axis(4))))
+                #
+                    #if( node.joystick.get_button(3) == 1):
+                    #    node.send_command("estop")
+                    #    drone_kill = True
+
+                    node.send_manual_control(roll_m, pitch_m, yaw_velocity_m, thrust)
+                    clock.tick(20)  # 20 Hz update rate
+            except KeyboardInterrupt:
+                pass
+            finally:
+                pygame.quit()
+        case 2:
+            try:
+                while rclpy.ok():
+                    pygame.event.pump()  # Process internal queue
+                    #while arming_state == 7:
+                    #print(f"Flight mode: {flight_mode}")
+                    #left_trigger = ((node.joystick.get_axis(2) + 1.0)/2.0)
+                    #right_trigger = (node.joystick.get_axis(5) + 1.0)/2.0
+                    #yaw_value = right_trigger - left_trigger
+                    roll_m = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
+                    pitch_m = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
+                    yaw_velocity_m = node.joystick.get_axis(2) if abs(node.joystick.get_axis(2)) > DEAD_ZONE else 0.0
+                    thrust = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
+                    
+                    current_axis_state = int(abs(node.joystick.get_axis(4)))
 
 
-            #if prev_axis_state is None or current_axis_state != prev_axis_state:
-            #    if current_axis_state == 1:
-            #        node.send_command("disarm")
-            #        #print("Arming state changed to: Disarmed (0)")  # Debug
-            #    elif current_axis_state == 0:
-            #        node.send_command("arm")
-            #        #print("Arming state changed to: Armed (1)")  # Debug
-            #    prev_axis_state = current_axis_state
-            ##arming_state = -int(abs(node.joystick.get_axis(4)))
-            ##print(f"Arming state: {arming_state}")
-            ##print(int(abs(node.joystick.get_axis(4))))
-        #
-            #if( node.joystick.get_button(3) == 1):
-            #    node.send_command("estop")
-            #    drone_kill = True
-        
-            node.send_manual_control(roll, pitch, yaw_velocity, thrust)
-            clock.tick(20)  # 20 Hz update rate
-    except KeyboardInterrupt:
-        pass
-    finally:
-        pygame.quit()
+                    if prev_axis_state is None or current_axis_state != prev_axis_state:
+                        if current_axis_state == 1:
+                            node.send_command("disarm")
+                            #print("Arming state changed to: Disarmed (0)")  # Debug
+                        elif current_axis_state == 0:
+                            node.send_command("arm")
+                            #print("Arming state changed to: Armed (1)")  # Debug
+                        prev_axis_state = current_axis_state
+                    arming_state = -int(abs(node.joystick.get_axis(4)))
+                    #print(f"Arming state: {arming_state}")
+                    #print(int(abs(node.joystick.get_axis(4))))
+                
+                    if( node.joystick.get_button(3) == 1):
+                        node.send_command("estop")
+                        drone_kill = True
+
+                    node.send_manual_control(roll_m, pitch_m, yaw_velocity_m, thrust)
+                    clock.tick(20)  # 20 Hz update rate
+            except KeyboardInterrupt:
+                pass
+            finally:
+                pygame.quit()
 
 def GuiConsoleLogger(node):
     global font_small
@@ -1654,7 +1697,7 @@ def main(args=None):
         GUIButton.button2( 492, 635, font_small, "Takeoff", "takeoff", node, -1.0)
         GUIButton.button1(1068, 635, font_small, "Set Origin", "set_origin", node)
         
-        #manual(node) #to be continued
+        manual(node) #to be continued
         send_map_pos(node)
         route_planner(node)
         execute_route(node)
