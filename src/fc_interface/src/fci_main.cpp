@@ -110,6 +110,8 @@ public:
         this->declare_parameter("safety.safety_thrust_initial", -0.8);
         this->declare_parameter("safety.safety_thrust_final", -0.45);
         this->declare_parameter("safety.safety_thrustdown_rate", 0.0005);
+        this->declare_parameter("safety.check_battery", true);
+        this->declare_parameter("safety.battery_threshold", 0.10); // 5% battery threshold
         this->get_parameter("safety.check_gcs_timeout", check_gcs_timeout_);
         this->get_parameter("safety.check_position_timeout", check_position_timeout_);
         this->get_parameter("safety.gcs_timeout_threshold", gcs_timeout_threshold_);
@@ -117,11 +119,16 @@ public:
         this->get_parameter("safety.safety_thrust_initial", safety_thrust_initial_);
         this->get_parameter("safety.safety_thrust_final", safety_thrust_final_);
         this->get_parameter("safety.safety_thrustdown_rate", safety_thrustdown_rate_);
+        this->get_parameter("safety.check_battery", safety_check_battery_);
+        this->get_parameter("safety.battery_threshold", safety_battery_threshold_);
+
         RCLCPP_INFO(get_logger(), "Safety parameters: gcs_timeout=%.2f, position_timeout=%.2f, "
-                    "safety_thrust_initial=%.2f, safety_thrustdown_rate=%.4f",
+                    "safety_thrust_initial=%.2f, safety_thrustdown_rate=%.4f, "
+                    "check_battery=%d, battery_threshold=%.2f",
                     gcs_timeout_threshold_, position_timeout_threshold_,
-                    safety_thrust_, safety_thrustdown_rate_);
-  
+                    safety_thrust_, safety_thrustdown_rate_,
+                    safety_check_battery_, safety_battery_threshold_);
+
         // Load setup parameters
         this->declare_parameter("setup.lidar_offset", 0.0);
         this->get_parameter("setup.lidar_offset", lidar_offset_);
@@ -331,9 +338,24 @@ private:
             return;
         }
 
-        bool trigger_safety_land = false;
+        bool trigger_emergency_land = false;
+        bool trigger_position_land = false;
         bool trigger_blind_land = false;
         bool landing_position_mode = drone_state.flight_mode == FlightMode::LAND_POSITION;
+
+        // Check battery status if enabled
+        if (safety_check_battery_ && !landing_position_mode)
+        {
+            // Get the latest battery state
+            BatteryState battery_state = state_manager_.getBatteryState();
+            if (battery_state.charge_remaining < safety_battery_threshold_)
+            {
+                RCLCPP_WARN(get_logger(), "Battery charge low (%.2f < %.2f), triggering emergency land",
+                            battery_state.charge_remaining, safety_battery_threshold_);
+                trigger_emergency_land = true;
+            }
+        }
+
 
         // Check GCS input freshness
         if (check_gcs_timeout_ && !landing_position_mode)
@@ -356,20 +378,18 @@ private:
         }
 
         // Determine fail-safe action
-        if (gcs_stale_ && !position_stale_ && !landing_position_mode)
-        {
-            RCLCPP_WARN(get_logger(), "Entering safety land mode due to stale GCS input");
-            trigger_safety_land = true;
-        }
-        else if (position_stale_)
-        {
+        if (position_stale_) {
             RCLCPP_WARN(get_logger(), "Entering safety land mode due to stale data (GCS: %s, Position: %s)",
-                        gcs_stale_ ? "stale" : "fresh", position_stale_ ? "stale" : "fresh");
+                gcs_stale_ ? "stale" : "fresh", position_stale_ ? "stale" : "fresh");
             trigger_blind_land = true;
-        }
+        } else if ((gcs_stale_ || trigger_emergency_land) && !landing_position_mode) {
+            RCLCPP_WARN(get_logger(), "Entering safety land mode due to stale GCS input or low battery (charge_remaining=%.2f < threshold=%.2f)",
+                        state_manager_.getBatteryState().charge_remaining, safety_battery_threshold_);
+            trigger_position_land = true;
+        }  
 
         // Apply fail-safe
-        if (trigger_safety_land && !landing_position_mode)
+        if (trigger_position_land && !landing_position_mode)
             {
                 setDroneMode(FlightMode::BEGIN_LAND_POSITION);
                 ensureControlLoopRunning(2);
@@ -1192,6 +1212,8 @@ private:
     float gcs_timeout_threshold_;
     float position_timeout_threshold_;
     rclcpp::Time safety_land_start_time_;
+    bool safety_check_battery_;
+    float safety_battery_threshold_;
 
     // Last X Ground Distance Sensor readings
     static constexpr int max_ground_distance_readings_ = 10;

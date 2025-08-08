@@ -37,8 +37,10 @@ flight_controller_interface:
 
     # Safety Parameters
     safety:
-      check_gcs_timeout: true          # Check for ground control station timeout
+      check_gcs_timeout: true           # Check for ground control station timeout
       check_position_timeout: false     # Check for position data timeout
+      check_battery: true               # Check battery status
+      battery_threshold: 0.05           # Battery threshold for safety (0-1 scale)
       gcs_timeout_threshold: 1.0        # Timeout for ground control station input (seconds)
       position_timeout_threshold: 0.2   # Timeout for position data (seconds)
       safety_thrust_initial: -0.72      # Initial thrust for safety landing (negative for downward)
