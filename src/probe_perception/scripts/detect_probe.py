@@ -13,6 +13,7 @@ import numpy as np
 import os
 from ament_index_python.packages import get_package_share_directory
 import struct
+import uuid
 
 # Intrinsic parameters for RealSense D435 (from provided calibration data)
 CAMERA_INTRINSIC_MATRIX = np.array([
@@ -21,14 +22,7 @@ CAMERA_INTRINSIC_MATRIX = np.array([
     [0.0, 0.0, 1.0]
 ], dtype=np.float64)
 
-<<<<<<< HEAD
 CAMERA_DISTORTION_COEFFS = np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)
-=======
-# Distortion coefficients (plumb_bob model, no distortion)
-CAMERA_DISTORTION_COEFFS = np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)  # k1, k2, p1, p2, k3
-
-# Extrinsic parameters (identity, assuming point cloud in camera frame)
->>>>>>> fb727498785bbf15ee9230b1d03d231ab9173f14
 CAMERA_EXTRINSIC_ROTATION = np.array([
     [1.0, 0.0, 0.0],
     [0.0, 1.0, 0.0],
@@ -38,9 +32,22 @@ CAMERA_EXTRINSIC_ROTATION_MATRIX = CAMERA_EXTRINSIC_ROTATION.reshape((3, 3), ord
 
 CAMERA_EXTRINSIC_TRANSLATION = np.array([0.0, 0.0, 0.0], dtype=np.float64)
 
+
+
+# Camera to drone transform (4x4 homogeneous matrix)
+CAMERA_TO_DRONE_TRANSFORM = np.array([
+    [0.0, -0.70710678, 0.70710678, 0.137751],
+    [1.0, 0.0, 0.0, -0.018467],
+    [0.0, 0.70710678, 0.70710678, 0.12126],
+    [0.0, 0.0, 0.0, 1.0]
+], dtype=np.float64)
+
+
 class SegmentationNode(Node):
     def __init__(self):
         super().__init__('segmentation_node')
+        self.uuid = uuid.uuid4()
+        print(f"SegmentationNode initialized with UUID: {self.uuid}")
 
         qos = QoSProfile(
             depth=10,
@@ -57,7 +64,7 @@ class SegmentationNode(Node):
         
         self.rgb_sub = Subscriber(self, CompressedImage, '/thyra/out/color_image/compressed', qos_profile=qos)
         self.depth_sub = Subscriber(self, CompressedImage, '/thyra/out/depth_image/compressed', qos_profile=qos)
-        self.ts = ApproximateTimeSynchronizer([self.rgb_sub, self.depth_sub], queue_size=10, slop=0.1)
+        self.ts = ApproximateTimeSynchronizer([self.rgb_sub, self.depth_sub], queue_size=2, slop=0.05)
         self.ts.registerCallback(self.image_handler)
         
         self.image_publisher = self.create_publisher(Image, '/probe_detector/segmented_image', 10)
@@ -141,14 +148,17 @@ class SegmentationNode(Node):
                         continue
                 else:
                     continue  
-                           
+
+                # Transform location of the probe from camera to drone FRD
+                transformed_position = self.transform_point(position[0], position[1], position[2])
+
                 probe_location = {
                     "centroid_x": centroid_x,
                     "centroid_y": centroid_y,
                     "confidence": probe_confidences[i],
-                    "x": position[0],
-                    "y": position[1],
-                    "z": position[2]
+                    "x": transformed_position[0],
+                    "y": transformed_position[1],
+                    "z": transformed_position[2]
                 }
                 probe_locations.append(probe_location)
                   
@@ -234,7 +244,13 @@ class SegmentationNode(Node):
         valid = (depth > 0).reshape(-1)
         point_cloud = points[valid]
         return point_cloud
-    
+
+    def transform_point(self, x, y, z):
+        # Transform the point from camera frame to drone frame using CAMERA_TO_DRONE_TRANSFORM
+        point = np.array([x, y, z, 1.0])
+        transformed = CAMERA_TO_DRONE_TRANSFORM @ point
+        return transformed[:3]
+
 def main(args=None):
     rclpy.init(args=args)
     try:    
