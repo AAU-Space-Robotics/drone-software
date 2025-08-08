@@ -134,9 +134,15 @@ public:
         this->get_parameter("setup.lidar_offset", lidar_offset_);
         this->declare_parameter("setup.takeoff_height_", -0.5);
         this->get_parameter("setup.takeoff_height_", takeoff_height_);
+        this->declare_parameter("setup.motor_speed_min", 1000.0);
+        this->get_parameter("setup.motor_speed_min", motor_speed_min_);
+        this->declare_parameter("setup.motor_speed_max", 1900.0);
+        this->get_parameter("setup.motor_speed_max", motor_speed_max_);
 
         RCLCPP_INFO(get_logger(), "Lidar offset: %.2f", lidar_offset_);
         RCLCPP_INFO(get_logger(), "Takeoff height: %.2f", takeoff_height_);
+        RCLCPP_INFO(get_logger(), "Motor speed min: %.2f", motor_speed_min_);
+        RCLCPP_INFO(get_logger(), "Motor speed max: %.2f", motor_speed_max_);
 
         // Set initial state
         state_manager_.setHeartbeat(GCSHeartbeat(get_time(),0));
@@ -492,7 +498,15 @@ private:
     void ActuatorOutputCallback(const ActuatorOutputs::SharedPtr msg)
     {
         // Set the actuator speeds in the state manager
-        Stamped4DVector actuator_speeds(get_time(), msg->output[0], msg->output[1], msg->output[2], msg->output[3]);
+        float motor_speed_range = motor_speed_max_ - motor_speed_min_;
+        float output[4];
+        for (int i = 0; i < 4; ++i)
+        {
+            output[i] = (msg->output[i] - motor_speed_min_) / motor_speed_range;
+            output[i] = std::clamp(output[i], 0.0f, 1.0f);
+        }
+
+        Stamped4DVector actuator_speeds(get_time(), output[0], output[1],output[2], output[3]);
         state_manager_.setActuatorSpeeds(actuator_speeds);
     }
 
@@ -1230,7 +1244,11 @@ private:
     double timeout_threshold_;
     int current_control_mode_;
     std::mutex current_control_mode_mutex_;
+
+    // Setup variables
     float takeoff_height_;
+    float motor_speed_min_;
+    float motor_speed_max_;
 };
 
 int main(int argc, char *argv[])
