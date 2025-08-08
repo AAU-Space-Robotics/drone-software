@@ -460,10 +460,15 @@ private:
     {
         DroneState drone_state = state_manager_.getDroneState();
         
+        bool arming = (drone_state.arming_state == ArmingState::DISARMED && msg->arming_state == 2);
+        bool disarming = (drone_state.arming_state == ArmingState::ARMED && msg->arming_state != 2);
         // Reset the control loop if the arming state changes. Only if the drone is asked to be armed, while armed, do nothing.
-        if ((drone_state.arming_state == ArmingState::DISARMED && msg->arming_state == 2) || 
-            (drone_state.arming_state == ArmingState::ARMED && msg->arming_state != 2))
+        if (arming || disarming)
         {
+            if (disarming)
+            {
+                drone_state.flight_mode = FlightMode::STANDBY;
+            }
             cleanupControlLoop();
         }
 
