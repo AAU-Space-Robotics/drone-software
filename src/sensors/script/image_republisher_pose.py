@@ -34,10 +34,14 @@ class CompressedImageRepublisher(Node):
             self, VehicleLocalPosition, '/fmu/out/vehicle_local_position', qos_profile=qos)
         self.attitude_sub = message_filters.Subscriber(
             self, VehicleAttitude, '/fmu/out/vehicle_attitude', qos_profile=qos)
-        
+     
+
         # Synchronize all four messages
-        self.ts = message_filters.ApproximateTimeSynchronizer(
-            [self.color_sub, self.depth_sub, self.position_sub, self.attitude_sub], queue_size=10, slop=0.1)
+        self.ts = message_filters.ApproximateTimeSynchronizer([self.color_sub, self.depth_sub, self.position_sub, self.attitude_sub],
+    queue_size=10,
+    slop=0.1,
+    allow_headerless=True  # Enable headerless message support
+)
         self.ts.registerCallback(self.synced_callback)
         
         # Publishers for compressed topics and pose
@@ -47,7 +51,9 @@ class CompressedImageRepublisher(Node):
             CompressedImage, '/thyra/out/depth_image/compressed', qos)
         self.pose_pub = self.create_publisher(
             PoseStamped, '/thyra/out/pose/synced_with_RGBD', qos)
-        
+        self.origin_offset_sub = self.create_subscription(
+            PoseStamped, '/thyra/out/origin_offset', self.origin_offset_callback, 10)
+
         # Timer for 5 Hz publishing
         self.timer = self.create_timer(1.0 / 5.0, self.timer_callback)
         self.latest_color_msg = None
@@ -55,8 +61,16 @@ class CompressedImageRepublisher(Node):
         self.latest_position_msg = None
         self.latest_attitude_msg = None
         self.last_published_timestamp = None
-        
+        self.current_origin_offset = (0, 0, 0)
+
+
+
         self.get_logger().info('Republishing synchronized compressed color (JPEG) and depth (PNG) images, and pose with Best Effort QoS at 5 Hz')
+
+    def origin_offset_callback(self, msg):
+        # Handle the origin offset message
+        self.current_origin_offset = (msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
+
 
     def synced_callback(self, color_msg, depth_msg, position_msg, attitude_msg):
         # Store the latest synchronized messages only if they are new (using color timestamp as reference)
@@ -106,9 +120,9 @@ class CompressedImageRepublisher(Node):
                     # Create PoseStamped message
                     pose_msg = PoseStamped()
                     pose_msg.header = self.latest_color_msg.header  # Use color timestamp for sync
-                    pose_msg.pose.position.x = float(self.latest_position_msg.x)
-                    pose_msg.pose.position.y = float(self.latest_position_msg.y)
-                    pose_msg.pose.position.z = float(self.latest_position_msg.z)
+                    pose_msg.pose.position.x = float(self.latest_position_msg.x - self.current_origin_offset[0])
+                    pose_msg.pose.position.y = float(self.latest_position_msg.y - self.current_origin_offset[1])
+                    pose_msg.pose.position.z = float(self.latest_position_msg.z - self.current_origin_offset[2])
                     pose_msg.pose.orientation.x = float(self.latest_attitude_msg.q[1])
                     pose_msg.pose.orientation.y = float(self.latest_attitude_msg.q[2])
                     pose_msg.pose.orientation.z = float(self.latest_attitude_msg.q[3])
