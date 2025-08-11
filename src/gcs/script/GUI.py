@@ -38,6 +38,8 @@ from OpenGL.GL import *
 import re
 import math
 
+
+
 class DroneData:
     position: list = (0.0, 0.0, 0.0)
     velocity: list = (0.0, 0.0, 0.0)
@@ -167,6 +169,7 @@ probes = []
 probe_classification = 0
 probe_numb = 0
 temp_y_arrow, start_y_arrow = 0, 0
+flight_mode = -1  # Default to a safe value, e.g., "Standby"
 
 class DroneGuiNode(Node):
     def __init__(self):
@@ -854,6 +857,7 @@ def return_to_home_button(node):
     imgui.pop_style_var()
 
 def manual(node):
+    global flight_mode
     imgui.set_cursor_pos((1562, 200))
     button_color = (0.5, 0.5, 0.5)
     hover_color = (0.5, 0.8, 0.5)

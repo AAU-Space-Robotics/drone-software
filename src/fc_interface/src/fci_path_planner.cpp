@@ -30,8 +30,8 @@ bool FCI_PathPlanner::GenerateTrajectory(
 
     // Calculate the time required for the trajectory based on distance and velocity
     float distance = (end_pos - start_pos).norm();
-    float current_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(start_quat).x(), 2*M_PI, 0);
-    float target_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(end_quat).x(), 2*M_PI, 0);
+    float current_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(start_quat).x(), 2 * M_PI, 0);
+    float target_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(end_quat).x(), 2 * M_PI, 0);
     float distance_angular = std::fabs(std::atan2(std::sin(target_yaw - current_yaw), std::cos(target_yaw - current_yaw)));
     float trajectory_duration_cartesian = calculateDuration(distance, current_linear_velocity_, min_linear_velocity_, max_linear_velocity_);
     float trajectory_duration_angular = calculateDuration(distance_angular, current_angular_velocity_, min_angular_velocity_, max_angular_velocity_);
@@ -47,6 +47,67 @@ bool FCI_PathPlanner::GenerateTrajectory(
                 start_pos(i), end_pos(i), start_vel(i), start_acc(i), total_time, method);
         }
     }
+    return true;
+}
+
+bool FCI_PathPlanner::GenerateSpinTrajectory(
+    const Eigen::Vector3d& position,
+    const Eigen::Quaterniond& start_quat,
+    double target_yaw,
+    double num_rotations,
+    bool use_longest_path,
+    trajectoryMethod method) {
+    // Set start and end positions to be the same (no translation)
+    Eigen::Vector3d start_pos = position;
+    Eigen::Vector3d end_pos = position;
+
+    // Get current yaw from start quaternion
+    float current_yaw = transformations_.unwrapAngle(transformations_.quaternionToEuler(start_quat).x(), 2 * M_PI, 0);
+    
+    // Normalize target yaw to [0, 2π)
+    float target_yaw_normalized = transformations_.unwrapAngle(target_yaw, 2 * M_PI, 0);
+    
+    // Calculate angular distance for the final yaw adjustment
+    float delta_yaw = target_yaw_normalized - current_yaw;
+    if (use_longest_path) {
+        // Choose the longer path by adjusting delta_yaw
+        if (delta_yaw > 0) {
+            delta_yaw -= 2 * M_PI;
+        } else {
+            delta_yaw += 2 * M_PI;
+        }
+    } else {
+        // Ensure shortest path by wrapping delta_yaw to [-π, π]
+        delta_yaw = std::atan2(std::sin(delta_yaw), std::cos(delta_yaw));
+    }
+    
+    // Add additional rotations (each rotation is 2π)
+    float total_angular_distance = std::fabs(delta_yaw + num_rotations * 2 * M_PI);
+    
+    // Calculate duration based on angular velocity
+    total_time = calculateDuration(total_angular_distance, current_angular_velocity_, min_angular_velocity_, max_angular_velocity_);
+    
+    // Compute the effective target yaw including rotations
+    double effective_target_yaw = current_yaw + delta_yaw + num_rotations * 2 * M_PI * (delta_yaw >= 0 ? 1 : -1);
+    
+    // Convert effective target yaw to quaternion (rotation around z-axis)
+    Eigen::Quaterniond end_quat(Eigen::AngleAxisd(effective_target_yaw, Eigen::Vector3d::UnitZ()));
+    
+    // Store normalized quaternions for interpolation
+    this->start_quat = start_quat.normalized();
+    this->end_quat = end_quat.normalized();
+    
+    // Set zero velocity and acceleration for position
+    start_vel = Eigen::Vector3d::Zero();
+    start_acc = Eigen::Vector3d::Zero();
+    
+    // Generate constant position polynomials (no movement)
+    if (method == MIN_SNAP) {
+        for (int i = 0; i < 3; ++i) {
+            segments[i].coefficient = std::vector<double>{position(i), 0, 0, 0, 0, 0, 0, 0};
+        }
+    }
+    
     return true;
 }
 
@@ -134,7 +195,6 @@ std::vector<double> FCI_PathPlanner::generatePolynomialCoefficients(
     return std::vector<double>{coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5], coeffs[6], coeffs[7]};
 }
 
-
 bool FCI_PathPlanner::setLinearVelocity(float linear_velocity) {
     if (linear_velocity < min_linear_velocity_ || linear_velocity > max_linear_velocity_) {
         return false; // Invalid velocity
@@ -143,7 +203,7 @@ bool FCI_PathPlanner::setLinearVelocity(float linear_velocity) {
     return true;
 }
 
-bool FCI_PathPlanner::setAngularVelocity(float angular_velocity){
+bool FCI_PathPlanner::setAngularVelocity(float angular_velocity) {
     if (angular_velocity < min_angular_velocity_ || angular_velocity > max_angular_velocity_) {
         return false; // Invalid velocity
     }
