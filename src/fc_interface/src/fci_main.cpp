@@ -1,5 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include "geometry_msgs/msg/pose_stamped.hpp"
 
 #include <px4_msgs/msg/offboard_control_mode.hpp>
 #include <px4_msgs/msg/trajectory_setpoint.hpp>
@@ -159,6 +160,7 @@ public:
         attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
         drone_state_pub_ = create_publisher<interfaces::msg::DroneState>("thyra/out/drone_state", 10);
+        origin_offset_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>("/thyra/out/origin_offset", 10);
 
         // Subscribers
         if (position_source == "px4"){
@@ -223,6 +225,7 @@ public:
         offboard_timer_ = create_wall_timer(200ms, [this](){ setOffboardMode(); });
         drone_state_timer = create_wall_timer(100ms, [this](){ publish_drone_state(); });
         safety_timer_ = create_wall_timer(200ms, [this]() { safetyCheckCallback(); });
+        offset_timer = create_wall_timer(1000ms, [this]() { publish_origin_offset(); });
 
         RCLCPP_INFO(get_logger(), "FlightControllerInterface initialized.");
 
@@ -514,6 +517,19 @@ private:
         while (yaw > M_PI) yaw -= 2.0 * M_PI;
         while (yaw < -M_PI) yaw += 2.0 * M_PI;
         return yaw;
+    }
+
+    // Publish the origin offset
+    void publish_origin_offset()
+    {
+        geometry_msgs::msg::PoseStamped msg{};
+        msg.header.stamp = get_time();
+        msg.header.frame_id = "px4_offset";
+        Stamped3DVector Current_origin = state_manager_.getOrigin();
+        msg.pose.position.x = Current_origin.x();
+        msg.pose.position.y = Current_origin.y();
+        msg.pose.position.z = Current_origin.z();
+        origin_offset_pub_->publish(msg);
     }
 
     // Drone state publisher
@@ -1188,6 +1204,7 @@ private:
     rclcpp::Publisher<VehicleAttitudeSetpoint>::SharedPtr attitude_setpoint_pub_;
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_pub_;
     rclcpp::Publisher<interfaces::msg::DroneState>::SharedPtr drone_state_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr origin_offset_pub_;
 
     // rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr gps_sub_;
     rclcpp::Subscription<interfaces::msg::GcsHeartbeat>::SharedPtr gcs_heartbeat_sub_;
@@ -1204,6 +1221,7 @@ private:
     rclcpp::TimerBase::SharedPtr offboard_timer_;
     rclcpp::TimerBase::SharedPtr drone_state_timer;
     rclcpp::TimerBase::SharedPtr safety_timer_;
+    rclcpp::TimerBase::SharedPtr offset_timer;
     rclcpp_action::Server<DroneCommand>::SharedPtr drone_command_server_;
 
 
