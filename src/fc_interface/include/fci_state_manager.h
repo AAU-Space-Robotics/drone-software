@@ -170,7 +170,7 @@ struct GCSHeartbeat {
 // Drone state
 struct DroneState {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
-    
+     
     //Drone state data
     Command command = Command::DISARM;
     ArmingState arming_state = ArmingState::DISARMED;

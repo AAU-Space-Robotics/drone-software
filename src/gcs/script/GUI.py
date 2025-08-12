@@ -17,7 +17,7 @@ import threading
 from threading import Thread
 from interfaces.msg import DroneState
 from interfaces.msg import GcsHeartbeat
-from interfaces.msg import ProbeLocations
+from interfaces.msg import ProbeGlobalLocations
 from interfaces.action import DroneCommand
 from dataclasses import dataclass
 from decimal import Decimal
@@ -37,6 +37,8 @@ import numpy as np
 from OpenGL.GL import *
 import re
 import math
+
+
 
 class DroneData:
     position: list = (0.0, 0.0, 0.0)
@@ -167,6 +169,7 @@ probes = []
 probe_classification = 0
 probe_numb = 0
 temp_y_arrow, start_y_arrow = 0, 0
+flight_mode = -1  # Default to a safe value, e.g., "Standby"
 
 class DroneGuiNode(Node):
     def __init__(self):
@@ -185,8 +188,8 @@ class DroneGuiNode(Node):
             
         )
         self.subscription = self.create_subscription(
-            ProbeLocations,
-            '/thyra/out/probe_locations_global',
+            ProbeGlobalLocations,
+            '/probe_detector/global_probe_locations',
             self.probe_callback,
             10
             
@@ -303,11 +306,27 @@ class DroneGuiNode(Node):
         global probes
         global probe_numb, probe_classification
 
-        probe_numb = msg.num_probes 
+        # Extract the number of probes
+        probe_numb = msg.probe_count
 
-        probe_classification = msg.classification_confidence
+        # Extract classification confidence (assuming it's derived from the confidence list or a separate field)
+        # If classification_confidence is meant to be the average of msg.confidence, we can compute it
+        probe_classification = sum(msg.confidence) / len(msg.confidence) if msg.confidence else 0.0
 
-        probes = msg.probes
+        # Extract probe data into a structured format (list of dictionaries)
+        probes = []
+        for i in range(msg.probe_count):
+            probe = {
+                'x': msg.x[i],
+                'y': msg.y[i],
+                'z': msg.z[i],
+                'confidence': msg.confidence[i],
+                'contribution': msg.contribution[i]
+            }
+            probes.append(probe)
+
+        # Optionally, store the timestamp if needed
+        timestamp = msg.stamp
 
 
 
@@ -873,6 +892,7 @@ def return_to_home_button(node):
     imgui.pop_style_var()
 
 def manual(node):
+    global flight_mode
     imgui.set_cursor_pos((1562, 200))
     button_color = (0.5, 0.5, 0.5)
     hover_color = (0.5, 0.8, 0.5)

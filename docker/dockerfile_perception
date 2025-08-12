@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y curl && \
     apt-get update && apt-get install -y \
     ros-dev-tools \
     ros-${ROS_DISTRO}-desktop \
+    ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
     ros-${ROS_DISTRO}-cv-bridge \
     ros-${ROS_DISTRO}-sensor-msgs \
     ros-${ROS_DISTRO}-geometry-msgs \

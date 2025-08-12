@@ -40,6 +40,8 @@ install(TARGETS
 
 install(PROGRAMS
   script/image_republisher.py
+  script/image_republisher_pose.py
+  script/px4_to_cam.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

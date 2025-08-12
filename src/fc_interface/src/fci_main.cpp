@@ -1,5 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include "geometry_msgs/msg/pose_stamped.hpp"
 
 #include <px4_msgs/msg/offboard_control_mode.hpp>
 #include <px4_msgs/msg/trajectory_setpoint.hpp>
@@ -159,6 +160,7 @@ public:
         attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
         drone_state_pub_ = create_publisher<interfaces::msg::DroneState>("thyra/out/drone_state", 10);
+        origin_offset_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>("/thyra/out/origin_offset", 10);
 
         // Subscribers
         if (position_source == "px4"){
@@ -223,6 +225,7 @@ public:
         offboard_timer_ = create_wall_timer(200ms, [this](){ setOffboardMode(); });
         drone_state_timer = create_wall_timer(100ms, [this](){ publish_drone_state(); });
         safety_timer_ = create_wall_timer(200ms, [this]() { safetyCheckCallback(); });
+        offset_timer = create_wall_timer(1000ms, [this]() { publish_origin_offset(); });
 
         RCLCPP_INFO(get_logger(), "FlightControllerInterface initialized.");
 
@@ -516,6 +519,19 @@ private:
         return yaw;
     }
 
+    // Publish the origin offset
+    void publish_origin_offset()
+    {
+        geometry_msgs::msg::PoseStamped msg{};
+        msg.header.stamp = get_time();
+        msg.header.frame_id = "px4_offset";
+        Stamped3DVector Current_origin = state_manager_.getOrigin();
+        msg.pose.position.x = Current_origin.x();
+        msg.pose.position.y = Current_origin.y();
+        msg.pose.position.z = Current_origin.z();
+        origin_offset_pub_->publish(msg);
+    }
+
     // Drone state publisher
     void publish_drone_state()
     {
@@ -571,6 +587,7 @@ private:
         //uint8 estop  
         FlightMode flightmode = drone_state.flight_mode;
         msg.flight_mode = static_cast<int16_t>(flightmode);
+        msg.flight_time = static_cast<double>(drone_state.flight_time.seconds());
         //RCLCPP_INFO(get_logger(), "Flight mode: %d", static_cast<int>(msg.flight_mode));
         
 
@@ -702,9 +719,12 @@ private:
 
     void controlLoop()
     {
-
-        // update time in air
-
+        // Update flight time
+        DroneState drone_state = state_manager_.getDroneState();
+        rclcpp::Time current_time = get_time();
+        drone_state.flight_time = drone_state.flight_time + (current_time - drone_state.timestamp);
+        drone_state.timestamp = current_time;
+        state_manager_.setDroneState(drone_state);
 
         //Lock the current control mode
         std::lock_guard<std::mutex> lock(current_control_mode_mutex_);
@@ -747,6 +767,11 @@ private:
                 Stamped4DVector target_profile(get_time(), 0.0, 0.0, 0.0, 0.0);
                 state_manager_.setTargetPositionProfile(target_profile);
                 publishAttitudeSetpoint(Eigen::Vector4d(0.0, 0.0, 0.0, 0.0));
+
+                DroneState drone_state = state_manager_.getDroneState();
+                drone_state.timestamp = get_time();
+                drone_state.flight_time = rclcpp::Duration(0, 0);
+                state_manager_.setDroneState(drone_state);
             }
             catch (const rclcpp::exceptions::RCLError &e)
             {
@@ -764,6 +789,9 @@ private:
         }
         DroneState drone_state = state_manager_.getDroneState();
         if (!control_timer_ && drone_state.arming_state == ArmingState::ARMED) {
+            drone_state.timestamp = get_time();
+            drone_state.flight_time = rclcpp::Duration(0, 0);
+            state_manager_.setDroneState(drone_state);
             control_timer_ = create_wall_timer(10ms, [this]() { controlLoop(); });
             RCLCPP_INFO(get_logger(), "Control loop started with mode: %d", mode);
         }
@@ -914,7 +942,7 @@ private:
     rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID & /*uuid*/,
                                                    std::shared_ptr<const DroneCommand::Goal> goal)
     {
-        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed","set_angular_speed"};
+        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed","set_angular_speed", "spin"};
         RCLCPP_INFO(get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
 
         DroneState drone_state = state_manager_.getDroneState();
@@ -968,6 +996,11 @@ private:
         if (goal->command_type == "set_angular_speed" && (goal->target_pose.size() != 1 || drone_state.arming_state != ArmingState::DISARMED))
         {
             RCLCPP_WARN(get_logger(), "Rejected: invalid set_angular_speed parameters or drone not armed.");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+        if (goal->command_type == "spin" && (goal->target_pose.size() != 3 || drone_state.arming_state != ArmingState::ARMED || goal->target_pose[1] < 0.0 || (goal->target_pose[2] != 0.0 && goal->target_pose[2] != 1.0)))
+        {
+            RCLCPP_WARN(get_logger(), "Rejected: invalid spin parameters, drone not armed, negative rotations, or invalid path selection.");
             return rclcpp_action::GoalResponse::REJECT;
         }
 
@@ -1097,6 +1130,37 @@ private:
                 result->message = "Drone moving to target position.";
                 std::cout << "Goto target: " << target_position.transpose() << ", yaw: " << target_yaw << std::endl;
             }
+            else if (goal->command_type == "spin")
+            {
+                setDroneMode(FlightMode::POSITION);
+                ensureControlLoopRunning(2);
+
+                // Get current position and orientation
+                Stamped3DVector global_pos = state_manager_.getGlobalPosition();
+                StampedQuaternion attitude = state_manager_.getAttitude();
+                Eigen::Vector3d current_position = {global_pos.x(), global_pos.y(), global_pos.z()};
+                Eigen::Quaterniond current_quat = attitude.quaternion().normalized();
+
+                // Extract spin parameters
+                double target_yaw = goal->target_pose[0];
+                double num_rotations = goal->target_pose[1];
+                bool use_longest_path = (goal->target_pose[2] == 1.0);
+
+                // Generate spin trajectory
+                path_planner_.GenerateSpinTrajectory(current_position, current_quat, target_yaw, num_rotations, use_longest_path, trajectoryMethod::MIN_SNAP);
+                float trajectory_duration = path_planner_.getTotalTime();
+
+                // Set trajectory start time and activate trajectory mode
+                DroneState drone_state = state_manager_.getDroneState();
+                drone_state.trajectory_start_time_ = get_time();
+                drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
+                drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
+                state_manager_.setDroneState(drone_state);
+
+                result->success = true;
+                result->message = "Drone spinning to yaw " + std::to_string(target_yaw) + " with " + std::to_string(num_rotations) + " rotations.";
+                RCLCPP_INFO(get_logger(), "Spin target: yaw=%.2f, rotations=%.1f, path=%s", target_yaw, num_rotations, use_longest_path ? "longest" : "shortest");
+            }
             else if (goal->command_type == "manual")
             {
                 cleanupControlLoop();
@@ -1188,6 +1252,7 @@ private:
     rclcpp::Publisher<VehicleAttitudeSetpoint>::SharedPtr attitude_setpoint_pub_;
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_pub_;
     rclcpp::Publisher<interfaces::msg::DroneState>::SharedPtr drone_state_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr origin_offset_pub_;
 
     // rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr gps_sub_;
     rclcpp::Subscription<interfaces::msg::GcsHeartbeat>::SharedPtr gcs_heartbeat_sub_;
@@ -1204,6 +1269,7 @@ private:
     rclcpp::TimerBase::SharedPtr offboard_timer_;
     rclcpp::TimerBase::SharedPtr drone_state_timer;
     rclcpp::TimerBase::SharedPtr safety_timer_;
+    rclcpp::TimerBase::SharedPtr offset_timer;
     rclcpp_action::Server<DroneCommand>::SharedPtr drone_command_server_;
 
 

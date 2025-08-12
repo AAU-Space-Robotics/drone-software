@@ -49,6 +49,15 @@ public:
         trajectoryMethod method
     );
 
+    bool GenerateSpinTrajectory(
+        const Eigen::Vector3d& position,
+        const Eigen::Quaterniond& start_quat,
+        double target_yaw,
+        double num_rotations,
+        bool use_longest_path,
+        trajectoryMethod method
+    );
+
     TrajectoryPoint evaluatePolynomial(
         const std::vector<double>& coefficients,
         double t
@@ -85,7 +94,7 @@ private:
         trajectoryMethod method
     );
 
-    float calculateDuration(float distance, float velocity, float min_velocity, float max_velocity)  const;
+    float calculateDuration(float distance, float velocity, float min_velocity, float max_velocity) const;
 
     FCI_Transformations transformations_;
 };
