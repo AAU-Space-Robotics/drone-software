@@ -172,6 +172,8 @@ probe_numb = 0
 temp_y_arrow, start_y_arrow = 0, 0
 flight_mode = -1  # Default to a safe value, e.g., "Standby"
 flight_time = 0.0
+trajectory_mode = 0  # Default trajectory mode
+last_trajectory_mode = None  
 
 class DroneGuiNode(Node):
     def __init__(self):
@@ -244,7 +246,7 @@ class DroneGuiNode(Node):
         global roll, pitch, yaw_velocity
         global velocity_x, velocity_y, velocity_z, velocity_timestamp
         global battery_voltage, battery_state_timestamp, battery_current, battery_percentage, battery_discharge_rate, battery_average_current
-        global arming_state, flight_mode, takeoff_time, flight_time
+        global arming_state, flight_mode, takeoff_time, flight_time, trajectory_mode
         global GUI_console_logs
         global actuator_speed
 
@@ -299,6 +301,7 @@ class DroneGuiNode(Node):
 
         arming_state = msg.arming_state
         #self.get_logger().info(f"Arming state: {arming_state}")
+        trajectory_mode = msg.trajectory_mode
         flight_mode = msg.flight_mode
         GUI_console_logs[0] = str(self.get_logger())
         #takeoff_time = msg.takeoff_time
@@ -430,7 +433,7 @@ def Arm_Button(node):
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
     draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
     with imgui.font(font_small):
-        imgui.set_cursor_pos((850, 30)); imgui.text(f"Flight time = {Decimal(flight_time).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((800, 30)); imgui.text(f"Flight time = {Decimal(flight_time).quantize(Decimal('0.000'))}")
     
 def Kill_command(node):
     global killbutton_color, drone_kill
@@ -917,13 +920,14 @@ def manual(node):
     elif flight_mode == 5:
         flight_mode_text = "Land position"
     
-    imgui.set_cursor_pos((850, 80))
+    imgui.set_cursor_pos((800, 100))
     with imgui.font(font_small):
         imgui.text("Flight Mode: " + str(flight_mode_text))
 
 def start_ros(node):
     try:
         rclpy.spin(node)
+        
     except KeyboardInterrupt:
         pass
     node.destroy_node()
@@ -942,24 +946,26 @@ def start_joystick(node):
         return
     
     node.joystick = pygame.joystick.Joystick(0)
+    
     node.joystick.init()
     if node.joystick.get_name() == "Sony Interactive Entertainment Wireless Controller":
         current_item = 1
-        #print(f"Initialized joystick: {node.joystick.get_name()}")
-        return
-    if node.joystick.get_name() == "OpenTX RM TX16S Joystick":
+        print(f"Initialized joystick: {node.joystick.get_name()}")
+        
+    elif node.joystick.get_name() == "OpenTX RM TX16S Joystick":
         current_item = 2
         #print(f"Initialized joystick: {node.joystick.get_name()}")
-        return
-    if not node.joystick.get_init():
-        #print("Joystick initialization failed.")
-        return
+
+    elif not node.joystick.get_init():
+        print("Joystick initialization failed.")
+
     
-  
+    
 
     clock = pygame.time.Clock()
     DEAD_ZONE = 0.05
     prev_axis_state = None
+    
     match current_item:
         case 1:
             try:
@@ -967,6 +973,7 @@ def start_joystick(node):
                     pygame.event.pump()  # Process internal queue
                     #while arming_state == 7:
                     #print(f"Flight mode: {flight_mode}")
+                    
                     left_trigger = ((node.joystick.get_axis(2) + 1.0)/2.0)
                     right_trigger = (node.joystick.get_axis(5) + 1.0)/2.0
                     yaw_value = right_trigger - left_trigger
@@ -975,8 +982,9 @@ def start_joystick(node):
                     yaw_velocity_m = yaw_value if abs(yaw_value) > DEAD_ZONE else 0.0
                     thrust = -node.joystick.get_axis(4) if abs(node.joystick.get_axis(4)) > DEAD_ZONE else 0.0
                     current_axis_state = int(abs(node.joystick.get_axis(4)))
-
-
+                    hello = node.joystick.get_button(3) #command to test which buttons
+                    # Debug
+               
                     #if prev_axis_state is None or current_axis_state != prev_axis_state:
                     #    if current_axis_state == 1:
                     #        node.send_command("disarm")
@@ -994,6 +1002,7 @@ def start_joystick(node):
                     #    drone_kill = True
 
                     node.send_manual_control(roll_m, pitch_m, yaw_velocity_m, thrust)
+                    
                     clock.tick(20)  # 20 Hz update rate
             except KeyboardInterrupt:
                 pass
@@ -1301,7 +1310,18 @@ def is_T_close(target_pos_x, target_pos_y):
     dy = target_pos_y - position_y
     distance = math.sqrt(dx * dx + dy * dy)
     return distance <= 0.5
-    
+
+def is_trajectory_complete():
+    global trajectory_mode, last_trajectory_mode
+    # Only return True if last_trajectory_mode is not 2 and current is 2
+    result = False
+    if last_trajectory_mode is not None and last_trajectory_mode != 2 and trajectory_mode == 2:
+        result = True
+    last_trajectory_mode = trajectory_mode
+    return result
+
+
+
 def execute_route(node):
     global flight_plan, flight_plan_coord
     global start_time, plan_duration, begin_execute
@@ -1382,7 +1402,7 @@ def execute_route(node):
                 try:
                     if execute_route_numb < len(flight_plan_coord) and flight_plan_coord[execute_route_numb]:
                         x, y, z, yaw = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
-                        if is_T_close(x, y):
+                        if is_trajectory_complete():
                             effect3 = True
 
                             step_finished = True
@@ -1404,7 +1424,7 @@ def execute_route(node):
         step_start_time = -1  
         current_step += 1  
         return
-    print(execute_route_numb)
+    
     
         
 class effect_class:
@@ -1601,14 +1621,16 @@ def drone_image(image_path, texture_id, img_width, img_height):
             imgui.image(texture_id, 290, 230)
         else:
             imgui.text("Failed to load droneimage.png")               
+
 def main(args=None):
     rclpy.init()
     global font, font_large, font_small, font_for_meter
-    global position_x, position_y, yaw_velocity
+    global position_x, position_y, yaw_velocity, current_item
     node = DroneGuiNode()  # Create node once
     Thread(target=start_ros, args=(node,), daemon=True).start()
     Thread(target=start_joystick, args=(node,), daemon=True).start()
     # Initialize GLFW
+
     if not glfw.init():
         print("Could not initialize GLFW")
         return
@@ -1735,8 +1757,8 @@ def main(args=None):
         GUIButton.button1(876, 635, font_small, "Land", "land", node)
         GUIButton.button2( 492, 635, font_small, "Takeoff", "takeoff", node, -1.0)
         GUIButton.button1(1068, 635, font_small, "Set Origin", "set_origin", node)
-        
-        manual(node) #to be continued
+  
+        manual(node) 
         send_map_pos(node)
         route_planner(node)
         execute_route(node)
