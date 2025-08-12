@@ -166,7 +166,7 @@ flight_plan_numb, execute_route_numb, visual_card_numb = 0 , 0, 0
 current_step, tep_start_time = 0, 0
 command_sent, waiting_for_completion = False, False
 probes = []
-probe_classification = 0
+probe_classification = [0.0,0.0,0.0,0.0,0.0]  # Placeholder for probe classification confidence
 probe_numb = 0
 temp_y_arrow, start_y_arrow = 0, 0
 flight_mode = -1  # Default to a safe value, e.g., "Standby"
@@ -307,11 +307,11 @@ class DroneGuiNode(Node):
         global probe_numb, probe_classification
 
         # Extract the number of probes
-        probe_numb = msg.probe_count
+        
 
         # Extract classification confidence (assuming it's derived from the confidence list or a separate field)
         # If classification_confidence is meant to be the average of msg.confidence, we can compute it
-        probe_classification = sum(msg.confidence) / len(msg.confidence) if msg.confidence else 0.0
+        
 
         # Extract probe data into a structured format (list of dictionaries)
         probes = []
@@ -324,6 +324,9 @@ class DroneGuiNode(Node):
                 'contribution': msg.contribution[i]
             }
             probes.append(probe)
+        #probe_classification = sum(msg.confidence) / len(msg.confidence) if msg.confidence else 0.0
+
+        probe_numb = msg.probe_count
 
         # Optionally, store the timestamp if needed
         timestamp = msg.stamp
@@ -656,54 +659,22 @@ def probe_Field(node):
             plan_card.probe_cards(0,1,probes,i,node)
         if probe_numb == 2:
             plan_card.probe_cards(0,1,probes,i,node)
-            plan_card.probe_cards(20,2,probes,i+3,node)
+            plan_card.probe_cards(20,2,probes,i+1,node)
         if  probe_numb == 3:
             plan_card.probe_cards(0,1,probes,i,node)
-            plan_card.probe_cards(20,2,probes,i+3,node)
-            plan_card.probe_cards(40,3,probes,i+6,node)
+            plan_card.probe_cards(20,2,probes,i+1,node)
+            plan_card.probe_cards(40,3,probes,i+2,node)
         if probe_numb == 4:
             plan_card.probe_cards(0,1,probes,i,node)
-            plan_card.probe_cards(20,2,probes,i+3,node)
-            plan_card.probe_cards(40,3,probes,i+6,node)
-            plan_card.probe_cards(60,4,probes,i+9,node)
+            plan_card.probe_cards(20,2,probes,i+1,node)
+            plan_card.probe_cards(40,3,probes,i+2,node)
+            plan_card.probe_cards(60,4,probes,i+3,node)
         if probe_numb >= 5:
             plan_card.probe_cards(0,1,probes,i,node)
-            plan_card.probe_cards(20,2,probes,i+3,node)
-            plan_card.probe_cards(40,3,probes,i+6,node)
-            plan_card.probe_cards(60,4,probes,i+9,node)
-            plan_card.probe_cards(80,5,probes,i+12,node)
-        #        imgui.set_cursor_pos((30, 790)); imgui.text("1")
-        #        imgui.set_cursor_pos((100, 790)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
-        #        imgui.set_cursor_pos((185, 790)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
-        #        imgui.set_cursor_pos((270, 790)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
-        #        imgui.set_cursor_pos((365, 790)); imgui.text(f"wack")
-        #i = 3
-        #imgui.set_cursor_pos((30, 810)); imgui.text("2")
-        #imgui.set_cursor_pos((100, 810)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((185, 810)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((270, 810)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((365, 810)); imgui.text(f"wack")
-#
-        #i = 6
-        #imgui.set_cursor_pos((30, 830)); imgui.text("3")
-        #imgui.set_cursor_pos((100, 830)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((185, 830)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((270, 830)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((365, 830)); imgui.text(f"wack")
-#
-        #i = 9
-        #imgui.set_cursor_pos((30, 850)); imgui.text("4")
-        #imgui.set_cursor_pos((100, 850)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((185, 850)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((270, 850)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((365, 850)); imgui.text(f"wack")
-#
-        #i = 12
-        #imgui.set_cursor_pos((30, 870)); imgui.text("5")
-        #imgui.set_cursor_pos((100, 870)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((185, 870)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((270, 870)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
-        #imgui.set_cursor_pos((365, 870)); imgui.text(f"wack")
+            plan_card.probe_cards(20,2,probes,i+1,node)
+            plan_card.probe_cards(40,3,probes,i+2,node)
+            plan_card.probe_cards(60,4,probes,i+3,node)
+            plan_card.probe_cards(80,5,probes,i+4,node)
     except:
         pass
 
@@ -1590,10 +1561,10 @@ class plan_card:
                 # --- Effect setup only once ---
     def probe_cards(y_add, id, probes, i, node):
         imgui.set_cursor_pos((30, 790+y_add)); imgui.text(f"{id}")
-        imgui.set_cursor_pos((100, 790+y_add)); imgui.text(f"{Decimal(probes[(i)]).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((185, 790+y_add)); imgui.text(f"{Decimal(probes[(i)+1]).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((270, 790+y_add)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((365, 790+y_add)); imgui.text(f"wack")
+        imgui.set_cursor_pos((100, 790+y_add)); imgui.text(f"{Decimal(probes[i].x).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((185, 790+y_add)); imgui.text(f"{Decimal(probes[i].y).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((270, 790+y_add)); imgui.text(f"{Decimal(probes[i].z).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((365, 790+y_add)); imgui.text(f"{Decimal(probes[i].confidence).quantize(Decimal('0.00'))}")
                
 def drone_image(image_path, texture_id, img_width, img_height):
     #Todo move to function
