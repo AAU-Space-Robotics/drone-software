@@ -142,6 +142,7 @@ test_slider = 0
 battery_state_timestamp = 0
 position_timestamp = 0
 velocity_timestamp = 0
+probe_timestamp = 0
 takeoff_time = 0
 battery_voltage, battery_current, battery_percentage = 0.0, 0.0, 0.0
 battery_discharge_rate, battery_average_current = 0.0, 0.0
@@ -170,6 +171,7 @@ probe_classification = [0.0,0.0,0.0,0.0,0.0]  # Placeholder for probe classifica
 probe_numb = 0
 temp_y_arrow, start_y_arrow = 0, 0
 flight_mode = -1  # Default to a safe value, e.g., "Standby"
+flight_time = 0.0
 
 class DroneGuiNode(Node):
     def __init__(self):
@@ -242,7 +244,7 @@ class DroneGuiNode(Node):
         global roll, pitch, yaw_velocity
         global velocity_x, velocity_y, velocity_z, velocity_timestamp
         global battery_voltage, battery_state_timestamp, battery_current, battery_percentage, battery_discharge_rate, battery_average_current
-        global arming_state, flight_mode, takeoff_time
+        global arming_state, flight_mode, takeoff_time, flight_time
         global GUI_console_logs
         global actuator_speed
 
@@ -301,10 +303,12 @@ class DroneGuiNode(Node):
         GUI_console_logs[0] = str(self.get_logger())
         #takeoff_time = msg.takeoff_time
         #self.imgui_logger.info(f"Takeoff time: {takeoff_time}")
+        flight_time = msg.flight_time
 
     def probe_callback(self, msg):
         global probes
         global probe_numb, probe_classification
+        global probe_timestamp
 
         # Extract the number of probes
         
@@ -329,7 +333,7 @@ class DroneGuiNode(Node):
         probe_numb = msg.probe_count
 
         # Optionally, store the timestamp if needed
-        timestamp = msg.stamp
+        probe_timestamp = msg.stamp
 
 
 
@@ -391,10 +395,10 @@ class DroneGuiNode(Node):
 
 def Arm_Button(node):
     global button_color, drone_kill, drone_state
-    global arming_state
+    global arming_state, flight_time
     imgui.set_cursor_pos((450, 30))
     button_color = (0.0, 0.5, 0.0) if drone_kill else (1.0, 0.0, 0.0)
-    button_text = "Press to Arm!" if drone_kill else "Press to Disarm"
+    button_text = " Disarmed " if drone_kill else "  Armed   "
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *button_color)
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *button_color)
@@ -402,11 +406,11 @@ def Arm_Button(node):
     if arming_state == 1:
         drone_kill = False
         drone_state = True
-        button_text = "Press to Disarm"
+        button_text = "  Armed   "
     elif arming_state == 0:
         drone_kill = True
         drone_state = False
-        button_text = "Press to Arm!"
+        button_text = " Disarmed "
     with imgui.font(font_small):
         if imgui.button(button_text):
             if drone_kill:
@@ -419,18 +423,15 @@ def Arm_Button(node):
                 drone_state = False
     imgui.pop_style_color(3)
     imgui.pop_style_var()
-    imgui.set_cursor_pos((710, 30))
-    with imgui.font(font):
-        if drone_kill:
-            imgui.text("THYRA IS DISARMED!")
-        else:
-            imgui.text("THYRA IS ARMED!")
+  
     draw_list = imgui.get_window_draw_list()
     start_x, start_y = 450, 70
     end_x, end_y = 1100, 70
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
     draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
-
+    with imgui.font(font_small):
+        imgui.set_cursor_pos((850, 30)); imgui.text(f"Flight time = {Decimal(flight_time).quantize(Decimal('0.000'))}")
+    
 def Kill_command(node):
     global killbutton_color, drone_kill
     imgui.set_cursor_pos((1110, 30))  # Changed x-coordinate to 1130
@@ -528,7 +529,7 @@ def Dropdown_Menu():
 
     with imgui.font(font_small):
         changed, current_item = imgui.combo(
-            "Controller", current_item, items)
+            " ", current_item, items)
     #imgui.set_cursor_pos((10,570))
     #imgui.text(f"{str(items[current_item])}")
 
@@ -618,6 +619,7 @@ def RPY_Text_Field():
 def probe_Field(node):
     global probes
     global probe_classification, probe_numb
+    global probe_timestamp
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
     # Move up 30 on y axis (was 780-925, now 750-895)
@@ -677,7 +679,7 @@ def probe_Field(node):
             plan_card.probe_cards(80,5,probes,i+4,node)
     except:
         pass
-
+    imgui.set_cursor_pos((103, 900)); imgui.text(f" TS: {velocity_timestamp}")
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
@@ -747,13 +749,7 @@ def grid():
     for y in range(157, 618, 22): #e 157 560 20
         drawlist.add_line(455, y, 1254, y, color, 1.5) #e 455 1095
 
-    imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.0, 1.0)
-    imgui.set_cursor_pos((462, 610)); imgui.text("10   9    8     7    6     5     4    3     2    1    0    -1    -2   -3   -4   -5    -6    -7    -8    -9   -10") #e 462 570
-    j = 10
-    for i in range(40, 482, 22): #e 50 470
-            imgui.set_cursor_pos((1235, 105+i)); imgui.text(f"{j}")
-            j -= 1
-    imgui.pop_style_color()
+   
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
 
@@ -762,19 +758,31 @@ def grid():
             draw_list.add_circle_filled(dot_position_x, dot_position_y, 4, color)  # Red dot at the center Center of the grid 778, 358
     elif 449 > dot_position_x:
         if 155 < dot_position_y < 620:
-            draw_list.add_triangle_filled(449, dot_position_y-10, 449, dot_position_y+10, 464, dot_position_y, color)
+            #draw_list.add_triangle_filled(449, dot_position_y-10, 449, dot_position_y+10, 464, dot_position_y, color)
+            draw_list.add_rect_filled(449, dot_position_y-2, 469, dot_position_y+2, color, rounding=2.0)
     elif dot_position_x > 1260:
         if 155 < dot_position_y < 620:
-            draw_list.add_triangle_filled(1260, dot_position_y-10, 1260, dot_position_y+10, 1245, dot_position_y, color)
-    elif 155 > dot_position_y:
+            #draw_list.add_triangle_filled(1260, dot_position_y-10, 1260, dot_position_y+10, 1245, dot_position_y, color)
+            draw_list.add_rect_filled(1260, dot_position_y-2, 1240, dot_position_y+2, color, rounding=2.0)
+    elif 140 > dot_position_y:
         if 449 < dot_position_x < 1260:
-            draw_list.add_triangle_filled(dot_position_x -10, 155, dot_position_x+10, 155, dot_position_x, 180, color)
+            #draw_list.add_triangle_filled(dot_position_x -10, 155, dot_position_x+10, 155, dot_position_x, 180, color)
+            draw_list.add_rect_filled(dot_position_x-2, 140, dot_position_x+2, 160, color, rounding=2.0)
     elif dot_position_y > 620:
         if 449 < dot_position_x < 1260:
-            draw_list.add_triangle_filled(dot_position_x -10, 620, dot_position_x+10, 620, dot_position_x, 595, color)
+            #draw_list.add_triangle_filled(dot_position_x -10, 620, dot_position_x+10, 620, dot_position_x, 595, color)
+            draw_list.add_rect_filled(dot_position_x-2, 620, dot_position_x+2, 600, color, rounding=2.0)
         #draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+855, 462.5, color)
     
-
+    
+     
+    imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.0, 1.0)
+    imgui.set_cursor_pos((462, 610)); imgui.text("10   9    8     7    6     5     4    3     2    1    0    -1    -2   -3   -4   -5    -6    -7    -8    -9   -10") #e 462 570
+    j = 10
+    for i in range(40, 482, 22): #e 50 470
+            imgui.set_cursor_pos((1235, 105+i)); imgui.text(f"{j}")
+            j -= 1
+    imgui.pop_style_color()
     # max 449 1107 x
     # max 155 561 y
               
@@ -909,7 +917,7 @@ def manual(node):
     elif flight_mode == 5:
         flight_mode_text = "Land position"
     
-    imgui.set_cursor_pos((1562, 710))
+    imgui.set_cursor_pos((850, 80))
     with imgui.font(font_small):
         imgui.text("Flight Mode: " + str(flight_mode_text))
 
@@ -1558,7 +1566,7 @@ class plan_card:
 
 
                 
-                # --- Effect setup only once ---
+                
     def probe_cards(y_add, id, probes, i, node):
         imgui.set_cursor_pos((30, 790+y_add)); imgui.text(f"{id}")
         imgui.set_cursor_pos((100, 790+y_add)); imgui.text(f"{Decimal(probes[i].x).quantize(Decimal('0.00'))}")
