@@ -16,6 +16,7 @@ float32 battery_discharged_mah
 float32 battery_average_current
 float32[] actuator_speeds #Speed of the four actuators from 0 to 1
 uint8 arming_state  
+uint8 trajectory_mode
      
 uint8 estop          
 int16 flight_mode
