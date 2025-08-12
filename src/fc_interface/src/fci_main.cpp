@@ -112,7 +112,11 @@ public:
         this->declare_parameter("safety.safety_thrust_final", -0.45);
         this->declare_parameter("safety.safety_thrustdown_rate", 0.0005);
         this->declare_parameter("safety.check_battery", true);
+        this->declare_parameter("safety.check_geofence", true);
+        this->declare_parameter("safety.geofence_radius", 2.0);
         this->declare_parameter("safety.battery_threshold", 0.10); // 5% battery threshold
+        this->declare_parameter("safety.geofence_height", 2.0); // Geofence height (meters)
+
         this->get_parameter("safety.check_gcs_timeout", check_gcs_timeout_);
         this->get_parameter("safety.check_position_timeout", check_position_timeout_);
         this->get_parameter("safety.gcs_timeout_threshold", gcs_timeout_threshold_);
@@ -122,13 +126,19 @@ public:
         this->get_parameter("safety.safety_thrustdown_rate", safety_thrustdown_rate_);
         this->get_parameter("safety.check_battery", safety_check_battery_);
         this->get_parameter("safety.battery_threshold", safety_battery_threshold_);
+        this->get_parameter("safety.check_geofence", safety_check_geofence_);
+        this->get_parameter("safety.geofence_radius", safety_geofence_radius_);
+        this->get_parameter("safety.geofence_height", safety_geofence_height_);
 
         RCLCPP_INFO(get_logger(), "Safety parameters: gcs_timeout=%.2f, position_timeout=%.2f, "
                     "safety_thrust_initial=%.2f, safety_thrustdown_rate=%.4f, "
-                    "check_battery=%d, battery_threshold=%.2f",
+                    "check_battery=%d, battery_threshold=%.2f, "
+                    "check_geofence=%d, geofence_radius=%.2f, geofence_height=%.2f",
                     gcs_timeout_threshold_, position_timeout_threshold_,
                     safety_thrust_, safety_thrustdown_rate_,
-                    safety_check_battery_, safety_battery_threshold_);
+                    safety_check_battery_, safety_battery_threshold_,
+                    safety_check_geofence_, safety_geofence_radius_,
+                    safety_geofence_height_);
 
         // Load setup parameters
         this->declare_parameter("setup.lidar_offset", 0.0);
@@ -334,7 +344,19 @@ private:
         // Use the arrival time of the GCS heartbeat message as the heartbeat time
         state_manager_.setHeartbeat(GCSHeartbeat(get_time(), msg->gcs_nominal));
     }
-    
+
+    bool geofence_violated(Eigen::Vector3d position)
+    {
+        Eigen::Vector2d xy_position(position.x(), position.y());
+        float z_position = position.z();
+
+        float xy_distance = xy_position.norm();
+        float z_distance = std::abs(z_position);
+
+        return (xy_distance >= safety_geofence_radius_ || z_distance >= safety_geofence_height_);
+    }
+
+
     void safetyCheckCallback()
     {
         DroneState drone_state = state_manager_.getDroneState();
@@ -383,6 +405,16 @@ private:
             if (position_stale_)
             {
                 RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", position_timeout_threshold_);
+            }
+        }
+
+        // Check Geofence violations
+        if (safety_check_geofence_)
+        {
+            if (geofence_violated(state_manager_.getGlobalPosition().vector()))
+            {
+                RCLCPP_WARN(get_logger(), "Geofence violation detected!");
+                trigger_emergency_land = true;
             }
         }
 
@@ -581,9 +613,8 @@ private:
         //uint8 arming_state  
         DroneState drone_state = state_manager_.getDroneState();
         msg.arming_state = static_cast<uint8_t>(drone_state.arming_state);
-        //msg.takeoff_timestamp = drone_state.takeoff_timestamp.seconds();
-        
-        
+        msg.trajectory_mode = static_cast<uint8_t>(drone_state.trajectory_mode);
+
         //uint8 estop  
         FlightMode flightmode = drone_state.flight_mode;
         msg.flight_mode = static_cast<int16_t>(flightmode);
@@ -940,9 +971,9 @@ private:
 
     // Action server handlers
     rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID & /*uuid*/,
-                                                   std::shared_ptr<const DroneCommand::Goal> goal)
+                                                std::shared_ptr<const DroneCommand::Goal> goal)
     {
-        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed","set_angular_speed", "spin"};
+        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed", "set_angular_speed", "spin"};
         RCLCPP_INFO(get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
 
         DroneState drone_state = state_manager_.getDroneState();
@@ -952,60 +983,73 @@ private:
             return rclcpp_action::GoalResponse::REJECT;
         }
 
-        if (goal->command_type == "arm" && drone_state.arming_state == ArmingState::ARMED)
-        {
-            RCLCPP_WARN(get_logger(), "Rejected: drone already armed.");
-            return rclcpp_action::GoalResponse::REJECT;
-        }
-        if (goal->command_type == "disarm" && drone_state.arming_state == ArmingState::DISARMED)
-        {
-            RCLCPP_WARN(get_logger(), "Rejected: drone already disarmed.");
-            return rclcpp_action::GoalResponse::REJECT;
-        }
-        if (goal->command_type == "takeoff" && (goal->target_pose.size() != 1 || drone_state.arming_state != ArmingState::ARMED))
-        {
-            RCLCPP_WARN(get_logger(), "Rejected: invalid takeoff parameters or drone not armed.");
-            return rclcpp_action::GoalResponse::REJECT;
-        }
-        if (goal->command_type == "land" && false)
-        {
+        if (goal->command_type == "arm") {
+            if (drone_state.arming_state == ArmingState::ARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: drone already armed.");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+        } else if (goal->command_type == "disarm") {
+            if (drone_state.arming_state == ArmingState::DISARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: drone already disarmed.");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+        } else if (goal->command_type == "land" && false) {
             RCLCPP_WARN(get_logger(), "Rejected: invalid land parameters or drone not armed.");
             return rclcpp_action::GoalResponse::REJECT;
-        }
-        if (goal->command_type == "goto" && (goal->target_pose.size() != 3 || drone_state.arming_state != ArmingState::ARMED))
-        {
-            RCLCPP_WARN(get_logger(), "Rejected: invalid goto parameters or drone not armed.");
-            return rclcpp_action::GoalResponse::REJECT;
-        }
-        if (goal->command_type == "manual" && (drone_state.flight_mode == FlightMode::MANUAL || drone_state.arming_state != ArmingState::ARMED))
-        {
-            RCLCPP_WARN(get_logger(), "Rejected: already in manual mode or drone not armed.");
-            return rclcpp_action::GoalResponse::REJECT;
-        }
-        if (goal->command_type == "set_origin" && (drone_state.arming_state != ArmingState::DISARMED))
-        {
-           
-            RCLCPP_WARN(get_logger(), "Rejected: Drone was not disarmed");
-            return rclcpp_action::GoalResponse::REJECT;
-        }
-        if (goal->command_type == "set_linear_speed" && (goal->target_pose.size() != 1 || drone_state.arming_state != ArmingState::DISARMED))
-        {
-            RCLCPP_WARN(get_logger(), "Rejected: invalid set_linear_speed parameters or drone not armed.");
-            return rclcpp_action::GoalResponse::REJECT;
-        }
-        if (goal->command_type == "set_angular_speed" && (goal->target_pose.size() != 1 || drone_state.arming_state != ArmingState::DISARMED))
-        {
-            RCLCPP_WARN(get_logger(), "Rejected: invalid set_angular_speed parameters or drone not armed.");
-            return rclcpp_action::GoalResponse::REJECT;
-        }
-        if (goal->command_type == "spin" && (goal->target_pose.size() != 3 || drone_state.arming_state != ArmingState::ARMED || goal->target_pose[1] < 0.0 || (goal->target_pose[2] != 0.0 && goal->target_pose[2] != 1.0)))
-        {
-            RCLCPP_WARN(get_logger(), "Rejected: invalid spin parameters, drone not armed, negative rotations, or invalid path selection.");
-            return rclcpp_action::GoalResponse::REJECT;
+        } else if (goal->command_type == "manual") {
+            if (drone_state.flight_mode == FlightMode::MANUAL || drone_state.arming_state != ArmingState::ARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: already in manual mode or drone not armed.");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+        } else if (goal->command_type == "set_origin") {
+            if (drone_state.arming_state != ArmingState::DISARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: Drone was not disarmed");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+        } else if (goal->command_type == "set_linear_speed") {
+            if (goal->target_pose.size() != 1 || drone_state.arming_state != ArmingState::DISARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: invalid set_linear_speed parameters or drone not armed.");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+        } else if (goal->command_type == "set_angular_speed") {
+            if (goal->target_pose.size() != 1 || drone_state.arming_state != ArmingState::DISARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: invalid set_angular_speed parameters or drone not armed.");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+        } else if (goal->command_type == "spin") {
+            if (goal->target_pose.size() != 3 || drone_state.arming_state != ArmingState::ARMED || 
+                goal->target_pose[1] < 0.0 || (goal->target_pose[2] != 0.0 && goal->target_pose[2] != 1.0)) {
+                RCLCPP_WARN(get_logger(), "Rejected: invalid spin parameters, drone not armed, negative rotations, or invalid path selection.");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+        } else if (goal->command_type == "takeoff") {
+            if (goal->target_pose.size() != 1) {
+                RCLCPP_WARN(get_logger(), "Rejected: invalid takeoff parameters, expected single altitude value.");
+                return rclcpp_action::GoalResponse::REJECT;
+            } else if (drone_state.arming_state != ArmingState::ARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: drone not armed for takeoff.");
+                return rclcpp_action::GoalResponse::REJECT;
+            } else if (geofence_violated(Eigen::Vector3d(0, 0, goal->target_pose[0]))) {
+                RCLCPP_WARN(get_logger(), "Rejected: takeoff altitude %f would violate geofence.", goal->target_pose[0]);
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+        } else if (goal->command_type == "goto") {
+            if (goal->target_pose.size() != 3) {
+                RCLCPP_WARN(get_logger(), "Rejected: invalid goto parameters, expected x, y, z coordinates.");
+                return rclcpp_action::GoalResponse::REJECT;
+            } else if (drone_state.arming_state != ArmingState::ARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: drone not armed for goto.");
+                return rclcpp_action::GoalResponse::REJECT;
+            } else if (geofence_violated(Eigen::Vector3d(goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]))) {
+                RCLCPP_WARN(get_logger(), "Rejected: target position (x: %f, y: %f, z: %f) would violate geofence.", 
+                            goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]);
+                return rclcpp_action::GoalResponse::REJECT;
+            }
         }
 
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     }
+
 
     rclcpp_action::CancelResponse handleCancel(const std::shared_ptr<GoalHandleDroneCommand> /*goal_handle*/)
     {
@@ -1299,6 +1343,9 @@ private:
     rclcpp::Time safety_land_start_time_;
     bool safety_check_battery_;
     float safety_battery_threshold_;
+    bool safety_check_geofence_;
+    float safety_geofence_radius_;
+    float safety_geofence_height_;
 
     // Last X Ground Distance Sensor readings
     static constexpr int max_ground_distance_readings_ = 10;

@@ -37,12 +37,15 @@ flight_controller_interface:
       check_gcs_timeout: true          # Check for ground control station timeout
       check_position_timeout: false     # Check for position data timeout
       check_battery: true               # Check battery status
+      check_geofence: true              # Check for geofence violations
       battery_threshold: 0.05           # Battery threshold for safety (0-1 scale)
       gcs_timeout_threshold: 1.0        # Timeout for ground control station input (seconds)
       position_timeout_threshold: 0.2   # Timeout for position data (seconds)
       safety_thrust_initial: -0.72      # Initial thrust for safety landing (negative for downward)
       safety_thrust_final: -0.66        # Final thrust for safety landing (negative for downward)
       safety_thrustdown_rate: 0.0       # Rate of thrust decrease during safety landing
+      geofence_radius: 20.0             # Geofence radius (meters)
+      geofence_height: 10.0             # Geofence height (meters)
 
     # Setup Parameters
     setup:
