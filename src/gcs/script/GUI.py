@@ -765,7 +765,26 @@ def grid():
             j -= 1
     imgui.pop_style_color()
     draw_list = imgui.get_window_draw_list()
-    draw_list.add_circle_filled(dot_position_x, dot_position_y, 4, imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0))  # Red dot at the center Center of the grid 778, 358
+    color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
+
+    if 449 < dot_position_x < 1260 and 155 < dot_position_y < 620: 
+            
+            draw_list.add_circle_filled(dot_position_x, dot_position_y, 4, color)  # Red dot at the center Center of the grid 778, 358
+    elif 449 > dot_position_x:
+        if 155 < dot_position_y < 620:
+            draw_list.add_triangle_filled(449, dot_position_y-10, 449, dot_position_y+10, 464, dot_position_y, color)
+    elif dot_position_x > 1260:
+        if 155 < dot_position_y < 620:
+            draw_list.add_triangle_filled(1260, dot_position_y-10, 1260, dot_position_y+10, 1245, dot_position_y, color)
+    elif 155 > dot_position_y:
+        if 449 < dot_position_x < 1260:
+            draw_list.add_triangle_filled(dot_position_x -10, 155, dot_position_x+10, 155, dot_position_x, 180, color)
+    elif dot_position_y > 620:
+        if 449 < dot_position_x < 1260:
+            draw_list.add_triangle_filled(dot_position_x -10, 620, dot_position_x+10, 620, dot_position_x, 595, color)
+        #draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+855, 462.5, color)
+    
+
     # max 449 1107 x
     # max 155 561 y
               
@@ -919,18 +938,22 @@ def start_joystick(node):
     pygame.joystick.init()
 
     if pygame.joystick.get_count() == 0:
-        print("No joystick connected.")
+        #print("No joystick connected.")
+        current_item = 0
         return
     
     node.joystick = pygame.joystick.Joystick(0)
     node.joystick.init()
     if node.joystick.get_name() == "Sony Interactive Entertainment Wireless Controller":
         current_item = 1
-    print(f"Initialized joystick: {node.joystick.get_name()}")
+        #print(f"Initialized joystick: {node.joystick.get_name()}")
+        return
     if node.joystick.get_name() == "OpenTX RM TX16S Joystick":
         current_item = 2
+        #print(f"Initialized joystick: {node.joystick.get_name()}")
+        return
     if not node.joystick.get_init():
-        print("Joystick initialization failed.")
+        #print("Joystick initialization failed.")
         return
     
   
@@ -1090,10 +1113,10 @@ def GuiConsoleLogger(node):
 
 def motor_speed():
     global actuator_speeds   
-    actuator_speeds_slider_bar1 = map_value(actuator_speeds[0], 1000, 1900, 106, 54)
-    actuator_speeds_slider_bar2 = map_value(actuator_speeds[1], 1000, 1900, 106, 54)
-    actuator_speeds_slider_bar3 = map_value(actuator_speeds[2], 1000, 1900, 106, 54)
-    actuator_speeds_slider_bar4 = map_value(actuator_speeds[3], 1000, 1900, 106, 54)
+    actuator_speeds_slider_bar1 = map_value(actuator_speeds[0], 0, 1, 106, 54)
+    actuator_speeds_slider_bar2 = map_value(actuator_speeds[1], 0, 1, 106, 54)
+    actuator_speeds_slider_bar3 = map_value(actuator_speeds[2], 0, 1, 106, 54)
+    actuator_speeds_slider_bar4 = map_value(actuator_speeds[3], 0, 1, 106, 54)
     graphs.motor_speed_graph(1300, 50, 1360, 110) 
     graphs.motor_speed_graph(1380, 50, 1440, 110)
     graphs.motor_speed_graph(1460, 50, 1520, 110)
@@ -1103,13 +1126,13 @@ def motor_speed():
     color2 = standardcolor
     color3 = standardcolor
     color4 = standardcolor
-    if actuator_speeds[0] > 900:
+    if actuator_speeds[0] > 0.9:
         color1 = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
-    if actuator_speeds[1] > 900:
+    if actuator_speeds[1] > 0.9:
         color2 = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
-    if actuator_speeds[2] > 900:
+    if actuator_speeds[2] > 0.9:
         color3 = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
-    if actuator_speeds[3] > 900:
+    if actuator_speeds[3] > 0.9:
         color4 = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
     draw_list = imgui.get_window_draw_list()
     draw_list.add_rect_filled(1303,106,1357,actuator_speeds_slider_bar1,color1, rounding=1.0,flags=15)   
@@ -1164,9 +1187,9 @@ def mouse_placement():
             print(f"{mouse_x} and {mouse_y} ")
 
 def send_map_pos(node):
-    global mouse_x_buffer, mouse_y_buffer, yaw, position_z
+    global mouse_x_buffer, mouse_y_buffer, yaw, position_z, target_position_z
     global effect1
-
+    buffer_z = 0
    
     mouse_placement()
     mouse_x, mouse_y = imgui.get_mouse_pos()
@@ -1179,8 +1202,9 @@ def send_map_pos(node):
             if imgui.is_mouse_clicked(imgui.MOUSE_BUTTON_LEFT):
                 try:
                     x, y , z = float(picked_x), float(picked_y), position_z
-                    node.send_command("goto", [x, y, z], yaw)
-                    node.imgui_logger.info(f"Going to position: x = {Decimal(x).quantize(Decimal('0.000'))}, y = {Decimal(y).quantize(Decimal('0.000'))}, z = {Decimal(z).quantize(Decimal('0.000'))}")
+                    buffer_z = target_position_z
+                    node.send_command("goto", [x, y, buffer_z], yaw)
+                    node.imgui_logger.info(f"Going to position: x = {Decimal(x).quantize(Decimal('0.000'))}, y = {Decimal(y).quantize(Decimal('0.000'))}, z = {Decimal(buffer_z).quantize(Decimal('0.000'))}")
                     effect1 = True
                 except ValueError:
                     pass
@@ -1190,8 +1214,8 @@ def send_map_pos(node):
     
 def route_planner(node):
     global change_y_1, change_y_2, permant_y, card_y_buffer
-    global flight_plan, text_buffer_plan, flight_plan_numb, flight_plan_coord
-    global effect2, execute_route_numb, temp_y_arrow, start_y_arrow 
+    global flight_plan, text_buffer_plan, flight_plan_numb, flight_plan_coord, execute_route_numb
+    global effect2, current_step, temp_y_arrow, start_y_arrow 
     text_field = ""
     mouse_x, mouse_y = imgui.get_mouse_pos()
     imgui.set_cursor_pos((1690, 260))
@@ -1244,12 +1268,13 @@ def route_planner(node):
             flight_plan[i] = 0
             flight_plan_numb = 0
             flight_plan_coord[i][0] = ""
-            execute_route_numb = 0
+            current_step = 0
             temp_y_arrow = 0
             start_y_arrow = 0
+            execute_route_numb = 0
    
     
-    #print(f"First command = {flight_plan[0]} and second = {flight_plan[1]} and so forth = {flight_plan[2]} + {flight_plan[3]}")
+    
     #if imgui.is_mouse_down(imgui.MOUSE_BUTTON_LEFT):
     #    if 1297 < mouse_x < 1565 and 190 < mouse_y < 624:  
     #        card_y_buffer = mouse_y -25
@@ -1264,14 +1289,19 @@ def route_planner(node):
     #plan_card.goto_card(1287, 400, node)
 
 def is_T_close(target_pos_x, target_pos_y):
-    global position_x, permant_y, position_z
-    pos_vector_length = math.sqrt(math.pow(position_x, 2)+ math.pow(position_y,2))
-    t_vector_length = math.sqrt(math.pow(target_pos_x, 2)+ math.pow(target_pos_y,2))
-    e = t_vector_length - pos_vector_length
-    if e <= 0.5:
-        return True
-    else:
-        return False
+    #global position_x, position_y, position_z
+    #pos_vector_length = math.sqrt(math.pow(position_x, 2)+ math.pow(position_y,2))
+    #t_vector_length = math.sqrt(math.pow(target_pos_x, 2)+ math.pow(target_pos_y,2))
+    #e = t_vector_length - pos_vector_length
+    #if e <= 0.5:
+    #    return True
+    #else:
+    #    return False
+    global position_x, position_y
+    dx = target_pos_x - position_x
+    dy = target_pos_y - position_y
+    distance = math.sqrt(dx * dx + dy * dy)
+    return distance <= 0.5
     
 def execute_route(node):
     global flight_plan, flight_plan_coord
@@ -1279,7 +1309,7 @@ def execute_route(node):
     global execute_route_numb, effect3
     global position_x, position_y, position_z
     global current_step, step_start_time, command_sent, waiting_for_completion
-
+    #print(execute_route_numb)
     if GUIButton.button_Plan(1285, 635, font_small, "Excecute##plan4"):
         begin_execute = True
         current_step = 0
@@ -1287,113 +1317,96 @@ def execute_route(node):
         command_sent = False
         waiting_for_completion = False
         
-        #print(f"First command = {flight_plan[0]} and second = {flight_plan[1]} and third = {flight_plan[2]} and fourth = {flight_plan[3]} and fifth = {flight_plan[4]} and sixth = {flight_plan[5]}")
-    if begin_execute and current_step < len(flight_plan) and flight_plan[current_step] != 0:
-        current_time = time.time()
-        
-        # Initialize step timing if we just started this step
-        if step_start_time == 0:
-            step_start_time = current_time
-            command_sent = False
-            waiting_for_completion = False
-        
-        elapsed = current_time - step_start_time
-       
-        
-        match flight_plan[current_step]:
-            case 1:  
-                if not command_sent:
-                    node.send_command("arm")
-                    command_sent = True
-                    #print("Armed drone")
-                
-              
-                if elapsed >= plan_duration - 1 and not waiting_for_completion:
-                    node.send_command("takeoff", [-1.0])
-                    waiting_for_completion = True
-                    #print("Takeoff command sent")
-                
-         
-                if waiting_for_completion and elapsed >= plan_duration + 5:
-                    #print("Takeoff completed, moving to next step")
-                    effect3 = True
-                    current_step += 1
-                    step_start_time = 0
-                    execute_route_numb += 1
-                    
-            
-            case 2:  
-                if not command_sent:
-                    #print("Starting landing sequence")
-                    node.send_command("land", [-1.0])
-                    command_sent = True
-                
-   
-                if elapsed >= 1.0:  
-                    #print("Landing command completed")
-                    effect3 = True
-                    current_step += 1
-                    step_start_time = 0
-                    
-            
-            case 3:  
-                if not command_sent:
-                    try:
-                        
-                        #print(f"here i am {flight_plan_coord[execute_route_numb][0]}")
-                        x, y, z, yaw = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
-                        #print(f"x = {x} y = {y} z = {z} and yaw = {yaw}")
-                        node.send_command("goto", [x, y, z], yaw)
-                        node.imgui_logger.info(f"Going to position: x = {x}, y = {y}, z = {z}, yaw = {yaw}")
-                        command_sent = True
-                        waiting_for_completion = True
-                    except ValueError:
-                        node.get_logger().warn("Invalid input for goto, please enter x y z yaw values")
-                        node.imgui_logger.warn("Invalid input for goto, please enter x y z yaw values")
-                        effect3 = True
-                        current_step += 1  #may need to change, skips step
-                        step_start_time = 0
-                        
-                
-                if waiting_for_completion:
-                    try:
-                        x, y, z, yaw = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
-                        if is_T_close(x, y):
-                            effect3 = True
-                            #print("Reached target position")
-                            execute_route_numb += 1
-                            current_step += 1
-                            step_start_time = 0
-                        elif elapsed > 50.0:  
-                            #print("Timeout waiting to reach position, moving to next step")
-                            effect3 = True
-                            execute_route_numb += 1
-                            current_step += 1
-                            step_start_time = 0
-                    except (ValueError, IndexError):
-                        effect3 = True
-                        current_step += 1
-                        step_start_time = 0
-        
-    
-    elif begin_execute and (current_step >= len(flight_plan) or flight_plan[current_step] == 0):
 
-        #print("Flight plan execution completed")
+    # If we’re not executing or plan is over
+    if not begin_execute or current_step >= len(flight_plan) or flight_plan[current_step] == 0:
         begin_execute = False
         current_step = 0
         step_start_time = 0
         command_sent = False
         waiting_for_completion = False
+        return
+
+    current_time = time.time()
+    if step_start_time == 0:
+        step_start_time = current_time
+        command_sent = False
+        waiting_for_completion = False
+
+    elapsed = current_time - step_start_time
+
+    step_finished = False  # track if this step finishes in this frame
+    #print(current_step)
+    match flight_plan[current_step]:
+        case 1:  # Arm & takeoff
+            if not command_sent:
+                node.send_command("arm")
+                command_sent = True
+
+            if elapsed >= plan_duration - 3 and not waiting_for_completion:
+                node.send_command("takeoff", [-1.0])
+                waiting_for_completion = True
+
+            if waiting_for_completion and elapsed >= plan_duration + 5:
+                effect3 = True
+                execute_route_numb += 1
+                step_finished = True
+
+        case 2:  # Land
+            
+            if not command_sent:
+                node.send_command("land", [-1.0])
+                command_sent = True
+
+            if elapsed >= 3.0:
+                effect3 = True
+                step_finished = True
+
+        case 3:  # Goto
+            
+            if not command_sent:
+                try:
+                    if execute_route_numb < len(flight_plan_coord) and flight_plan_coord[execute_route_numb]:
+                        x, y, z, yaw = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
+                        node.send_command("goto", [x, y, z], yaw)
+                        node.imgui_logger.info(f"Going to position: x = {x}, y = {y}, z = {z}, yaw = {yaw}")
+                        command_sent = True
+                        waiting_for_completion = True
+                    else:
+                        step_finished = True
+                except ValueError:
+                    node.get_logger().warn("Invalid goto input")
+                    node.imgui_logger.warn("Invalid goto input")
+                    step_finished = True
+
+            if waiting_for_completion and elapsed > 0.5:
+                try:
+                    if execute_route_numb < len(flight_plan_coord) and flight_plan_coord[execute_route_numb]:
+                        x, y, z, yaw = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
+                        if is_T_close(x, y):
+                            effect3 = True
+
+                            step_finished = True
+                            execute_route_numb += 1
+                        #elif elapsed > 50.0:
+                        #    effect3 = True
+                        #    
+                        #    step_finished = True
+                        #    waiting_for_completion = False
+                except (ValueError, IndexError):
+                    step_finished = True
+                    execute_route_numb += 1
+                    #waiting_for_completion = False
+
+    # If the step finished, move to next one, but don’t process it this frame
+    if step_finished:
+        waiting_for_completion = False
+        command_sent = False
+        step_start_time = -1  
+        current_step += 1  
+        return
+    print(execute_route_numb)
     
-    # Always display the plan cards
-    plan_card.goto_card(1288, 190, node, flight_plan[0], flight_plan_coord[0], 0)
-    plan_card.goto_card(1288, 242, node, flight_plan[1], flight_plan_coord[1], 1)
-    plan_card.goto_card(1288, 294, node, flight_plan[2], flight_plan_coord[2], 2)
-    plan_card.goto_card(1288, 346, node, flight_plan[3], flight_plan_coord[3], 3)
-    plan_card.goto_card(1288, 398, node, flight_plan[4], flight_plan_coord[4], 4)
-    plan_card.goto_card(1288, 450, node, flight_plan[5], flight_plan_coord[5], 5)
-    plan_card.goto_card(1288, 502, node, flight_plan[6], flight_plan_coord[6], 6)
-    effect_class.arrow_effect(execute_route_numb)
         
 class effect_class:
     def circle_effect_green(color, pos_x, pos_y):
@@ -1472,6 +1485,7 @@ class effect_class:
                 #draw_list.add_triangle_filled(1266, 201+(temp_y), 1266, 231+(temp_y), 1282, 216+(temp_y), color)
         else:
             draw_list.add_triangle_filled(1266, 201+(temp_y_arrow), 1266, 231+(temp_y_arrow), 1282, 216+(temp_y_arrow), color)
+
 class plan_card:
     def goto_card(card_pos_x, card_pos_y, node, type,text, numb):
         global flight_plan_numb, flight_plan_coord, execute_route_numb
@@ -1561,7 +1575,33 @@ class plan_card:
         imgui.set_cursor_pos((270, 790+y_add)); imgui.text(f"{Decimal(probes[(i)+2]).quantize(Decimal('0.00'))}")
         imgui.set_cursor_pos((365, 790+y_add)); imgui.text(f"wack")
                
-        
+def drone_image(image_path, texture_id, img_width, img_height):
+    #Todo move to function
+    global position_x, position_y
+    dot_position_x = map_value(position_x, 10, -10, 467, 1228) #e 1107
+    dot_position_y = map_value(position_y, 10, -10, 158, 599)
+    if 455 < dot_position_x < 1250 and 165 < dot_position_y < 610:  
+        if texture_id:
+
+            img = Image.open(image_path).convert("RGBA")
+
+            # Apply a dead zone to yaw_velocity to prevent sudden jumps between 6.28 and 0
+            if abs(yaw_velocity) < 0.05 or abs(yaw_velocity - 2 * math.pi) < 0.05:
+                angle = 0
+            else:
+                angle = yaw_velocity * 57.4358  # Convert 0-2π to degrees
+            rotated_img = img.rotate(angle, expand=False, center=(img.width/2, img.height/2))
+            pixels = rotated_img.tobytes()
+            gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
+            gl.glTexImage2D(
+                gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, img_width, img_height, 0,
+                gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, pixels
+            )
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            imgui.set_cursor_pos((dot_position_x-161.5, dot_position_y-107))  # Position the image
+            imgui.image(texture_id, 290, 230)
+        else:
+            imgui.text("Failed to load droneimage.png")               
 def main(args=None):
     rclpy.init()
     global font, font_large, font_small, font_for_meter
@@ -1691,7 +1731,7 @@ def main(args=None):
         #takeoff_button(node)
         #land_button(node)
         return_to_home_button(node)
-        
+        #drone_image(image_path,texture_id,img_width,img_height)
         GuiConsoleLogger(node)
         GUIButton.button1(876, 635, font_small, "Land", "land", node)
         GUIButton.button2( 492, 635, font_small, "Takeoff", "takeoff", node, -1.0)
@@ -1701,32 +1741,43 @@ def main(args=None):
         send_map_pos(node)
         route_planner(node)
         execute_route(node)
+        plan_card.goto_card(1288, 190, node, flight_plan[0], flight_plan_coord[0], 0)
+        plan_card.goto_card(1288, 242, node, flight_plan[1], flight_plan_coord[1], 1)
+        plan_card.goto_card(1288, 294, node, flight_plan[2], flight_plan_coord[2], 2)
+        plan_card.goto_card(1288, 346, node, flight_plan[3], flight_plan_coord[3], 3)
+        plan_card.goto_card(1288, 398, node, flight_plan[4], flight_plan_coord[4], 4)
+        plan_card.goto_card(1288, 450, node, flight_plan[5], flight_plan_coord[5], 5)
+        plan_card.goto_card(1288, 502, node, flight_plan[6], flight_plan_coord[6], 6)
+        effect_class.arrow_effect(execute_route_numb)
      
 
-
         #Todo move to function
-        if texture_id:
-            dot_position_x = map_value(position_x, 10, -10, 467, 1228) #e 1107
-            dot_position_y = map_value(position_y, 10, -10, 158, 599)
-            img = Image.open(image_path).convert("RGBA")
-       
-            # Apply a dead zone to yaw_velocity to prevent sudden jumps between 6.28 and 0
-            if abs(yaw_velocity) < 0.05 or abs(yaw_velocity - 2 * math.pi) < 0.05:
-                angle = 0
+    
+        dot_position_x = map_value(position_x, 10, -10, 467, 1228) #e 1107
+        dot_position_y = map_value(position_y, 10, -10, 158, 599)
+        if 455 < dot_position_x < 1250 and 165 < dot_position_y < 610:  
+            if texture_id:
+
+                img = Image.open(image_path).convert("RGBA")
+
+                # Apply a dead zone to yaw_velocity to prevent sudden jumps between 6.28 and 0
+                if abs(yaw_velocity) < 0.05 or abs(yaw_velocity - 2 * math.pi) < 0.05:
+                    angle = 0
+                else:
+                    angle = yaw_velocity * 57.4358  # Convert 0-2π to degrees
+                rotated_img = img.rotate(angle, expand=False, center=(img.width/2, img.height/2))
+                pixels = rotated_img.tobytes()
+                gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
+                gl.glTexImage2D(
+                    gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, img_width, img_height, 0,
+                    gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, pixels
+                )
+                gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+                imgui.set_cursor_pos((dot_position_x-50, dot_position_y-50))  # Position the image
+                imgui.image(texture_id, 100, 100)
             else:
-                angle = yaw_velocity * 57.4358  # Convert 0-2π to degrees
-            rotated_img = img.rotate(angle, expand=False, center=(img.width/2, img.height/2))
-            pixels = rotated_img.tobytes()
-            gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
-            gl.glTexImage2D(
-                gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, img_width, img_height, 0,
-                gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, pixels
-            )
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            imgui.set_cursor_pos((dot_position_x-60, dot_position_y-60))  # Position the image
-            imgui.image(texture_id, 120, 120)
-        else:
-            imgui.text("Failed to load droneimage.png")
+                imgui.text("Failed to load droneimage.png")   
+
 
         imgui.end()
 
