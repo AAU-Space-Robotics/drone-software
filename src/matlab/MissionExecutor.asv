@@ -11,18 +11,11 @@ function MissionExecutor()
     markerSize = 150; % in mm
     
     % Mission parameters
-    takeoff_marker_id = 101;
-    landing_marker_id = 102;
+    takeoff_id = 101;
+    land_id = 102;
     all_probes_found = false;
-    probe_search_amount = 3;
-    search_height = -1.5; % in meters
-    landing_aruco_detection_threshold = 5;
-    landing_aruco_detection_count = 0;    
-    landing_aruco_detection_list = [];
-    landing_marker_pose_estimate = [];
-    landing_marker_detected = false;
-    search_attempts = 0;
-    search_attempts_max = 3;
+    landing_aruco_detection_count = 0;
+    
 
 
     % Define CAMERA_TO_DRONE_TRANSFORM (4x4 homogeneous matrix) in meters
@@ -38,7 +31,7 @@ function MissionExecutor()
 
     % Subscribers
     sub_state = ros2subscriber(node, "/thyra/out/drone_state", ...
-                                "interfaces/DroneState", @msgCallback_dronestate);
+                                "interfaces/DroneState", @msgCallback);
     sub_RGB_image = ros2subscriber(node, "/thyra/out/color_image/compressed", ...
                                    "sensor_msgs/CompressedImage", @msgCallback_RGB, qos);
     sub_pose_synced = ros2subscriber(node, "/thyra/out/pose/synced_with_RGBD", ...
@@ -65,39 +58,8 @@ function MissionExecutor()
     waitForTrajectoryCompletion(0.1);
 
     % Spin
-    disp('Spinning until all probes and landing marker are found...');
-    while ~(all_probes_found && landing_marker_detected)
-        sendCommand('spin', [0.0, 1.0, 0.0], 0);
-        waitForTrajectoryCompletion(0.1);
-        check_if_all_probes_found();
-        if search_attempts < search_attempts_max
-            search_attempts = search_attempts + 1;  
-        end
-        if search_attempts >= search_attempts_max
-            disp('Max search attempts reached. Stopping search.');
-            break;
-        end
-        pause(0.5); % Give time for callbacks to process images
-    end
-
-    landing_marker_pose_estimate_xy = [];
-    if all_probes_found
-        if landing_marker_detected
-            disp('All probes and landing marker found.');
-            landing_marker_pose_estimate_xy = [landing_marker_pose_estimate(1:2), search_height];
-        else
-            disp('All probes found, but landing marker not detected.');
-            landing_marker_pose_estimate_xy = [0, 0, search_height];
-        end
-    elseif landing_marker_detected
-        disp('Landing marker found, but not all probes detected.');
-        landing_marker_pose_estimate_xy = [landing_marker_pose_estimate(1:2), search_height];
-    end
-
-    % Goto landing marker location
-    
-    sendCommand('goto', landing_marker_pose_estimate_xy, 0);
-    disp('Waiting for goto to complete...');
+    sendCommand('spin', [1.2, 1.0, 0.0], 0);
+    disp('Waiting for spin to complete...');
     waitForTrajectoryCompletion(0.1);
 
     % Land
@@ -107,8 +69,12 @@ function MissionExecutor()
 
     disp('Mission execution completed.');
 
+    while true
+        pause(1); 
+    end
+
     % === Callbacks ===
-    function msgCallback_dronestate(msg)
+    function msgCallback(msg)
         last_drone_state = msg;
     end
     function msgCallback_RGB(msg)
@@ -132,27 +98,14 @@ function MissionExecutor()
         disp(['Detected markers: ', num2str(ids(:)')]);
         for i = 1:length(ids)
             rvec = rvecs(i,:);
-            %disp(['Marker ', num2str(ids(i)), ' in drone frame: ', mat2str(pose_in_drone_frame(1:3)', 4)]);
-            % If the landing marker is found, add to the list of detections and increment the count
-            if ids(i) == landing_marker_id && ~landing_marker_detected
-                % Marker in drone frame
-                pose_in_drone_frame = cameraToDrone * [tvecs(i,:)'; 1];
+            
+            % Marker in drone frame
+            pose_in_drone_frame = cameraToDrone * [tvecs(i,:)'; 1];
 
-                % Transform to world frame
-                pose_in_world = T_world_drone * pose_in_drone_frame;
-                %disp(['Marker ', num2str(ids(i)), ' in world frame: ', mat2str(pose_in_world(1:3)', 4)]);
+            % Transform to world frame
+            pose_in_world = T_world_drone * pose_in_drone_frame;
 
-                landing_aruco_detection_count = landing_aruco_detection_count + 1;
-                landing_aruco_detection_list = [landing_aruco_detection_list; pose_in_world(1:3)'];
-
-                if landing_aruco_detection_count == landing_aruco_detection_threshold
-                    landing_marker_pose_estimate = mean(landing_aruco_detection_list, 1);
-                    landing_marker_detected = true;
-                    disp(['Average landing marker pose (world frame): ', mat2str(landing_marker_pose_estimate, 4)]);
-                end
-
-            end
-
+            disp(['Marker ', num2str(ids(i)), ' in world frame: ', mat2str(pose_in_world(1:3)', 4)]);
         end
     end
 
@@ -193,16 +146,6 @@ function MissionExecutor()
                     disp(['Trajectory mode ', num2str(target_mode), ' reached.']);
                     break;
                 end
-            end
-        end
-    end
-
-    function check_if_all_probes_found()
-        if ~isempty(last_drone_state) && isfield(last_drone_state, 'probes_found')
-            if last_drone_state.probes_found >= probe_search_amount
-                all_probes_found = true;
-            else
-                all_probes_found = false;
             end
         end
     end
