@@ -51,6 +51,32 @@ enum class TrajectoryMode {
     COMPLETED = 2
 };
 
+struct GlobalProbeLocations {
+    rclcpp::Time stamp = rclcpp::Time(0, 0);
+    std::vector<float> x;
+    std::vector<float> y;
+    std::vector<float> z;
+    std::vector<float> confidence;
+    std::vector<int32_t> contribution;
+    int32_t probe_count = 0;
+
+    GlobalProbeLocations() = default;
+
+    GlobalProbeLocations(const rclcpp::Time& ts, const std::vector<float>& x, const std::vector<float>& y,
+                         const std::vector<float>& z, const std::vector<float>& confidence,
+                         const std::vector<int32_t>& contribution, int32_t probe_count)
+        : stamp(ts), x(x), y(y), z(z), confidence(confidence), contribution(contribution), probe_count(probe_count) {}
+
+    // Getters
+    rclcpp::Time getStamp() const { return stamp; }
+    const std::vector<float>& getX() const { return x; }
+    const std::vector<float>& getY() const { return y; }
+    const std::vector<float>& getZ() const { return z; }
+    const std::vector<float>& getConfidence() const { return confidence; }
+    const std::vector<int32_t>& getContribution() const { return contribution; }
+    int32_t getProbeCount() const { return probe_count; }
+};
+
 // Used to define 3D(~4D), where the last dimension is time 
 struct Stamped3DVector {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
@@ -268,6 +294,9 @@ public:
     void setActuatorSpeeds(const Stamped4DVector& new_data);
     Stamped4DVector getActuatorSpeeds();
 
+    void setGlobalProbeLocations(const GlobalProbeLocations& new_data);
+    GlobalProbeLocations getGlobalProbeLocations();
+
 private:
     
     // Mutexes for thread safety
@@ -290,6 +319,7 @@ private:
     std::mutex latest_control_signal_mutex_;
     std::mutex battery_state_mutex_;
     std::mutex actuator_speeds_mutex_;
+    std::mutex probe_global_locations_mutex_;
 
     // Data structures to store state information
     GCSHeartbeat gcs_heartbeat_;
@@ -311,7 +341,8 @@ private:
     PositionError position_error_;
     Eigen::Vector4d latest_control_signal_ = Eigen::Vector4d::Zero(); // Initialize to zero
     Stamped4DVector actuator_speeds_ = Stamped4DVector(rclcpp::Time(0, 0), 0.0, 0.0, 0.0, 0.0);
-    
+    GlobalProbeLocations probe_global_locations_;
+
 };
 
 #endif // FCI_STATEMANAGER_H
