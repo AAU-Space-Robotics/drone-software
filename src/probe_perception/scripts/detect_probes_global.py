@@ -83,6 +83,7 @@ class SegmentationNode(Node):
         self.confidence_threshold = 0.75
         self.merge_threshold = 0.6  # Distance threshold for merging probes (in meters)
         self.tracked_probes = []  # List of tracked Probe objects
+        self.distance_threshold = 3.0  # Distance threshold for probe detection (in meters)
 
         # Subscribers
         self.rgb_sub = Subscriber(self, CompressedImage, '/thyra/out/color_image/compressed', qos_profile=qos)
@@ -190,7 +191,7 @@ class SegmentationNode(Node):
             confidence = loc["confidence"]
             distance = np.sqrt(lx * lx + ly * ly + lz * lz)
 
-            if distance > 2.5:
+            if distance > self.distance_threshold:
                 self.get_logger().warn(f"Probe too far away: {distance}")
                 continue
 
