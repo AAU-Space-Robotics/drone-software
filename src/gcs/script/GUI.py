@@ -978,7 +978,7 @@ def start_joystick(node):
                     right_trigger = (node.joystick.get_axis(5) + 1.0)/2.0
                     yaw_value = right_trigger - left_trigger
                     roll_m = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
-                    pitch_m = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
+                    pitch_m = node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
                     yaw_velocity_m = yaw_value if abs(yaw_value) > DEAD_ZONE else 0.0
                     thrust = -node.joystick.get_axis(4) if abs(node.joystick.get_axis(4)) > DEAD_ZONE else 0.0
                     current_axis_state = int(abs(node.joystick.get_axis(4)))

@@ -27,6 +27,7 @@ bool FCI_PathPlanner::GenerateTrajectory(
     const Eigen::Vector3d& current_velocity,
     const Eigen::Vector3d& current_acceleration,
     trajectoryMethod method) {
+    use_yaw_polynomial = false;
 
     // Calculate the time required for the trajectory based on distance and velocity
     float distance = (end_pos - start_pos).norm();
@@ -82,7 +83,7 @@ bool FCI_PathPlanner::GenerateSpinTrajectory(
     }
     
     // Add additional rotations (each rotation is 2π)
-    float total_angular_distance = std::fabs(delta_yaw + num_rotations * 2 * M_PI);
+    float total_angular_distance = std::fabs(delta_yaw) + num_rotations * 2 * M_PI;
     
     // Calculate duration based on angular velocity
     total_time = calculateDuration(total_angular_distance, current_angular_velocity_, min_angular_velocity_, max_angular_velocity_);
@@ -90,12 +91,13 @@ bool FCI_PathPlanner::GenerateSpinTrajectory(
     // Compute the effective target yaw including rotations
     double effective_target_yaw = current_yaw + delta_yaw + num_rotations * 2 * M_PI * (delta_yaw >= 0 ? 1 : -1);
     
-    // Convert effective target yaw to quaternion (rotation around z-axis)
-    Eigen::Quaterniond end_quat(Eigen::AngleAxisd(effective_target_yaw, Eigen::Vector3d::UnitZ()));
+    // Set yaw polynomial (unwrapped)
+    double start_yaw = current_yaw;
+    yaw_segment.coefficient = generatePolynomialCoefficients(start_yaw, effective_target_yaw, 0.0, 0.0, total_time, method);
+    use_yaw_polynomial = true;
     
-    // Store normalized quaternions for interpolation
+    // Store normalized start quaternion (end not needed for spin)
     this->start_quat = start_quat.normalized();
-    this->end_quat = end_quat.normalized();
     
     // Set zero velocity and acceleration for position
     start_vel = Eigen::Vector3d::Zero();
@@ -125,32 +127,6 @@ TrajectoryPoint FCI_PathPlanner::evaluatePolynomial(const std::vector<double>& c
     return point;
 }
 
-std::vector<FullTrajectoryPoint> FCI_PathPlanner::getTrajectoryPoints(double dt, trajectoryMethod method) {
-    std::vector<FullTrajectoryPoint> points;
-    for (double t = 0; t <= total_time; t += dt) {
-        FullTrajectoryPoint point;
-        if (method == MIN_SNAP) {
-            TrajectoryPoint x = evaluatePolynomial(segments[0].coefficient, t);
-            TrajectoryPoint y = evaluatePolynomial(segments[1].coefficient, t);
-            TrajectoryPoint z = evaluatePolynomial(segments[2].coefficient, t);
-            point.position = Eigen::Vector3d(x.position, y.position, z.position);
-            point.velocity = Eigen::Vector3d(x.velocity, y.velocity, z.velocity);
-            point.acceleration = Eigen::Vector3d(x.acceleration, y.acceleration, z.acceleration);
-            // Slerp for quaternion interpolation
-            Eigen::Quaterniond slerp_quat = end_quat;
-
-            // Ensure SLERP takes the shortest path
-            if (start_quat.dot(end_quat) < 0.0) {
-                slerp_quat.coeffs() *= -1.0;
-            }
-
-            point.orientation = start_quat.slerp(t / total_time, slerp_quat).normalized();
-        }
-        points.push_back(point);
-    }
-    return points;
-}
-
 FullTrajectoryPoint FCI_PathPlanner::getTrajectoryPoint(double t, trajectoryMethod method) {
     FullTrajectoryPoint point;
     if (method == MIN_SNAP) {
@@ -160,18 +136,26 @@ FullTrajectoryPoint FCI_PathPlanner::getTrajectoryPoint(double t, trajectoryMeth
         point.position = Eigen::Vector3d(x.position, y.position, z.position);
         point.velocity = Eigen::Vector3d(x.velocity, y.velocity, z.velocity);
         point.acceleration = Eigen::Vector3d(x.acceleration, y.acceleration, z.acceleration);
-        // Slerp for quaternion interpolation
-        Eigen::Quaterniond slerp_quat = end_quat;
-        
-        // Ensure SLERP takes the shortest path
-        if (start_quat.dot(end_quat) < 0.0) {
-            slerp_quat.coeffs() *= -1.0;
-        }
 
-        point.orientation = start_quat.slerp(t / total_time, slerp_quat).normalized();
+        if (use_yaw_polynomial) {
+            // Use unwrapped yaw polynomial for orientation (for spin)
+            TrajectoryPoint yaw_pt = evaluatePolynomial(yaw_segment.coefficient, t);
+            point.orientation = Eigen::Quaterniond(Eigen::AngleAxisd(yaw_pt.position, Eigen::Vector3d::UnitZ())).normalized();
+        } else if (start_quat.normalized().isApprox(end_quat.normalized(), 1e-6)) {
+            // No rotation: use start quaternion directly
+            point.orientation = start_quat.normalized();
+        } else {
+            // SLERP for non-spin, non-identical quaternions
+            Eigen::Quaterniond slerp_quat = end_quat;
+            if (start_quat.dot(end_quat) < 0.0) {
+                slerp_quat.coeffs() *= -1.0;
+            }
+            point.orientation = start_quat.slerp(t / total_time, slerp_quat).normalized();
+        }
     }
     return point;
 }
+
 
 std::vector<double> FCI_PathPlanner::generatePolynomialCoefficients(
     double start, double end, double start_vel, double start_acc, double time, trajectoryMethod method) {

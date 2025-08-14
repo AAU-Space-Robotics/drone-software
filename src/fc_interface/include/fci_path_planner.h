@@ -63,11 +63,6 @@ public:
         double t
     );
 
-    std::vector<FullTrajectoryPoint> getTrajectoryPoints(
-        double dt,
-        trajectoryMethod method
-    );
-
     FullTrajectoryPoint getTrajectoryPoint(
         double t,
         trajectoryMethod method
@@ -84,6 +79,8 @@ private:
     trajectorySegment segments[3]; // x, y, z
     Eigen::Quaterniond start_quat;
     Eigen::Quaterniond end_quat;
+    trajectorySegment yaw_segment;
+    bool use_yaw_polynomial = false;
 
     std::vector<double> generatePolynomialCoefficients(
         double start,

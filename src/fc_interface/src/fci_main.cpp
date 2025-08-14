@@ -1180,9 +1180,9 @@ private:
                 ensureControlLoopRunning(2);
 
                 // Get current position and orientation
-                Stamped3DVector global_pos = state_manager_.getGlobalPosition();
                 StampedQuaternion attitude = state_manager_.getAttitude();
-                Eigen::Vector3d current_position = {global_pos.x(), global_pos.y(), global_pos.z()};
+                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+                Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 Eigen::Quaterniond current_quat = attitude.quaternion().normalized();
 
                 // Extract spin parameters
@@ -1191,7 +1191,7 @@ private:
                 bool use_longest_path = (goal->target_pose[2] == 1.0);
 
                 // Generate spin trajectory
-                path_planner_.GenerateSpinTrajectory(current_position, current_quat, target_yaw, num_rotations, use_longest_path, trajectoryMethod::MIN_SNAP);
+                path_planner_.GenerateSpinTrajectory(takeoff_position, current_quat, target_yaw, num_rotations, use_longest_path, trajectoryMethod::MIN_SNAP);
                 float trajectory_duration = path_planner_.getTotalTime();
 
                 // Set trajectory start time and activate trajectory mode

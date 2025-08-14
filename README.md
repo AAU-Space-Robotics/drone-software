@@ -172,28 +172,47 @@ ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{c
 Run this command from the workspace root (e.g., `~/drone-software`). Ensure the package is sourced with `source install/setup.bash` beforehand, or the ROS 2 network will not recognize the package. Once armed, send a new command within approximately 10 seconds, or the drone will disarm due to a PX4 safety feature (not implemented in this package). The following commands are currently supported:
 
 - **Takeoff:**
-  ```bash
-  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'takeoff', target_pose: [-2], yaw: 0.0}"
-  ```
-  - Requires one argument: the z-coordinate (altitude) to reach (e.g., `-2` for 2 meters upward). Negative values indicate upward movement.
+   ```bash
+   ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'takeoff', target_pose: [-2], yaw: 0.0}"
+   ```
+   - Initiates automatic takeoff to a specified altitude.
+      - **target_pose**: A single value representing the desired altitude in meters (e.g., `-2` for 2 meters above the origin; negative values indicate upward movement).
+      - **yaw**: Desired orientation in radians.
+   - The command will be rejected if the altitude is not provided.
 
 - **Go To:**
-  ```bash
-  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'goto', target_pose: [1,1,-2], yaw: 0.0}"
-  ```
-  - Requires an `[x, y, z]` coordinate. The command will be rejected without all three values. Altitude is specified with negative values for higher altitudes.
+   ```bash
+   ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'goto', target_pose: [1, 1, -2], yaw: 0.0}"
+   ```
+   - Moves the drone to the specified `[x, y, z]` position in meters.
+      - **x, y, z**: Target coordinates. All three values are required.
+      - **z**: Altitude, with negative values indicating upward movement (e.g., `-2` for 2 meters above the origin).
+      - **yaw**: Desired orientation in radians (0 to 2π).
+   - The command will be rejected if any coordinate is missing.
+
+- **Spin:**
+   ```bash
+   ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'spin', target_pose: [1.57, 2.0, 0], yaw: 0.0}"
+   ```
+   - Requires three arguments in `target_pose`: `[yaw, num_rotations, use_longest_path]`.
+      - **yaw**: Target orientation in radians (0 to 2π).
+      - **num_rotations**: Number of full rotations to perform (0 for direct movement to target, 1 or more for additional rotations).
+      - **use_longest_path**: Path selection (0 for shortest path, 1 for longest path).
+   - The command will be rejected if any argument is missing.
 
 - **Manual Mode:**
-  ```bash
-  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'manual', target_pose: [], yaw: 0.0}"
-  ```
-  - Switches the controller to listen for manual control inputs on the `drone/in/manual_input` topic. A node in the `gcs` package can publish control values from a PS4 controller.
+   ```bash
+   ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'manual', target_pose: [], yaw: 0.0}"
+   ```
+   - Switches the drone to manual control mode. In this mode, the flight controller listens for manual input messages on the `drone/in/manual_input` topic.
+   - Manual inputs can be sent from a node in the `gcs` package, such as those using a PS4 controller.
 
 - **Set New Origin:**
-  ```bash
-  ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'set_origin', target_pose: [], yaw: 0.0}"
-  ```
-  - Sets a new origin for the drone. It has to be disarmed to perform this action.
+   ```bash
+   ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'set_origin', target_pose: [], yaw: 0.0}"
+   ```
+   - Updates the drone’s local origin reference. This command can only be executed when the drone is disarmed.
+   - Use this to reset the coordinate system before starting a new mission or after relocation.
 
 
 ### other stuff
