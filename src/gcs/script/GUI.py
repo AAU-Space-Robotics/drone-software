@@ -38,7 +38,7 @@ from OpenGL.GL import *
 import re
 import math
 
-
+#filename = "probe_data.txt"
 
 class DroneData:
     position: list = (0.0, 0.0, 0.0)
@@ -112,7 +112,38 @@ class GUIButton():
         imgui.pop_style_var() 
         imgui.set_window_font_scale(1.0)
         return state
+    def button_save(x,y,font,label,filename,probes):
+        
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
 
+        imgui.set_window_font_scale(0.75)
+        imgui.set_cursor_pos((x, y))
+        imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
+        imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
+        imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
+        imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0)) 
+        with imgui.font(font):
+            if imgui.button(label, width=120, height=40):
+                try:
+                    with open(filename, "w") as f:
+                    
+                        f.write(f"Data recorded on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+                        # Write each probe's data
+                        for i, probe in enumerate(probes):
+                            f.write(f"Probe {i+1}:\n")
+                            f.write(f"  x: {probe['x']}\n")
+                            f.write(f"  y: {probe['y']}\n")
+                            f.write(f"  z: {probe['z']}\n")
+                            f.write(f"  confidence: {probe['confidence']}\n")
+                            f.write(f"  contribution: {probe['contribution']}\n\n")
+                        print(f"Saved to {filename}")
+                        
+                except Exception as e:
+                    print(f"Failed to save: {e}")
+        imgui.pop_style_color(3)
+        imgui.pop_style_var() 
+        imgui.set_window_font_scale(1.0)
 
 class graphs():
     def motor_speed_graph(start_x, width, start_y, height):
@@ -129,7 +160,7 @@ drone_data = DroneData()
 
 button_color = (0.0,0.5,0.0)
 killbutton_color = (0.8,0.0,0.0)
-text_buffer, text_buffer_plan = "", ""
+text_buffer, text_buffer_plan, text_buffer_spin, text_buffer_plan_spin = "", "", "", ""
 speed_buffer = ""
 current_item = 0
 position_x, position_y, position_z = 0, 0, 0
@@ -619,7 +650,7 @@ def RPY_Text_Field():
         imgui.set_cursor_pos((150, 638)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
         imgui.set_cursor_pos((23, 680)); imgui.text(f"[r]")
 
-def probe_Field(node):
+def probe_Field(node,filename):
     global probes
     global probe_classification, probe_numb
     global probe_timestamp
@@ -683,6 +714,7 @@ def probe_Field(node):
     except:
         pass
     imgui.set_cursor_pos((103, 900)); imgui.text(f" TS: {velocity_timestamp}")
+    GUIButton.button_save(290, 650, font, "save",filename,probes)
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
@@ -978,7 +1010,7 @@ def start_joystick(node):
                     right_trigger = (node.joystick.get_axis(5) + 1.0)/2.0
                     yaw_value = right_trigger - left_trigger
                     roll_m = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
-                    pitch_m = node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
+                    pitch_m = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
                     yaw_velocity_m = yaw_value if abs(yaw_value) > DEAD_ZONE else 0.0
                     thrust = -node.joystick.get_axis(4) if abs(node.joystick.get_axis(4)) > DEAD_ZONE else 0.0
                     current_axis_state = int(abs(node.joystick.get_axis(4)))
@@ -1222,9 +1254,10 @@ def send_map_pos(node):
     
 def route_planner(node):
     global change_y_1, change_y_2, permant_y, card_y_buffer
-    global flight_plan, text_buffer_plan, flight_plan_numb, flight_plan_coord, execute_route_numb
+    global flight_plan, text_buffer_plan, flight_plan_numb, flight_plan_coord, execute_route_numb, text_buffer_plan_spin
     global effect2, current_step, temp_y_arrow, start_y_arrow 
     text_field = ""
+    text_field_spin = ""
     mouse_x, mouse_y = imgui.get_mouse_pos()
     imgui.set_cursor_pos((1690, 260))
     imgui.set_window_font_scale(2.0)
@@ -1232,6 +1265,12 @@ def route_planner(node):
     changed, text_field= imgui.input_text("##goto_input_plan", text_buffer_plan, 20)
     if changed:
         text_buffer_plan = text_field
+    imgui.set_cursor_pos((1690, 440))
+    imgui.set_window_font_scale(2.0)
+    imgui.set_next_item_width(180)
+    changed, text_field_spin= imgui.input_text("##spin_input_plan", text_buffer_plan_spin, 20)
+    if changed:
+        text_buffer_plan_spin = text_field_spin  
     imgui.set_window_font_scale(1.0) 
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
     draw_list = imgui.get_window_draw_list()
@@ -1280,6 +1319,20 @@ def route_planner(node):
             temp_y_arrow = 0
             start_y_arrow = 0
             execute_route_numb = 0
+
+    if GUIButton.button_Plan(1562,436,font_small, "Spin##plan4"):
+        for i, val in enumerate(flight_plan):
+            if val == 0:
+                flight_plan[i] = 4
+                try:
+                    flight_plan_coord[flight_plan_numb] = [text_buffer_plan_spin]
+                    flight_plan_numb += 1
+                    
+                    text_buffer_plan_spin = ""
+                    text_field_spin = ""
+                except ValueError:
+                     node.imgui_logger.warn("Invalid input for Spin, please enter yaw rotations direction values")
+                break
    
     
     
@@ -1416,6 +1469,37 @@ def execute_route(node):
                     step_finished = True
                     execute_route_numb += 1
                     #waiting_for_completion = False
+        case 4: # Spin
+            if not command_sent:
+                try:
+                    if execute_route_numb < len(flight_plan_coord) and flight_plan_coord[execute_route_numb]:
+                        yaw, rotations, distance = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
+
+                        node.send_command("spin", [yaw, rotations, distance], 0.0)
+                        node.imgui_logger.info("Spinning weeee")
+                        command_sent = True
+                        waiting_for_completion = True
+                    else:
+                        step_finished = True
+                except ValueError:
+                    node.get_logger().warn("Invalid spin input")
+                    node.imgui_logger.warn("Invalid spin input")
+                    step_finished = True
+
+            if waiting_for_completion and elapsed > 0.5:
+                try:
+                    if execute_route_numb < len(flight_plan_coord) and flight_plan_coord[execute_route_numb]:
+                        yaw, rotations, distance = map(float, flight_plan_coord[execute_route_numb][0].strip().split())
+                        if is_trajectory_complete():
+                            effect3 = True
+
+                            step_finished = True
+                            execute_route_numb += 1
+                except (ValueError, IndexError):
+                    step_finished = True
+                    execute_route_numb += 1
+
+
 
     # If the step finished, move to next one, but don’t process it this frame
     if step_finished:
@@ -1583,7 +1667,23 @@ class plan_card:
                     draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.9, 0.8, 0.0, 1.0))
                 except:
                     flight_plan_coord[numb][0] = ""
-
+            case 4:
+                text = str(text)
+                clean_text = re.sub(r"[^\d.\s\-+]", " ", text)
+                clean_text = " ".join(clean_text.split())   
+                # Draw card background
+                color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
+                draw_list = imgui.get_window_draw_list()
+                draw_list.add_rect_filled(card_pos_x, card_pos_y, card_pos_x + 265, card_pos_y + 50, color, rounding=10.0, flags=15)    
+                imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.0, 1.0)
+                imgui.set_cursor_pos((card_pos_x + 35, card_pos_y + 20))
+                imgui.text(f"Spin : {clean_text}")   
+                with imgui.font(font):
+                    imgui.set_cursor_pos((card_pos_x + 230, card_pos_y - 6)); imgui.text("-")
+                    imgui.set_cursor_pos((card_pos_x + 230, card_pos_y + 4)); imgui.text("-")
+                    imgui.set_cursor_pos((card_pos_x + 230, card_pos_y + 14)); imgui.text("-")
+                imgui.pop_style_color()
+          
 
                 
                 
@@ -1668,7 +1768,7 @@ def main(args=None):
     impl = GlfwRenderer(window)
     io = imgui.get_io()
     # Try to find the font in the ROS package share directory
-    
+ 
     try:
         font_dir = os.path.join(
             ament_index_python.packages.get_package_share_directory("gcs"),
@@ -1679,12 +1779,25 @@ def main(args=None):
             ament_index_python.packages.get_package_share_directory("gcs"),
             "images"
         )
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # Go up 3 levels to reach ~/drone-software
+        project_root = os.path.expanduser("~/drone-software")
+
+        # Folder for probe data
+        log_dir = os.path.join(project_root, "probe_data")
+        os.makedirs(log_dir, exist_ok=True)
+        # Combine directory and timestamped filename directly
+        filename = os.path.join(log_dir, f"probe_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+        print(filename)  # This now includes the full path
+
         image_path = os.path.join(image_dir, "droneImage.png")
         font_path = os.path.join(font_dir, "SourceCodePro-Black.otf")
     except Exception as e:
         print(f"Could not find gcs package share directory: {e}")
         glfw.terminate()
         return
+  
     #font_path = os.path.normpath(font_path)
     if not os.path.isfile(font_path):
         print(f"Font file not found: {font_path}")
@@ -1695,6 +1808,7 @@ def main(args=None):
     font_small = io.fonts.add_font_from_file_ttf(font_path, 30)
     font_for_meter = io.fonts.add_font_from_file_ttf(font_path, 20)
     impl.refresh_font_texture()
+    
     
 
     #texture_id = glGenTextures(1)
@@ -1744,7 +1858,8 @@ def main(args=None):
         Dropdown_Menu()
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
-        probe_Field(node)
+        
+        probe_Field(node,filename)
         XYZVelocity_Text_Field()
         batteryGraph()
         motor_speed()
