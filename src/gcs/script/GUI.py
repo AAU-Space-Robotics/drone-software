@@ -332,9 +332,9 @@ class DroneGuiNode(Node):
             }
             probes.append(probe)
         #probe_classification = sum(msg.confidence) / len(msg.confidence) if msg.confidence else 0.0
-
+        
         probe_numb = msg.probe_count
-
+        #print(f"Probe count: {probe_numb}")
         # Optionally, store the timestamp if needed
         probe_timestamp = msg.stamp
 
@@ -1589,10 +1589,10 @@ class plan_card:
                 
     def probe_cards(y_add, id, probes, i, node):
         imgui.set_cursor_pos((30, 790+y_add)); imgui.text(f"{id}")
-        imgui.set_cursor_pos((100, 790+y_add)); imgui.text(f"{Decimal(probes[i].x).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((185, 790+y_add)); imgui.text(f"{Decimal(probes[i].y).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((270, 790+y_add)); imgui.text(f"{Decimal(probes[i].z).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((365, 790+y_add)); imgui.text(f"{Decimal(probes[i].confidence).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((100, 790+y_add)); imgui.text(f"{Decimal(probes[i]['x']).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((185, 790+y_add)); imgui.text(f"{Decimal(probes[i]['y']).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((270, 790+y_add)); imgui.text(f"{Decimal(probes[i]['z']).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((365, 790+y_add)); imgui.text(f"{Decimal(probes[i]['confidence']).quantize(Decimal('0.00'))}")
                
 def drone_image(image_path, texture_id, img_width, img_height):
     #Todo move to function

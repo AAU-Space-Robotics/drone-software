@@ -2,57 +2,64 @@
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Header
-from interfaces.msg import ProbeLocations  # Replace with your actual package name
+from interfaces.msg import ProbeGlobalLocations  # Ensure this matches your package
+from builtin_interfaces.msg import Time
 
-class DummyProbePublisher(Node):
+class DummyProbeGlobalPublisher(Node):
     def __init__(self):
-        super().__init__('dummy_probe_publisher')
+        super().__init__('dummy_probe_global_publisher')
 
-        self.publisher_ = self.create_publisher(ProbeLocations, '/thyra/out/probe_locations_global', 10)
-        self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
+        # Publisher
+        self.publisher_ = self.create_publisher(
+            ProbeGlobalLocations,
+            '/thyra/out/probe_locations_global',
+            10
+        )
+
+        # Timer at 10 Hz
+        self.timer = self.create_timer(0.1, self.timer_callback)
         self.counter = 0
-        self.num_probes = 1
+        self.probe_count = 1
 
-        self.get_logger().info('Modified Dummy ProbeLocations Publisher Started')
+        self.get_logger().info('Dummy ProbeGlobalLocations Publisher Started')
 
     def timer_callback(self):
-        msg = ProbeLocations()
+        msg = ProbeGlobalLocations()
 
-        # Header
-        msg.header = Header()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'map'
-
-        # Occasionally increase num_probes
+        # Update probe count every 50 iterations
         if self.counter % 50 == 0 and self.counter > 0:
-            self.num_probes += 1
-        msg.num_probes = self.num_probes
+            self.probe_count += 1
+        msg.probe_count = self.probe_count
 
-        # Single changing confidence value between 0 and 1
-        confidence_value = (self.counter % 100) / 100.0
-        msg.classification_confidence = [confidence_value]
+        # Generate dummy positions and confidence
+        msg.x = []
+        msg.y = []
+        msg.z = []
+        msg.confidence = []
+        msg.contribution = []
 
-        # Dummy probe coordinates for num_probes
-        msg.probes = []
-        msg.centroid_x = []
-        msg.centroid_y = []
-
-        for i in range(self.num_probes):
+        for i in range(self.probe_count):
             x = i + 0.1 * self.counter
             y = i * 2.0 + 0.2 * self.counter
             z = 1.0 + 0.05 * self.counter
+            confidence_value = (self.counter % 100) / 100.0
+            contribution_value = (self.counter % 10) + 1  # arbitrary example
 
-            msg.probes.extend([x, y, z])
-            msg.centroid_x.append(x + 0.1)
-            msg.centroid_y.append(y + 0.1)
+            msg.x.append(x)
+            msg.y.append(y)
+            msg.z.append(z)
+            msg.confidence.append(confidence_value)
+            msg.contribution.append(contribution_value)
+
+        # Timestamp
+        msg.stamp = self.get_clock().now().to_msg()
 
         self.publisher_.publish(msg)
         self.counter += 1
 
 def main(args=None):
     rclpy.init(args=args)
-    node = DummyProbePublisher()
+    node = DummyProbeGlobalPublisher()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
