@@ -1,22 +1,18 @@
 import os
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import TimerAction
+from launch.actions import IncludeLaunchDescription, TimerAction
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 
 def generate_launch_description():
     # Define workspace directory (one level up from package)
-    workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
     pkg_share = FindPackageShare('fc_interface')
-
-    
-    # directory which workspace is located in
-    general_dir = os.path.abspath(os.path.join(workspace_dir, '..', '..', '..'))
-    px4_dir = os.path.join(general_dir, 'PX4-Autopilot')
+    sensors_pkg_share = FindPackageShare('sensors')
     
     # Path to the simulation config file
     params_path = PathJoinSubstitution([pkg_share, 'config', 'thyra_params.yaml'])
@@ -54,11 +50,17 @@ def generate_launch_description():
                 ('/fmu/in/distance_sensor', '/thyra/out/distance_sensor'),
             ],
         ),
-            
+
+        # Include thyra_cam launch file
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([sensors_pkg_share, 'launch', 'thyra_cam.launch.py'])
+            ),
+        ),
 
         # Delay and launch FlightControllerInterface node
         TimerAction(
-            period=20.0,  # Delay in seconds
+            period=15.0,  # Delay in seconds
             actions=[
                 Node(
                     package='fc_interface',

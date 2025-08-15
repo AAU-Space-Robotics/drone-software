@@ -38,10 +38,10 @@ class CompressedImageRepublisher(Node):
 
         # Synchronize all four messages
         self.ts = message_filters.ApproximateTimeSynchronizer([self.color_sub, self.depth_sub, self.position_sub, self.attitude_sub],
-    queue_size=10,
-    slop=0.1,
-    allow_headerless=True  # Enable headerless message support
-)
+            queue_size=10,
+            slop=0.1,
+            allow_headerless=True  # Enable headerless message support
+        )
         self.ts.registerCallback(self.synced_callback)
         
         # Publishers for compressed topics and pose

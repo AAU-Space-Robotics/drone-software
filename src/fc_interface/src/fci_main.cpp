@@ -21,6 +21,7 @@
 #include <interfaces/msg/drone_state.hpp>
 #include <interfaces/msg/drone_scope.hpp>
 #include <interfaces/msg/gcs_heartbeat.hpp>
+#include <interfaces/msg/probe_global_locations.hpp>
 
 #include "fci_controller.h"
 #include "fci_state_manager.h"
@@ -214,6 +215,10 @@ public:
             "/fmu/out/actuator_outputs", qos,
             [this](const ActuatorOutputs::SharedPtr msg)
             { ActuatorOutputCallback(msg);});
+        probe_global_locations_sub_ = create_subscription<interfaces::msg::ProbeGlobalLocations>(
+            "/thyra/out/probe_global_locations", qos,
+            [this](const interfaces::msg::ProbeGlobalLocations::SharedPtr msg)
+            { GlobalProbeLocationsCallback(msg); });
 
         // Action server
         drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
@@ -545,6 +550,20 @@ private:
         state_manager_.setActuatorSpeeds(actuator_speeds);
     }
 
+    void GlobalProbeLocationsCallback(const interfaces::msg::ProbeGlobalLocations::SharedPtr msg)
+    {
+        // Set the probe locations in the state manager
+        GlobalProbeLocations probe_locations;
+        probe_locations.stamp = get_time();
+        probe_locations.probe_count = msg->probe_count;
+        probe_locations.x = msg->x;
+        probe_locations.y = msg->y;
+        probe_locations.z = msg->z;
+        probe_locations.confidence = msg->confidence;
+        probe_locations.contribution = msg->contribution;
+        state_manager_.setGlobalProbeLocations(probe_locations);
+    }
+
     double unwrapYaw(double yaw) {
         while (yaw > M_PI) yaw -= 2.0 * M_PI;
         while (yaw < -M_PI) yaw += 2.0 * M_PI;
@@ -629,6 +648,10 @@ private:
         msg.actuator_speeds[1] = actuator_speeds.y();
         msg.actuator_speeds[2] = actuator_speeds.z();
         msg.actuator_speeds[3] = actuator_speeds.w();
+
+        // Global probe locations
+        GlobalProbeLocations probe_locations = state_manager_.getGlobalProbeLocations();
+        msg.probes_found = probe_locations.getProbeCount();
 
         //Publish the drone state message
         drone_state_pub_->publish(msg);
@@ -1180,9 +1203,9 @@ private:
                 ensureControlLoopRunning(2);
 
                 // Get current position and orientation
-                Stamped3DVector global_pos = state_manager_.getGlobalPosition();
                 StampedQuaternion attitude = state_manager_.getAttitude();
-                Eigen::Vector3d current_position = {global_pos.x(), global_pos.y(), global_pos.z()};
+                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+                Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 Eigen::Quaterniond current_quat = attitude.quaternion().normalized();
 
                 // Extract spin parameters
@@ -1191,7 +1214,7 @@ private:
                 bool use_longest_path = (goal->target_pose[2] == 1.0);
 
                 // Generate spin trajectory
-                path_planner_.GenerateSpinTrajectory(current_position, current_quat, target_yaw, num_rotations, use_longest_path, trajectoryMethod::MIN_SNAP);
+                path_planner_.GenerateSpinTrajectory(takeoff_position, current_quat, target_yaw, num_rotations, use_longest_path, trajectoryMethod::MIN_SNAP);
                 float trajectory_duration = path_planner_.getTotalTime();
 
                 // Set trajectory start time and activate trajectory mode
@@ -1308,6 +1331,7 @@ private:
     rclcpp::Subscription<BatteryStatus>::SharedPtr battery_status_sub_;
     rclcpp::Subscription<DistanceSensor>::SharedPtr ground_distance_sub_;
     rclcpp::Subscription<ActuatorOutputs>::SharedPtr actuator_output_sub_;
+    rclcpp::Subscription<interfaces::msg::ProbeGlobalLocations>::SharedPtr probe_global_locations_sub_;
 
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;

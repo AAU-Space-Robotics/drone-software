@@ -42,12 +42,18 @@ install(PROGRAMS
   script/image_republisher.py
   script/image_republisher_pose.py
   script/px4_to_cam.py
+  script/static_rgbd_test_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
 # Install header files
 install(DIRECTORY include/
   DESTINATION include/${PROJECT_NAME}
+)
+
+# Install data files
+install(DIRECTORY data/
+  DESTINATION share/${PROJECT_NAME}/
 )
 
 # Install launch files

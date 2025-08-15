@@ -199,5 +199,16 @@ Stamped4DVector FCI_StateManager::getActuatorSpeeds() {
     return actuator_speeds_;
 }
 
+// -- 
+void FCI_StateManager::setGlobalProbeLocations(const GlobalProbeLocations& new_data) {
+    std::lock_guard<std::mutex> lock(probe_global_locations_mutex_);
+    probe_global_locations_ = new_data;
+}
+
+GlobalProbeLocations FCI_StateManager::getGlobalProbeLocations() {
+    std::lock_guard<std::mutex> lock(probe_global_locations_mutex_);
+    return probe_global_locations_;
+}
+
 // End of Setters & Getters
 
