@@ -19,3 +19,6 @@ imgui.ini
 src/realsense-ros
 src/matlab_msg_gen
 venv
+
+**/rosbag*/
+probe_data/

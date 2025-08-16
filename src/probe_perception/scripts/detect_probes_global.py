@@ -78,6 +78,13 @@ class SegmentationNode(Node):
             history=QoSHistoryPolicy.KEEP_LAST
         )
 
+        qos2 = QoSProfile(
+            depth=10,
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            history=QoSHistoryPolicy.KEEP_LAST
+        )
+
         self.previous_time = 0
         self.fps = 5
         self.confidence_threshold = 0.75
@@ -93,9 +100,9 @@ class SegmentationNode(Node):
         self.ts.registerCallback(self.image_handler)
 
         # Publishers
-        self.image_publisher = self.create_publisher(Image, '/probe_detector/segmented_image', 10)
-        self.probe_publisher = self.create_publisher(ProbeLocations, '/probe_detector/probe_locations', 10)
-        self.global_probe_publisher = self.create_publisher(ProbeGlobalLocations, '/probe_detector/global_probe_locations', 10)
+        self.image_publisher = self.create_publisher(Image, '/probe_detector/segmented_image', qos2)
+        self.probe_publisher = self.create_publisher(ProbeLocations, '/probe_detector/probe_locations', qos2)
+        self.global_probe_publisher = self.create_publisher(ProbeGlobalLocations, '/probe_detector/global_probe_locations', qos2)
 
         self.bridge = CvBridge()
 

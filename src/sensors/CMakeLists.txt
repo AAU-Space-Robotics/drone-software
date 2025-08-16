@@ -43,6 +43,7 @@ install(PROGRAMS
   script/image_republisher_pose.py
   script/px4_to_cam.py
   script/static_rgbd_test_node.py
+  script/probe_republisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

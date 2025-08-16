@@ -226,7 +226,7 @@ class DroneGuiNode(Node):
             ProbeGlobalLocations,
             '/probe_detector/global_probe_locations',
             self.probe_callback,
-            10
+            qos
             
         )
         self.publisher_ = self.create_publisher(

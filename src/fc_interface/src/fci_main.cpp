@@ -216,7 +216,7 @@ public:
             [this](const ActuatorOutputs::SharedPtr msg)
             { ActuatorOutputCallback(msg);});
         probe_global_locations_sub_ = create_subscription<interfaces::msg::ProbeGlobalLocations>(
-            "/thyra/out/probe_global_locations", qos,
+            "/probe_detector/global_probe_locations", qos,
             [this](const interfaces::msg::ProbeGlobalLocations::SharedPtr msg)
             { GlobalProbeLocationsCallback(msg); });
 
@@ -718,7 +718,7 @@ private:
             drone_state.flight_mode = FlightMode::LANDED;
             drone_state.arming_state = ArmingState::DISARMED;
             drone_state.command = Command::DISARM;
-            drone_state.trajectory_mode = TrajectoryMode::INACTIVE;
+            drone_state.trajectory_mode = TrajectoryMode::COMPLETED;
             state_manager_.setDroneState(drone_state);
             disarm(true);
             cleanupControlLoop();
