@@ -8,7 +8,7 @@ function MissionExecutor()
     % Load camera parameters
     cameraParamsExtracted = load('cameraParams.mat');
     camIntrinsics = cameraParamsExtracted.cameraParams;
-    markerSize = 102.15; % in mm
+    markerSize = 144.0; % in mm
     
     % Mission parameters
     takeoff_marker_id = 101;

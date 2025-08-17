@@ -7,12 +7,6 @@ function [ids, tvecs, rvecs] = detectArucoInCameraFrame(Image, camIntrinsics, ma
         error('Input must be a color image with 3 channels.');
     end
 
-    % Optional: Resize for speed if huge
-    if size(Image,1) > 1080
-        scaleFactor = 1080 / size(Image,1);
-        Image = imresize(Image, scaleFactor);
-    end
-
     % Detect markers
     try
         [ids, locs] = readArucoMarker(Image);

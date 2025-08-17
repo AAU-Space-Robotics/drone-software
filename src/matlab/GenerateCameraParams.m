@@ -77,10 +77,9 @@ response = input(prompt, 's');
 
 if lower(response) == 'y'
     % Define Intel RealSense D435 parameters
-    focalLength = [425.8813171386719, 425.8813171386719]; % [fx, fy]
-    principalPoint = [430.5101623535156, 238.53343200683594]; % [cx, cy]
-    %imageSize = [640, 480]; % Actual camera resolution
-    imageSize = [1280, 720]; % Test image resolution
+    focalLength = [910.71533203125, 910.80615234375]; % [fx, fy]
+    principalPoint = [641.737548828125, 370.1865539550781]; % [cx, cy]
+    imageSize = [1280, 720]; % [width, height]
     radialDistortion = [0.0, 0.0, 0.0]; % [k1, k2, k3]
     tangentialDistortion = [0.0, 0.0]; % [p1, p2]
     
