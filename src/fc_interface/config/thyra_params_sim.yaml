@@ -46,6 +46,8 @@ flight_controller_interface:
       safety_thrustdown_rate: 0.0       # Rate of thrust decrease during safety landing
       geofence_radius: 20.0             # Geofence radius (meters)
       geofence_height: 10.0             # Geofence height (meters)
+      do_mode_change_delay: true        # Enable mode change delay
+      mode_change_delay: 5.0            # Mode change delay (seconds)
 
     # Setup Parameters
     setup:

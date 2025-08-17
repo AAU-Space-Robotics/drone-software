@@ -117,6 +117,8 @@ public:
         this->declare_parameter("safety.geofence_radius", 2.0);
         this->declare_parameter("safety.battery_threshold", 0.10); // 5% battery threshold
         this->declare_parameter("safety.geofence_height", 2.0); // Geofence height (meters)
+        this->declare_parameter("safety.do_mode_change_delay", false);
+        this->declare_parameter("safety.mode_change_delay", 5.0);
 
         this->get_parameter("safety.check_gcs_timeout", check_gcs_timeout_);
         this->get_parameter("safety.check_position_timeout", check_position_timeout_);
@@ -130,16 +132,19 @@ public:
         this->get_parameter("safety.check_geofence", safety_check_geofence_);
         this->get_parameter("safety.geofence_radius", safety_geofence_radius_);
         this->get_parameter("safety.geofence_height", safety_geofence_height_);
+        this->get_parameter("safety.do_mode_change_delay", do_mode_change_delay_);
+        this->get_parameter("safety.mode_change_delay", mode_change_delay_);
 
         RCLCPP_INFO(get_logger(), "Safety parameters: gcs_timeout=%.2f, position_timeout=%.2f, "
-                    "safety_thrust_initial=%.2f, safety_thrustdown_rate=%.4f, "
-                    "check_battery=%d, battery_threshold=%.2f, "
-                    "check_geofence=%d, geofence_radius=%.2f, geofence_height=%.2f",
-                    gcs_timeout_threshold_, position_timeout_threshold_,
-                    safety_thrust_, safety_thrustdown_rate_,
-                    safety_check_battery_, safety_battery_threshold_,
-                    safety_check_geofence_, safety_geofence_radius_,
-                    safety_geofence_height_);
+            "safety_thrust_initial=%.2f, safety_thrust_final=%.2f, safety_thrustdown_rate=%.4f, "
+            "check_battery=%d, battery_threshold=%.2f, "
+            "check_geofence=%d, geofence_radius=%.2f, geofence_height=%.2f, "
+            "do_mode_change_delay=%d, mode_change_delay=%.2f",
+            gcs_timeout_threshold_, position_timeout_threshold_,
+            safety_thrust_initial_, safety_thrust_final_, safety_thrustdown_rate_,
+            safety_check_battery_, safety_battery_threshold_,
+            safety_check_geofence_, safety_geofence_radius_,
+            safety_geofence_height_, do_mode_change_delay_, mode_change_delay_);
 
         // Load setup parameters
         this->declare_parameter("setup.lidar_offset", 0.0);
@@ -367,7 +372,6 @@ private:
         return (xy_distance >= safety_geofence_radius_ || z_distance >= safety_geofence_height_);
     }
 
-
     void safetyCheckCallback()
     {
         DroneState drone_state = state_manager_.getDroneState();
@@ -520,6 +524,7 @@ private:
             if (disarming)
             {
                 drone_state.flight_mode = FlightMode::STANDBY;
+                drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
             }
             cleanupControlLoop();
         }
@@ -639,6 +644,7 @@ private:
         DroneState drone_state = state_manager_.getDroneState();
         msg.arming_state = static_cast<uint8_t>(drone_state.arming_state);
         msg.trajectory_mode = static_cast<uint8_t>(drone_state.trajectory_mode);
+        msg.led_mode = static_cast<int16_t>(drone_state.flight_mode_trait);
 
         //uint8 estop  
         FlightMode flightmode = drone_state.flight_mode;
@@ -722,6 +728,7 @@ private:
             // Drone is now landed, update state and disarm
             RCLCPP_INFO(get_logger(), "Drone has landed, disarming...");
             drone_state.flight_mode = FlightMode::LANDED;
+            drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
             drone_state.arming_state = ArmingState::DISARMED;
             drone_state.command = Command::DISARM;
             drone_state.trajectory_mode = TrajectoryMode::COMPLETED;
@@ -873,6 +880,7 @@ private:
             RCLCPP_INFO(get_logger(), "Safety land mode activated.");
             drone_state.timestamp = get_time();
             drone_state.flight_mode = FlightMode::SAFETYLAND_BLIND;
+            drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
             state_manager_.setDroneState(drone_state);
             safety_land_start_time_ = get_time();
         }
@@ -889,6 +897,7 @@ private:
             {
                 drone_state.timestamp = get_time();
                 drone_state.flight_mode = FlightMode::LANDED;
+                drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
 
                 // Clean up control loop
                 disarm(true);
@@ -937,6 +946,7 @@ private:
 
         // Set trajectory start time and update flight mode
         drone_state.flight_mode = FlightMode::LAND_POSITION;
+        drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
         drone_state.trajectory_start_time_ = get_time();
         drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
         drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
@@ -947,12 +957,26 @@ private:
     void setDroneMode(FlightMode mode)
     {
         DroneState drone_state = state_manager_.getDroneState();
-    
-        if (drone_state.flight_mode != mode)
+        FlightMode old_flight_mode = drone_state.flight_mode;
+
+        if (old_flight_mode != mode)
         {
             drone_state.timestamp = get_time();
             drone_state.flight_mode = mode;
+            drone_state.flight_mode_trait = getFlightModeTraits(mode)[0];
             state_manager_.setDroneState(drone_state);
+
+            // Only delay if switching between autonomous/manual, but NOT if switching to standby or between estop and standby
+            if (do_mode_change_delay_ && 
+                (getFlightModeTraits(mode)[0] != getFlightModeTraits(old_flight_mode)[0]) &&
+                mode != FlightMode::STANDBY &&
+                !( (mode == FlightMode::EMERGENCY_STOP && old_flight_mode == FlightMode::STANDBY) ||
+                   (mode == FlightMode::STANDBY && old_flight_mode == FlightMode::EMERGENCY_STOP) )
+            )
+            {
+                RCLCPP_INFO(get_logger(), "Switching flight mode waiting for %.2f seconds...", mode_change_delay_);
+                rclcpp::sleep_for(std::chrono::nanoseconds(static_cast<int64_t>(mode_change_delay_ * 1e9)));
+            }
         }
     }
 
@@ -1123,6 +1147,7 @@ private:
         {
             if (goal->command_type == "estop")
             {
+                setDroneMode(FlightMode::EMERGENCY_STOP);
                 disarm(true);
                 cleanupControlLoop();
                 result->success = true;
@@ -1385,6 +1410,8 @@ private:
     bool position_stale_ = false;
     bool check_gcs_timeout_;
     bool check_position_timeout_;
+    float mode_change_delay_;
+    bool do_mode_change_delay_;
     float safety_thrust_;
     float safety_thrust_initial_;
     float safety_thrust_final_;

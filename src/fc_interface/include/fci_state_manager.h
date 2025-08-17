@@ -34,6 +34,7 @@ enum class ArmingState {
 };
 
 enum class FlightMode {
+    EMERGENCY_STOP = -3,
     LANDED = -2,
     STANDBY = -1,
     MANUAL = 0,
@@ -43,6 +44,35 @@ enum class FlightMode {
     BEGIN_LAND_POSITION = 4,
     LAND_POSITION = 5
 };
+// Traits for each FlightMode
+enum class FlightModeTrait {
+    ESTOP = -1,
+    STANDBY = 0,
+    MANUAL = 1,
+    AUTONOMOUS = 2
+};
+
+// Example mapping (can be used in a function or static const array)
+static const std::unordered_map<FlightMode, std::vector<FlightModeTrait>> flight_mode_traits_map = {
+    {FlightMode::EMERGENCY_STOP, {FlightModeTrait::ESTOP}},
+    {FlightMode::LANDED, {FlightModeTrait::STANDBY}},
+    {FlightMode::STANDBY, {FlightModeTrait::STANDBY}},
+    {FlightMode::MANUAL, {FlightModeTrait::MANUAL}},
+    {FlightMode::MANUAL_AIDED, {FlightModeTrait::MANUAL}},
+    {FlightMode::POSITION, {FlightModeTrait::AUTONOMOUS}},
+    {FlightMode::SAFETYLAND_BLIND, {FlightModeTrait::AUTONOMOUS}},
+    {FlightMode::BEGIN_LAND_POSITION, {FlightModeTrait::AUTONOMOUS}},
+    {FlightMode::LAND_POSITION, {FlightModeTrait::AUTONOMOUS}}
+};
+
+// Helper function to get traits for a FlightMode
+inline std::vector<FlightModeTrait> getFlightModeTraits(FlightMode mode) {
+    auto it = flight_mode_traits_map.find(mode);
+    if (it != flight_mode_traits_map.end()) {
+        return it->second;
+    }
+    return {};
+}
 
 enum class TrajectoryMode {
     UNINITIALIZED = -1,
@@ -201,6 +231,7 @@ struct DroneState {
     Command command = Command::DISARM;
     ArmingState arming_state = ArmingState::DISARMED;
     FlightMode flight_mode = FlightMode::STANDBY;
+    FlightModeTrait flight_mode_trait = FlightModeTrait::STANDBY;
     TrajectoryMode trajectory_mode = TrajectoryMode::INACTIVE;
     rclcpp::Time trajectory_start_time_;
     rclcpp::Duration trajectory_duration = rclcpp::Duration(0, 0);

@@ -21,6 +21,7 @@ int32 probes_found
      
 uint8 estop          
 int16 flight_mode
+int16 led_mode
 float64 flight_time
 
 
