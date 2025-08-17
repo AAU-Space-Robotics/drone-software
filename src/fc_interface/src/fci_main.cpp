@@ -244,6 +244,12 @@ public:
 
         RCLCPP_INFO(get_logger(), "FlightControllerInterface initialized.");
 
+        //Set origin
+        
+        Stamped3DVector current_position = state_manager_.getGlobalPosition();
+        state_manager_.setOrigin(current_position);
+
+
     }
 
     rclcpp::Time get_time() const {
@@ -1034,15 +1040,26 @@ private:
                 RCLCPP_WARN(get_logger(), "Rejected: invalid set_linear_speed parameters or drone not armed.");
                 return rclcpp_action::GoalResponse::REJECT;
             }
+            float linear_speed = goal->target_pose[0];
+            if (!std::isfinite(linear_speed)) {
+                RCLCPP_WARN(get_logger(), "Rejected: linear speed is not a finite real number (value: %f).", linear_speed);
+                return rclcpp_action::GoalResponse::REJECT;
+            }
         } else if (goal->command_type == "set_angular_speed") {
             if (goal->target_pose.size() != 1 || drone_state.arming_state != ArmingState::DISARMED) {
                 RCLCPP_WARN(get_logger(), "Rejected: invalid set_angular_speed parameters or drone not armed.");
                 return rclcpp_action::GoalResponse::REJECT;
             }
+            float angular_speed = goal->target_pose[0];
+            if (!std::isfinite(angular_speed)) {
+                RCLCPP_WARN(get_logger(), "Rejected: angular speed is not a finite real number (value: %f).", angular_speed);
+                return rclcpp_action::GoalResponse::REJECT;
+            }
         } else if (goal->command_type == "spin") {
             if (goal->target_pose.size() != 3 || drone_state.arming_state != ArmingState::ARMED || 
-                goal->target_pose[1] < 0.0 || (goal->target_pose[2] != 0.0 && goal->target_pose[2] != 1.0)) {
-                RCLCPP_WARN(get_logger(), "Rejected: invalid spin parameters, drone not armed, negative rotations, or invalid path selection.");
+                goal->target_pose[1] < 0.0 || (goal->target_pose[2] != 0.0 && goal->target_pose[2] != 1.0) ||
+                !std::isfinite(goal->target_pose[0]) || !std::isfinite(goal->target_pose[1]) || !std::isfinite(goal->target_pose[2])) {
+                RCLCPP_WARN(get_logger(), "Rejected: invalid spin parameters, drone not armed, negative rotations, invalid path selection, or non-finite values.");
                 return rclcpp_action::GoalResponse::REJECT;
             }
         } else if (goal->command_type == "takeoff") {
@@ -1051,6 +1068,9 @@ private:
                 return rclcpp_action::GoalResponse::REJECT;
             } else if (drone_state.arming_state != ArmingState::ARMED) {
                 RCLCPP_WARN(get_logger(), "Rejected: drone not armed for takeoff.");
+                return rclcpp_action::GoalResponse::REJECT;
+            } else if (!std::isfinite(goal->target_pose[0])){
+                RCLCPP_WARN(get_logger(), "Rejected: takeoff altitude is not a finite real number (value: %f).", goal->target_pose[0]);
                 return rclcpp_action::GoalResponse::REJECT;
             } else if (geofence_violated(Eigen::Vector3d(0, 0, goal->target_pose[0]))) {
                 RCLCPP_WARN(get_logger(), "Rejected: takeoff altitude %f would violate geofence.", goal->target_pose[0]);
@@ -1062,6 +1082,13 @@ private:
                 return rclcpp_action::GoalResponse::REJECT;
             } else if (drone_state.arming_state != ArmingState::ARMED) {
                 RCLCPP_WARN(get_logger(), "Rejected: drone not armed for goto.");
+                return rclcpp_action::GoalResponse::REJECT;
+            } else if (!std::isfinite(goal->target_pose[0]) || !std::isfinite(goal->target_pose[1]) || !std::isfinite(goal->target_pose[2])) {
+                RCLCPP_WARN(get_logger(), "Rejected: goto coordinates are not finite real numbers (x: %f, y: %f, z: %f).", 
+                            goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]);
+                return rclcpp_action::GoalResponse::REJECT;
+            } else if (!std::isfinite(goal->yaw)) {
+                RCLCPP_WARN(get_logger(), "Rejected: goto yaw is not a finite real number (value: %f).", goal->yaw);
                 return rclcpp_action::GoalResponse::REJECT;
             } else if (geofence_violated(Eigen::Vector3d(goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]))) {
                 RCLCPP_WARN(get_logger(), "Rejected: target position (x: %f, y: %f, z: %f) would violate geofence.", 

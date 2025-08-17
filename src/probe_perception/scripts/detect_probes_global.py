@@ -90,7 +90,7 @@ class SegmentationNode(Node):
         self.confidence_threshold = 0.75
         self.merge_threshold = 0.6  # Distance threshold for merging probes (in meters)
         self.tracked_probes = []  # List of tracked Probe objects
-        self.distance_threshold = 3.0  # Distance threshold for probe detection (in meters)
+        self.distance_threshold = 4.0  # Distance threshold for probe detection (in meters)
 
         # Subscribers
         self.rgb_sub = Subscriber(self, CompressedImage, '/thyra/out/color_image/compressed', qos_profile=qos)

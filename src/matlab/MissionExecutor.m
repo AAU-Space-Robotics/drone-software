@@ -65,26 +65,18 @@ function MissionExecutor()
     pause(1);
 
     % Takeoff
-    sendCommand('takeoff', [-2.0], 0);
+    sendCommand('takeoff', [-1.6], 0);
     disp('Waiting for takeoff to complete...');
     waitForTrajectoryCompletion(0.1);
 
-    % Spin
-    disp('Spinning until all probes and landing marker are found...');
-    while ~(all_probes_found && landing_marker_detected)
-        sendCommand('spin', [0.0, 1.0, 0.0], 0);
-        waitForTrajectoryCompletion(0.1);
-        check_if_all_probes_found();
-        if search_attempts < search_attempts_max
-            search_attempts = search_attempts + 1;  
-        end
-        if search_attempts >= search_attempts_max
-            disp('Max search attempts reached. Stopping search.');
-            break;
-        end
-        pause(0.5); % Give time for callbacks to process images
-    end
+    % Search for probes and landing marker
+    performSearchPattern_spin();
 
+    % If probes and landing marker is not detected, search in another pattern
+    if ~(all_probes_found && landing_marker_detected)
+        performSearchPattern_rectangular();
+    end
+    
     % Determine landing marker pose estimate
     if  landing_marker_detected
         landing_marker_pose_estimate_xy = [landing_marker_pose_estimate(1:2), search_height];
@@ -215,10 +207,16 @@ function MissionExecutor()
 
         yaw_to_marker_estimate = estimate_yaw_to_marker();
 
+        % Spin to yaw first
+        sendCommand('spin', [yaw_to_marker_estimate, 0.0, 0.0], 0);
+        waitForTrajectoryCompletion(0.1);
+
         % Send the command to go to the ArUco marker
         sendCommand('goto', landing_marker_pose_estimate_xy, yaw_to_marker_estimate);
         landing_marker_pose_estimate_used = landing_marker_pose_estimate;
         yaw_to_marker_estimate_used = yaw_to_marker_estimate;
+
+        pause(pause_time);
 
         % While waiting for the drone to reach the marker, check if aruco marker is getting a new estimate. 
         while true
@@ -250,7 +248,6 @@ function MissionExecutor()
 
     end
 
-
     function check_if_all_probes_found()
         if ~isempty(last_drone_state) && isfield(last_drone_state, 'probes_found')
             if last_drone_state.probes_found >= probe_search_amount
@@ -264,7 +261,7 @@ function MissionExecutor()
     function yaw = estimate_yaw_to_marker()
         % Estimate orientation to look at marker
         if isempty(last_pose_synced) || isempty(landing_marker_pose_estimate)
-            yaw = NaN;
+            yaw = 0.0;
             disp('Cannot estimate yaw: missing pose or marker estimate.');
             return;
         end
@@ -298,5 +295,77 @@ function MissionExecutor()
         T = [R [px; py; pz]; 0 0 0 1];
     end
 
+    function performSearchPattern_spin()
+        disp('Performing search pattern: spin');
+        while ~(all_probes_found && landing_marker_detected)
+            sendCommand('spin', [0.0, 1.0, 0.0], 0);
+            waitForTrajectoryCompletion(0.1);
+            check_if_all_probes_found();
+            if search_attempts < search_attempts_max
+                search_attempts = search_attempts + 1;  
+            end
+            if search_attempts >= search_attempts_max
+                disp('Max search attempts reached. Stopping search.');
+                break;
+            end
+            pause(0.5);
+        end
+    end
 
+    function performSearchPattern_rectangular()
+        if ~(all_probes_found && landing_marker_detected)
+            disp('Performing search pattern: Rectangular');
+            % Go to [1, 0, search_height] with zero yaw
+            sendCommand('goto', [1, 0, search_height], 0);
+            waitForTrajectoryCompletion(0.1);
+            check_if_all_probes_found();
+            if all_probes_found && landing_marker_detected, return; end
+
+            % Go to [1, 1, search_height] with zero yaw
+            sendCommand('goto', [1, 1, search_height], 0);
+            waitForTrajectoryCompletion(0.1);
+            check_if_all_probes_found();
+            if all_probes_found && landing_marker_detected, return; end
+
+            % Spin to pi/2
+            sendCommand('spin', [pi/2, 0.0, 0.0], 0);
+            waitForTrajectoryCompletion(0.1);
+
+            % Go to [-1, 1, search_height] with pi/2 yaw
+            sendCommand('goto', [-1, 1, search_height], pi/2);
+            waitForTrajectoryCompletion(0.1);
+            check_if_all_probes_found();
+            if all_probes_found && landing_marker_detected, return; end
+
+            % Spin to pi
+            sendCommand('spin', [pi, 0.0, 0.0], 0);
+            waitForTrajectoryCompletion(0.1);
+
+            % Go to [-1, -1, search_height] with pi yaw
+            sendCommand('goto', [-1, -1, search_height], pi);
+            waitForTrajectoryCompletion(0.1);
+            check_if_all_probes_found();
+            if all_probes_found && landing_marker_detected, return; end
+
+            % Spin to 1.5*pi
+            sendCommand('spin', [1.5*pi, 0.0, 0.0], 0);
+            waitForTrajectoryCompletion(0.1);
+
+            % Go to [1, -1, search_height] with 1.5*pi yaw
+            sendCommand('goto', [1, -1, search_height], 1.5*pi);
+            waitForTrajectoryCompletion(0.1);
+            check_if_all_probes_found();
+            if all_probes_found && landing_marker_detected, return; end
+
+            % Spin to 0
+            sendCommand('spin', [0, 0.0, 0.0], 0);
+            waitForTrajectoryCompletion(0.1);
+
+            % Go to [1, 1, search_height] with zero yaw
+            sendCommand('goto', [1, 1, search_height], 0);
+            waitForTrajectoryCompletion(0.1);
+            check_if_all_probes_found();
+            if all_probes_found && landing_marker_detected, return; end
+        end
+    end
 end
