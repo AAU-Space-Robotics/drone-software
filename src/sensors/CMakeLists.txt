@@ -44,6 +44,7 @@ install(PROGRAMS
   script/px4_to_cam.py
   script/static_rgbd_test_node.py
   script/probe_republisher.py
+  script/LED.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
