@@ -27,7 +27,7 @@ void loop() {
     int cmd = input.toInt();
     switch (cmd) {
       case -1:
-        Serial.println("Setting LEDs to Red (Estop)");
+        Serial.println("Setting LEDs to Rgued (Estop)");
         setColor(255, 0, 0);   // Red (Estop)
         break;
       case 0:
