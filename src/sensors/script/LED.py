@@ -5,7 +5,8 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 from interfaces.msg import DroneState
 import serial
 from std_msgs.msg import Int16
-
+led_mode = 0
+led_buffer = 0
 class DroneLEDNode(Node):
     def __init__(self):
         #qos = QoSProfile(
@@ -24,11 +25,17 @@ class DroneLEDNode(Node):
         )
 
     def state_callback(self, msg):
-        self.led_mode = msg.led_mode
+        global led_mode, led_buffer
+        led_mode = msg.led_mode
+        self.led_mode = led_mode
+        #self.led_mode = msg.led_mode
         #self.get_logger().info(f"LED mode updated: {self.led_mode}")
         try:
+            if led_mode != led_buffer:
+                self.ser.write(f"{self.led_mode}\n".encode())
+                led_buffer = led_mode
             # Send mode as ASCII string with newline (easy for Arduino to parse)
-            self.ser.write(f"{self.led_mode}\n".encode())
+            
             
             # OR if you want to send just one raw byte (no text):
             # self.ser.write(bytes([self.led_mode & 0xFF]))

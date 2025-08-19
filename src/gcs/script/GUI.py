@@ -936,7 +936,7 @@ def manual(node):
     imgui.pop_style_var()
     flight_mode_text = ""
     if flight_mode == -3:
-        flight_mode_text = "Emergency Stop"
+        flight_mode_text = "E-Stop"
     elif flight_mode == -2:
         flight_mode_text = "Landed"
     elif flight_mode == -1:
