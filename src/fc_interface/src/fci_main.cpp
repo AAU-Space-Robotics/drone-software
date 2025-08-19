@@ -975,6 +975,7 @@ private:
             if (do_mode_change_delay_ && 
                 (getFlightModeTraits(mode)[0] != getFlightModeTraits(old_flight_mode)[0]) &&
                 mode != FlightMode::STANDBY &&
+                mode != FlightMode::EMERGENCY_STOP &&
                 !( (mode == FlightMode::EMERGENCY_STOP && old_flight_mode == FlightMode::STANDBY) ||
                    (mode == FlightMode::STANDBY && old_flight_mode == FlightMode::EMERGENCY_STOP) )
             )
