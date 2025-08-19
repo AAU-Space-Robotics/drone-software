@@ -526,6 +526,11 @@ private:
                 drone_state.flight_mode = FlightMode::STANDBY;
                 drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
             }
+            else if (arming && (drone_state.flight_mode == FlightMode::EMERGENCY_STOP))
+            {
+                drone_state.flight_mode = FlightMode::STANDBY;
+                drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
+            }
             cleanupControlLoop();
         }
 
