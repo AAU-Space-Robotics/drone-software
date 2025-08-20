@@ -131,7 +131,14 @@ function MissionExecutor()
         aruco_window_size = 5; % Change to 3 if you want last 3
 
         disp(['Detected markers: ', num2str(ids(:)')]);
+        
         for i = 1:length(ids)
+
+            if any(isnan(tvecs(i,:)))
+                disp(['Marker ', num2str(ids(i)), ': Pose estimation failed, skipping.']);
+                continue;  % Skip markers with failed pose estimation
+            end
+
             if ids(i) == landing_marker_id
                 % Print pose in camera frame
                 disp(['Pose in camera frame (marker ', num2str(ids(i)), '): ', mat2str(tvecs(i,:), 4)]);
