@@ -13,6 +13,13 @@ function ArucoDetector()
     camIntrinsics = cameraParamsExtracted.cameraParams;
     markerSize = 144.0; % in mm
 
+    % Define CAMERA_TO_DRONE_TRANSFORM (4x4 homogeneous matrix) in meters
+    cameraToDrone = [...
+        0.0, -0.70710678, 0.70710678, 0.137751; ...
+        1.0, 0.0, 0.0, -0.018467; ...
+        0.0, 0.70710678, 0.70710678, 0.12126; ...
+        0.0, 0.0, 0.0, 1.0];
+
     % Subscribers
     sub_RGB_image = ros2subscriber(node, "/thyra/out/color_image/compressed", ...
                                    "sensor_msgs/CompressedImage", @msgCallback_RGB, qos);
@@ -31,10 +38,14 @@ function ArucoDetector()
             return;
         end
 
+        
+
         % Print detected marker poses
         disp(['Detected markers: ', num2str(ids(:)')]);
         for i = 1:length(ids)
-            disp(['Marker ID: ', num2str(ids(i)), ', Pose in camera frame (mm): ', mat2str(tvecs(i,:), 4)]);
+            pose_in_drone_frame = cameraToDrone * [tvecs(i,:)'; 1];
+            %disp(['Marker ID: ', num2str(ids(i)), ', Pose in camera frame (mm): ', mat2str(tvecs(i,:), 4)]);
+            disp(['Marker ID: ', num2str(ids(i)), ', Pose in drone frame (m): ', mat2str(pose_in_drone_frame(1:3), 4)]);
         end
     end
 
