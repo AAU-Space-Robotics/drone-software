@@ -1,0 +1,15 @@
+cocos2d==0.6.10
+Cython==0.29.37
+glfw==2.9.0
+imgui==2.0.0
+numpy==2.2.6
+opencv-python==4.12.0.88
+pillow==11.3.0
+pygame==2.6.1
+pyglet==1.5.31
+PyOpenGL==3.1.9
+PySDL2==0.9.17
+pyserial==3.5
+PyYAML==6.0.2
+setuptools==80.9.0
+six==1.17.0
