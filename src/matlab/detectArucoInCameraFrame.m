@@ -9,7 +9,13 @@ function [ids, tvecs, rvecs] = detectArucoInCameraFrame(Image, camIntrinsics, ma
 
     % Detect markers
     try
-        [ids, locs] = readArucoMarker(Image);
+        [ids, locs] = readArucoMarker(Image, ...
+            'RefineCorners', true, ...
+            'ResolutionPerBit', 20, ...
+            'WindowSizeStep', 2, ...
+            'WindowSizeRange', [3 10], ...
+            'RefinementMaxIterations', 100, ...
+            'RefinementTolerance', 0.01);
     catch ME
         warning('Aruco detection failed: %s', string(ME.message));
         ids = [];
@@ -37,10 +43,27 @@ function [ids, tvecs, rvecs] = detectArucoInCameraFrame(Image, camIntrinsics, ma
     rvecs = zeros(numMarkers, 3);
 
     for i = 1:numMarkers
-        imagePoints = squeeze(locs(:,:,i));        
-        [R, t] = extrinsics(imagePoints, objectPoints(:,1:2), camIntrinsics);
-        rvec = rotationMatrixToVector(R);
-        tvecs(i, :) = t / 1000;
-        rvecs(i, :) = rvec;
+        imagePoints = squeeze(locs(:,:,i));
+
+        try
+            % Robust PnP
+            [worldOrientation, worldLocation] = estimateWorldCameraPose(...
+                imagePoints, objectPoints, camIntrinsics, ...
+                'MaxReprojectionError', 3, ...
+                'Confidence', 98, ...
+                'MaxNumTrials', 2000);
+
+            % Convert pose
+            R = worldOrientation';
+            t = -worldLocation * R;  % Camera to marker
+            rvec = rotationMatrixToVector(R);
+            tvecs(i,:) = t / 1000;  % Convert mm to meters
+            rvecs(i,:) = rvec;
+
+        catch ME
+            % failure - assign NaN values
+            tvecs(i,:) = [NaN NaN NaN];
+            rvecs(i,:) = [NaN NaN NaN];
+        end
     end
 end

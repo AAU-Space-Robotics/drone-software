@@ -86,19 +86,6 @@ Before using the Raspberry Pi with ROS 2, you need to flash a microSD card with 
 9. **Set Up Micro XRCE-DDS Agent:**  
    Follow the "Setup Micro XRCE-DDS Agent & Client" section in the [PX4 ROS 2 User Guide](https://docs.px4.io/main/en/ros2/user_guide.html). Perform **only the Agent setup**—skip the Client step.
    *Note:* A version is specified in the download code. Consider updating to a newer version, such as the `master` branch, to avoid potential issues later.
-
-10. **Clone the Repository:**  
-   Clone this repository to obtain the code for controlling the drone:  
-   ```
-   git clone git@github.com:AAU-Space-Robotics/drone-software.git
-   ```
-   `cd` into the workspace, and use `colcon build` to build the repository.
-
-   *Note:* Unless you want to build the not so working `ground control station code (gcs package)`, use this build command:
-   ```
-   colcon build --packages-skip gcs
-   ```
-
    
 ### PX4 Configuration (Cube Orange)
 To configure the flight controller (Cube Orange) with PX4, follow these steps:
@@ -110,7 +97,13 @@ To configure the flight controller (Cube Orange) with PX4, follow these steps:
    Connect the drone to your computer via micro-USB. In QGroundControl, go to **Vehicle Setup > Firmware**. Verify the firmware is PX4 v1.15.2 (update if needed).
 
 3. **Configure Parameters:**  
-   In **Vehicle Setup > Parameters**, set the following:  
+   In **Vehicle Setup > Parameters**, set the following:
+  - **Enable TELEM2:**
+     ```
+     MAV_1_CONFIG = TELEM 2
+     ```
+    Reboot the flight controller, and then proceed with the following steps:
+   
    - **Telemetry on TELEM2:**  
      ```
      SER_TEL2_BAUD = 921600
@@ -120,16 +113,58 @@ To configure the flight controller (Cube Orange) with PX4, follow these steps:
      UXRCE_DDS_CFG = TELEM2
      ```
 
-4. **Save and Reboot:**  
+5. **Save and Reboot:**  
    Save the changes and restart the flight controller.
 
-# 2. Use of Packages
+# 2. Using Packages in the Drone Software Workspace
 
-Build the package in the root of the workspace (e.g., `~/drone-software`) to be able to use it. Then source it with:
+This section explains how to set up and build the necessary packages in your workspace (e.g., `~/drone-software`) so you can control the drone. Following these instructions will install and make the package which has been written by the AAU space robotics team, usable.
+
+## Step 1: Clone the Repositories
+
+To get started, you’ll need to clone two key repositories onto your Raspberry Pi. These provide the drone control code and the message definitions for communication with the PX4 firmware via Micro XRCE-DDS.
+
+### Clone the Drone Software Repository
+Clone the main repository containing the drone control code. You can do this from any directory where you start your terminal:
+
+```bash
+git clone https://github.com/AAU-Space-Robotics/drone-software.git
+```
+
+Next, navigate into the workspace:
+
+```bash
+cd ~/drone-software
+```
+
+### Clone the PX4 Message Definitions
+Inside the workspace, clone the `px4_msgs` repository, which defines the messages used to send data over the Micro XRCE-DDS agent to the PX4 firmware:
+
+```bash
+git clone -b release/1.15 https://github.com/PX4/px4_msgs.git
+```
+
+**Important Note:**  
+The version of `px4_msgs` *must* match the PX4 firmware version on your flight controller. For this setup, use the `release/1.15` branch because it aligns with PX4 firmware v1.15.x (e.g., v1.15.2). If your firmware is a different version, ensure the `px4_msgs` branch or tag matches it exactly. Mismatched message definitions will cause communication errors, like thrust values overwriting quaternion fields!
+
+## Step 2: Build the Workspace
+
+With the repositories cloned, build the workspace to compile the code and message definitions.
+
+Run this command from the root of the workspace (`~/drone-software`):
+
+```bash
+colcon build --packages-skip gcs
+```
+## Step 3: Source the Workspace
+
+After building, source the workspace to make the compiled packages available in your terminal session:
 
 ```bash
 source install/setup.bash
 ```
+
+This step ensures your ROS 2 environment recognizes the drone software and message definitions. You’ll need to run this command in every new terminal session unless you add it to your `~/.bashrc` for automatic sourcing.
 
 ## fc_interface Package
 

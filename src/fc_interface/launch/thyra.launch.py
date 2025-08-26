@@ -51,6 +51,14 @@ def generate_launch_description():
             ],
         ),
 
+        # Start Lidar node
+        Node(
+            package='sensors',
+            executable='LED.py',
+            name='led_node',
+            output='screen',
+        ),
+
         # Include thyra_cam launch file
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
