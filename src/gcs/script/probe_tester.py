@@ -39,9 +39,12 @@ class DummyProbeGlobalPublisher(Node):
         msg.contribution = []
 
         for i in range(self.probe_count):
-            x = i + 0.1 * self.counter
-            y = i * 2.0 + 0.2 * self.counter
-            z = 1.0 + 0.05 * self.counter
+            #x = i + 0.1 * self.counter
+            #y = i * 2.0 + 0.2 * self.counter
+            #z = 1.0 + 0.05 * self.counter
+            x = 1
+            y = 1  
+            z = 0
             confidence_value = (self.counter % 100) / 100.0
             contribution_value = (self.counter % 10) + 1  # arbitrary example
 

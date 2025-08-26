@@ -112,7 +112,7 @@ class GUIButton():
         imgui.pop_style_var() 
         imgui.set_window_font_scale(1.0)
         return state
-    def button_save(x,y,font,label,filename,probes):
+    def button_save(x,y,font,label,filename,probes, transformed_probes):
         
         os.makedirs(os.path.dirname(filename), exist_ok=True)
 
@@ -122,6 +122,9 @@ class GUIButton():
         imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
         imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
         imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *(0.0, 0.2, 0.0)) 
+        
+   
+
         with imgui.font(font):
             if imgui.button(label, width=120, height=40):
                 try:
@@ -131,12 +134,26 @@ class GUIButton():
 
                         # Write each probe's data
                         for i, probe in enumerate(probes):
+                            probes_grid_coords = probeCoordinatesToGridCoordinates(transformed_probes[i][0],transformed_probes[i][1],transformed_probes[i][2])
+                            f.write(f'Our Coordinates:\n')
                             f.write(f"Probe {i+1}:\n")
                             f.write(f"  x: {probe['x']}\n")
                             f.write(f"  y: {probe['y']}\n")
                             f.write(f"  z: {probe['z']}\n")
                             f.write(f"  confidence: {probe['confidence']}\n")
                             f.write(f"  contribution: {probe['contribution']}\n\n")
+
+                            f.write(f'ERC Coordinates:\n')
+                            f.write(f"Probe {i+1}:\n")
+                            f.write(f" x: {transformed_probes[i][0]}\n")
+                            f.write(f" y: {transformed_probes[i][1]}\n")
+                            f.write(f" z: {transformed_probes[i][2]}\n\n")
+                            
+                            f.write(f"Closest box coordinates of probe {i+1}:\n")
+                            f.write(f" x: {probes_grid_coords[0]}\n")
+                            f.write(f" y: {probes_grid_coords[1]}\n")
+                            f.write(f" z: {probes_grid_coords[2]}\n\n")
+                           
                         print(f"Saved to {filename}")
                         
                 except Exception as e:
@@ -205,6 +222,51 @@ flight_mode = -1  # Default to a safe value, e.g., "Standby"
 flight_time = 0.0
 trajectory_mode = 0  # Default trajectory mode
 last_trajectory_mode = None  
+rotated_x, rotated_y = 0.0, 0.0
+angle = 0.0
+erc_yaw = 3.14
+
+def probeCoordinatesToGridCoordinates(x, y, z):
+    GRID_SIZE = 1  # Define the grid size
+    # Find the closest grid center by rounding to nearest center (centers at 0.5, 1.5, ...)
+    grid_x = round((x - 0.5) / GRID_SIZE) * GRID_SIZE + 0.5
+    grid_y = round((y - 0.5) / GRID_SIZE) * GRID_SIZE + 0.5
+    #grid_z = round((z - 0.5) / GRID_SIZE) * GRID_SIZE + 0.5
+    grid_z = 0
+    return (grid_x, grid_y, grid_z)
+
+def construct_drone_to_global(erc_yaw, translation=np.zeros(3)):
+    # Fixed rotation around X by 180 degrees
+    Rx = np.array([
+        [1, 0, 0],
+        [0, -1, 0],
+        [0, 0, -1]
+    ])
+
+    # Rotation around Z by erc_yaw
+    cz, sz = np.cos(erc_yaw), np.sin(erc_yaw)
+    Rz = np.array([
+        [cz, -sz, 0],
+        [sz, cz, 0],
+        [0, 0, 1]
+    ])
+
+    # Combined rotation: Z * X
+    R = Rz @ Rx
+
+    # Build homogeneous transformation
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = translation
+
+    # Return as tuple like before: (matrix, np.array([0,0,0,1]))
+    return T, np.array([0, 0, 0, 1])
+
+
+droneGlobal_to_ERC_global = construct_drone_to_global(erc_yaw)
+
+
+# Variables for rotating the ERC coordinates
 
 class DroneGuiNode(Node):
     def __init__(self):
@@ -222,11 +284,18 @@ class DroneGuiNode(Node):
             10
             
         )
+        #self.subscription = self.create_subscription(
+        #    ProbeGlobalLocations,
+        #    '/probe_detector/global_probe_locations',
+        #    self.probe_callback,
+        #    qos
+        #    
+        #)
         self.subscription = self.create_subscription(
             ProbeGlobalLocations,
-            '/probe_detector/global_probe_locations',
+            '/thyra/out/probe_locations_global',
             self.probe_callback,
-            qos
+            10
             
         )
         self.publisher_ = self.create_publisher(
@@ -650,15 +719,26 @@ def RPY_Text_Field():
         imgui.set_cursor_pos((150, 638)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
         imgui.set_cursor_pos((23, 680)); imgui.text(f"[r]")
 
+
 def probe_Field(node,filename):
     global probes
     global probe_classification, probe_numb
     global probe_timestamp
+    global transformed_erc_probes
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
     # Move up 30 on y axis (was 780-925, now 750-895)
 
-    
+    #convert probes into numpy array
+    try:
+        
+
+        # Your existing code will work as is:
+        probe_array = np.array([[probe['x'], probe['y'], probe['z'], 1] for probe in probes]).T
+        transformed_probes = droneGlobal_to_ERC_global[0] @ probe_array
+        transformed_probes = transformed_probes[:3, :].T
+    except Exception as e:
+        transformed_probes = np.array([])
     draw_list.add_rect_filled(20, 750, 420, 895, color, rounding=10.0, flags=10)
 
 
@@ -691,30 +771,78 @@ def probe_Field(node,filename):
         imgui.set_cursor_pos((370, 755)); imgui.text("C")
     try:
         i = 0
+        draw_list = imgui.get_window_draw_list()
+        # Always use map_value for drawing probe circles, like in the first if statement
         if probe_numb == 1:
-            plan_card.probe_cards(0,1,probes,i,node)
+            circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228)
+            circle_y = map_value(probes[i]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(0, 1, transformed_probes, i, probes, node)
+            draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+           #print(circle_x, circle_y)
         if probe_numb == 2:
-            plan_card.probe_cards(0,1,probes,i,node)
-            plan_card.probe_cards(20,2,probes,i+1,node)
-        if  probe_numb == 3:
-            plan_card.probe_cards(0,1,probes,i,node)
-            plan_card.probe_cards(20,2,probes,i+1,node)
-            plan_card.probe_cards(40,3,probes,i+2,node)
+            circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228)
+            circle_y = map_value(probes[i]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(0, 1, transformed_probes, i, probes, node)
+            draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+            circle_x_one = map_value(probes[i+1]['x'], 10, -10, 467, 1228)
+            circle_y_one = map_value(probes[i+1]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(20, 2, transformed_probes, i+1, probes, node)
+            draw_list.add_circle_filled(circle_x_one, circle_y_one, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+        if probe_numb == 3:
+            circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228)
+            circle_y = map_value(probes[i]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(0, 1, transformed_probes, i, probes, node)
+            draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+            circle_x_one = map_value(probes[i+1]['x'], 10, -10, 467, 1228)
+            circle_y_one = map_value(probes[i+1]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(20, 2, transformed_probes, i+1, probes, node)
+            draw_list.add_circle_filled(circle_x_one, circle_y_one, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+            circle_x_two = map_value(probes[i+2]['x'], 10, -10, 467, 1228)
+            circle_y_two = map_value(probes[i+2]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(40, 3, transformed_probes, i+2, probes, node)
+            draw_list.add_circle_filled(circle_x_two, circle_y_two, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
         if probe_numb == 4:
-            plan_card.probe_cards(0,1,probes,i,node)
-            plan_card.probe_cards(20,2,probes,i+1,node)
-            plan_card.probe_cards(40,3,probes,i+2,node)
-            plan_card.probe_cards(60,4,probes,i+3,node)
+            circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228)
+            circle_y = map_value(probes[i]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(0, 1, transformed_probes, i, probes, node)
+            draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+            circle_x_one = map_value(probes[i+1]['x'], 10, -10, 467, 1228)
+            circle_y_one = map_value(probes[i+1]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(20, 2, transformed_probes, i+1, probes, node)
+            draw_list.add_circle_filled(circle_x_one, circle_y_one, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+            circle_x_two = map_value(probes[i+2]['x'], 10, -10, 467, 1228)
+            circle_y_two = map_value(probes[i+2]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(40, 3, transformed_probes, i+2, probes, node)
+            draw_list.add_circle_filled(circle_x_two, circle_y_two, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+            circle_x_three = map_value(probes[i+3]['x'], 10, -10, 467, 1228)
+            circle_y_three = map_value(probes[i+3]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(60, 4, transformed_probes, i+3, probes, node)
+            draw_list.add_circle_filled(circle_x_three, circle_y_three, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
         if probe_numb >= 5:
-            plan_card.probe_cards(0,1,probes,i,node)
-            plan_card.probe_cards(20,2,probes,i+1,node)
-            plan_card.probe_cards(40,3,probes,i+2,node)
-            plan_card.probe_cards(60,4,probes,i+3,node)
-            plan_card.probe_cards(80,5,probes,i+4,node)
+            circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228)
+            circle_y = map_value(probes[i]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(0, 1, transformed_probes, i, probes, node)
+            draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+            circle_x_one = map_value(probes[i+1]['x'], 10, -10, 467, 1228)
+            circle_y_one = map_value(probes[i+1]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(20, 2, transformed_probes, i+1, probes, node)
+            draw_list.add_circle_filled(circle_x_one, circle_y_one, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+            circle_x_two = map_value(probes[i+2]['x'], 10, -10, 467, 1228)
+            circle_y_two = map_value(probes[i+2]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(40, 3, transformed_probes, i+2, probes, node)
+            draw_list.add_circle_filled(circle_x_two, circle_y_two, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+            circle_x_three = map_value(probes[i+3]['x'], 10, -10, 467, 1228)
+            circle_y_three = map_value(probes[i+3]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(60, 4, transformed_probes, i+3, probes, node)
+            draw_list.add_circle_filled(circle_x_three, circle_y_three, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+            circle_x_four = map_value(probes[i+4]['x'], 10, -10, 467, 1228)
+            circle_y_four = map_value(probes[i+4]['y'], 10, -10, 158, 599)
+            plan_card.probe_cards(80, 5, transformed_probes, i+4, probes, node)
+            draw_list.add_circle_filled(circle_x_four, circle_y_four, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
     except:
         pass
     imgui.set_cursor_pos((103, 900)); imgui.text(f" TS: {velocity_timestamp}")
-    GUIButton.button_save(290, 650, font, "save",filename,probes)
+    GUIButton.button_save(290, 650, font, "save",filename,probes,transformed_probes)
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
@@ -892,6 +1020,12 @@ def Arrows():
         end_x + 5, end_y - 23,  # base right
         color
         )
+
+def rotate_x_and_y(position_x, position_y, angle):
+    global rotated_x, rotated_y
+    global probes
+    rotated_x = math.cos(angle) * position_x - math.sin(angle) * position_y
+    rotated_y = math.sin(angle) * position_x + math.cos(angle) * position_y
 
 def return_to_home_button(node):
     imgui.set_cursor_pos((684, 635))
@@ -1226,7 +1360,7 @@ def mouse_placement():
         if imgui.is_mouse_clicked(imgui.MOUSE_BUTTON_LEFT):
             mouse_x_buffer = mouse_x
             mouse_y_buffer = mouse_y
-            print(f"{mouse_x} and {mouse_y} ")
+            #print(f"{mouse_x} and {mouse_y} ")
 
 def send_map_pos(node):
     global mouse_x_buffer, mouse_y_buffer, yaw, position_z, target_position_z
@@ -1689,12 +1823,12 @@ class plan_card:
 
                 
                 
-    def probe_cards(y_add, id, probes, i, node):
+    def probe_cards(y_add, id, probes, i, og_probes, node):
         imgui.set_cursor_pos((30, 790+y_add)); imgui.text(f"{id}")
-        imgui.set_cursor_pos((100, 790+y_add)); imgui.text(f"{Decimal(probes[i]['x']).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((185, 790+y_add)); imgui.text(f"{Decimal(probes[i]['y']).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((270, 790+y_add)); imgui.text(f"{Decimal(probes[i]['z']).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((365, 790+y_add)); imgui.text(f"{Decimal(probes[i]['confidence']).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((100, 790+y_add)); imgui.text(f"{Decimal(probes[i][0]).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((185, 790+y_add)); imgui.text(f"{Decimal(probes[i][1]).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((270, 790+y_add)); imgui.text(f"{Decimal(probes[i][2]).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((365, 790+y_add)); imgui.text(f"{Decimal(og_probes[i]['confidence']).quantize(Decimal('0.00'))}")
                
 def drone_image(image_path, texture_id, img_width, img_height):
     #Todo move to function
