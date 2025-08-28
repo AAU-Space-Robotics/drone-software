@@ -1152,22 +1152,27 @@ def start_joystick(node):
                     current_axis_state = int(abs(node.joystick.get_axis(4)))
                     hello = node.joystick.get_button(3) #command to test which buttons
                     # Debug
-               
+                    #print(f'button 8 = {node.joystick.get_button(8)}, button 9 = {node.joystick.get_button(9)}, button 10 = {node.joystick.get_button(10)}, button 11  = {node.joystick.get_button(11)}')
                     #if prev_axis_state is None or current_axis_state != prev_axis_state:
-                    #    if current_axis_state == 1:
+                    #    if current_axis_state == 0:
                     #        node.send_command("disarm")
                     #        #print("Arming state changed to: Disarmed (0)")  # Debug
-                    #    elif current_axis_state == 0:
+                    #    elif current_axis_state == 1:
                     #        node.send_command("arm")
                     #        #print("Arming state changed to: Armed (1)")  # Debug
                     #    prev_axis_state = current_axis_state
-                    ##arming_state = -int(abs(node.joystick.get_axis(4)))
-                    ##print(f"Arming state: {arming_state}")
-                    ##print(int(abs(node.joystick.get_axis(4))))
-                #
-                    #if( node.joystick.get_button(3) == 1):
-                    #    node.send_command("estop")
-                    #    drone_kill = True
+                    #arming_state = -int(abs(node.joystick.get_button(2)))
+                    if(node.joystick.get_button(2) == 1):
+                        node.send_command("arm")
+                        arming_state = 1
+                        node.send_command("manual")
+                    #print(f"Arming state: {arming_state}")
+                    #print(f'arming state {arming_state} and button state {node.joystick.get_button(2)}')
+                    #print(int(abs(node.joystick.get_axis(4))))
+                
+                    if( node.joystick.get_button(1) == 1):
+                        node.send_command("estop")
+                        drone_kill = True
 
                     node.send_manual_control(roll_m, pitch_m, yaw_velocity_m, thrust)
                     
