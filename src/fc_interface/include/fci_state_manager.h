@@ -257,17 +257,23 @@ struct PIDError {
     double error_integral;
 };
 
-struct AccelerationError {
-    PIDError X;
-    PIDError Y;
-    PIDError Z;
-};
-
 struct PositionError {
     PIDError X;
     PIDError Y;
     PIDError Z;
     PIDError Yaw;
+};
+
+struct VelocityError {
+    PIDError X;
+    PIDError Y;
+    PIDError Z;
+};
+
+struct AccelerationError {
+    PIDError X;
+    PIDError Y;
+    PIDError Z;
 };
 
 // FCI_StateManager class definition
@@ -291,6 +297,9 @@ public:
 
     void setTargetPositionProfile(const Stamped4DVector& new_data);
     Stamped4DVector getTargetPositionProfile();
+
+    void setTargetVelocityProfile(const Stamped3DVector& new_data);
+    Stamped3DVector getTargetVelocityProfile();
 
     void setTargetAttitude(const StampedQuaternion& new_data);
     StampedQuaternion getTargetAttitude();
@@ -341,6 +350,7 @@ private:
     std::mutex ground_distance_state_mutex_;
     std::mutex attitude_data_mutex_;
     std::mutex target_position_profile_mutex_;
+    std::mutex target_velocity_profile_mutex_;
     std::mutex target_attitude_mutex_;
     std::mutex drone_cmd_ack_mutex_;
     std::mutex drone_state_mutex_;
@@ -363,6 +373,7 @@ private:
     Stamped3DVector ground_distance_state_;
     StampedQuaternion attitude_;
     Stamped4DVector target_position_profile_;
+    Stamped3DVector target_velocity_profile_;
     StampedQuaternion target_attitude_;
     DroneCmdAck drone_cmd_ack_;
     DroneState drone_state_;

@@ -71,6 +71,16 @@ Stamped4DVector FCI_StateManager::getTargetPositionProfile() {
     return target_position_profile_;   
 }
 
+void FCI_StateManager::setTargetVelocityProfile(const Stamped3DVector& new_data) {
+    std::lock_guard<std::mutex> lock(target_velocity_profile_mutex_);
+    target_velocity_profile_ = new_data;   
+}
+
+Stamped3DVector FCI_StateManager::getTargetVelocityProfile() {
+    std::lock_guard<std::mutex> lock(target_velocity_profile_mutex_);
+    return target_velocity_profile_;
+}
+
 void FCI_StateManager::setTargetAttitude(const StampedQuaternion& new_data) {
     std::lock_guard<std::mutex> lock(target_attitude_mutex_);
     target_attitude_ = new_data;   

@@ -767,6 +767,92 @@ private:
         return output;
     }
 
+    Eigen::Vector4d positionAndVelocityControl()
+    {
+       DroneState drone_state = state_manager_.getDroneState();
+        
+        // // Sample trajectory if active, else if landed, disarm
+        // if (drone_state.trajectory_mode == TrajectoryMode::ACTIVE) {
+        //         double dt = (get_time() - drone_state.trajectory_start_time_).seconds();
+        //         if (dt > path_planner_.getTotalTime()) {
+        //             drone_state.trajectory_mode = TrajectoryMode::COMPLETED;
+        //             state_manager_.setDroneState(drone_state);
+        //             FullTrajectoryPoint final_point = path_planner_.getTrajectoryPoint(path_planner_.getTotalTime(), trajectoryMethod::MIN_SNAP);
+        //             Stamped4DVector target_profile(get_time(), final_point.position.x(), final_point.position.y(), final_point.position.z(), 0.0); // No yaw in Vector4d
+        //             Stamped3DVector target_velocity_profile(get_time(), final_point.velocity.x(), final_point.velocity.y(), final_point.velocity.z());
+        //             state_manager_.setTargetPositionProfile(target_profile);
+        //             state_manager_.setTargetVelocityProfile(target_velocity_profile);
+        //             state_manager_.setTargetAttitude(StampedQuaternion(get_time(), final_point.orientation));
+        //         }
+        //         else{ // If trajectory is still active
+        //             FullTrajectoryPoint target_point = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP);
+        //             Stamped4DVector target_profile(get_time(), target_point.position.x(), target_point.position.y(), target_point.position.z(), 0.0); // No yaw in Vector4d
+        //             Stamped3DVector target_velocity_profile(get_time(), target_point.velocity.x(), target_point.velocity.y(), target_point.velocity.z());
+
+        //             state_manager_.setTargetPositionProfile(target_profile);
+        //             state_manager_.setTargetVelocityProfile(target_velocity_profile);
+        //             state_manager_.setTargetAttitude(StampedQuaternion(get_time(), target_point.orientation));
+        //         }
+        //     }
+        // else if (drone_state.flight_mode == FlightMode::LAND_POSITION && drone_state.trajectory_mode == TrajectoryMode::COMPLETED){
+        //         // Drone is now landed, update state and disarm
+        //         RCLCPP_INFO(get_logger(), "Drone has landed, disarming...");
+        //         drone_state.flight_mode = FlightMode::LANDED;
+        //         drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
+        //         drone_state.arming_state = ArmingState::DISARMED;
+        //         drone_state.command = Command::DISARM;
+        //         drone_state.trajectory_mode = TrajectoryMode::COMPLETED;
+        //         state_manager_.setDroneState(drone_state);
+        //         disarm(true);
+        //         cleanupControlLoop();
+        // }
+
+        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+        Stamped3DVector target_velocity_profile = state_manager_.getTargetVelocityProfile();
+        Stamped3DVector position = state_manager_.getGlobalPosition();
+        Stamped3DVector velocity = state_manager_.getGlobalVelocity();
+        StampedQuaternion attitude = state_manager_.getAttitude();
+        Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
+        //Stamped3DVector target_velocity_3d(target_velocity_profile.timestamp, target_velocity_profile.vector().x(), target_velocity_profile.vector().y(), target_velocity_profile.vector().z());
+        Stamped3DVector target_velocity_3d(target_velocity_profile.timestamp, 0.0, 0.0, 1.0);
+        
+        double dt = (get_time() - position.getTime()).seconds();
+        
+        if (dt > timeout_threshold_)
+        {
+            RCLCPP_WARN(get_logger(), "No position or velocity data received in the last %.2f seconds!", timeout_threshold_);
+            return Eigen::Vector4d::Zero();
+        }
+
+        // if((getTime() - timestamp_last_position_control_).seconds() >= period_position_control_){
+        //     Eigen::Vector4d last_control_signal = state_manager_.getLatestControlSignal();
+
+        //     // Calculate control output using P Controller
+        //     Eigen::Vector3d = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d, last_control_signal); 
+            
+        //     // Update this value only at the position control rate
+
+        //     // Lastly set previous update
+        //     timestamp_last_position_control_ = get_time();
+        // }
+        
+        //placeholder for output
+        Eigen::Vector3d last_control_signal(0.0, 0.0, 0.0);
+
+        // Calculate control output using PID controller
+        Eigen::Vector4d output = controller_.velocityControl(dt, prev_velocity_error_, velocity, attitude, target_velocity_3d, last_control_signal);
+
+
+        // Replace zero yaw with the planned yaw from quaternion
+        Eigen::Vector3d target_euler = transformations_.quaternionToEuler(state_manager_.getTargetAttitude().quaternion());
+
+
+        //RCLCPP_INFO(get_logger(), "target yaw: %.2f", target_euler.x());
+
+        output.z() = target_euler.x();
+        return output;
+    }
+
     //! Does not work... yet
     Eigen::Vector4d manualAidedMode()
     {
@@ -782,7 +868,7 @@ private:
         if (dt > timeout_threshold_)
         {
             RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", timeout_threshold_);
-            return Eigen::Vector4d::Zero();
+            return Eigen::Vector4d::Zero();  
         }
 
         //Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
@@ -815,6 +901,9 @@ private:
             break;
         case 3:
             control_input = safetyLandBlindMode();
+            break;
+        case 4:
+            control_input = positionAndVelocityControl();
             break;
         default:
             RCLCPP_WARN(get_logger(), "Unknown control mode: %d", current_control_mode_);
@@ -1032,7 +1121,7 @@ private:
     rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID & /*uuid*/,
                                                 std::shared_ptr<const DroneCommand::Goal> goal)
     {
-        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed", "set_angular_speed", "spin"};
+        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed", "set_angular_speed", "spin", "velocity"};
         RCLCPP_INFO(get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
 
         DroneState drone_state = state_manager_.getDroneState();
@@ -1090,6 +1179,21 @@ private:
                 goal->target_pose[1] < 0.0 || (goal->target_pose[2] != 0.0 && goal->target_pose[2] != 1.0) ||
                 !std::isfinite(goal->target_pose[0]) || !std::isfinite(goal->target_pose[1]) || !std::isfinite(goal->target_pose[2])) {
                 RCLCPP_WARN(get_logger(), "Rejected: invalid spin parameters, drone not armed, negative rotations, invalid path selection, or non-finite values.");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+        } else if (goal->command_type == "velocity") {
+            if (goal->target_pose.size() != 3) {
+                RCLCPP_WARN(get_logger(), "Rejected: invalid velocity parameters, expected vx, vy, vz coordinates.");
+                return rclcpp_action::GoalResponse::REJECT;
+            } else if (drone_state.arming_state != ArmingState::ARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: drone not armed for velocity command.");
+                return rclcpp_action::GoalResponse::REJECT;
+            } else if (!std::isfinite(goal->target_pose[0]) || !std::isfinite(goal->target_pose[1]) || !std::isfinite(goal->target_pose[2])) {
+                RCLCPP_WARN(get_logger(), "Rejected: velocity coordinates are not finite real numbers (vx: %f, vy: %f, vz: %f).", 
+                            goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]);
+                return rclcpp_action::GoalResponse::REJECT;
+            } else if (!std::isfinite(goal->yaw)) {
+                RCLCPP_WARN(get_logger(), "Rejected: velocity yaw is not a finite real number (value: %f).", goal->yaw);
                 return rclcpp_action::GoalResponse::REJECT;
             }
         } else if (goal->command_type == "takeoff") {
@@ -1255,6 +1359,11 @@ private:
                 result->message = "Drone moving to target position.";
                 std::cout << "Goto target: " << target_position.transpose() << ", yaw: " << target_yaw << std::endl;
             }
+            else if (goal->command_type == "velocity")
+            {
+                setDroneMode(FlightMode::POSITION);
+                ensureControlLoopRunning(4);
+            }
             else if (goal->command_type == "spin")
             {
                 setDroneMode(FlightMode::POSITION);
@@ -1405,6 +1514,7 @@ private:
     FCI_PathPlanner path_planner_;
 
     PositionError prev_position_error_;
+    VelocityError prev_velocity_error_;
     AccelerationError prev_acceleration_error_;
     static constexpr float yaw_sensitivity_ = 1.0f / 20.0f;
 
@@ -1430,6 +1540,10 @@ private:
     bool safety_check_geofence_;
     float safety_geofence_radius_;
     float safety_geofence_height_;
+
+    //controller specific variables
+    rclcpp::Time timestamp_last_position_control_ = get_time();
+    double period_position_control_ = 1/50.0; // ms
 
     // Last X Ground Distance Sensor readings
     static constexpr int max_ground_distance_readings_ = 10;
