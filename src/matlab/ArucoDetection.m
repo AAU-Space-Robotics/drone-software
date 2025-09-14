@@ -11,7 +11,7 @@ function ArucoDetector()
     % Load camera parameters
     cameraParamsExtracted = load('cameraParams.mat');
     camIntrinsics = cameraParamsExtracted.cameraParams;
-    markerSize = 144.0; % in mm
+    markerSize = 150.0; % in mm
 
     % Define CAMERA_TO_DRONE_TRANSFORM (4x4 homogeneous matrix) in meters
     cameraToDrone = [...

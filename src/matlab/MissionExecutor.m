@@ -8,14 +8,14 @@ function MissionExecutor()
     % Load camera parameters
     cameraParamsExtracted = load('cameraParams.mat');
     camIntrinsics = cameraParamsExtracted.cameraParams;
-    markerSize = 144.0; % in mm
+    markerSize = 150.0; % in mm
     
     % Mission parameters
     takeoff_marker_id = 101;
     landing_marker_id = 102;
     all_probes_found = false;
     probe_search_amount = 3;
-    search_height = -1.5; % in meters
+    search_height = -2.0; % in meters
     landing_aruco_detection_threshold = 5;
     landing_aruco_detection_count = 0;    
     landing_aruco_detection_list = [];
@@ -65,7 +65,7 @@ function MissionExecutor()
     pause(1);
 
     % Takeoff
-    sendCommand('takeoff', [-1.6], 0);
+    sendCommand('takeoff', [-2.0], 0);
     disp('Waiting for takeoff to complete...');
     waitForTrajectoryCompletion(0.1);
 

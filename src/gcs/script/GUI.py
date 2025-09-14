@@ -200,7 +200,7 @@ drone_state = False
 GUI_console_logs = [""]
 GUI_Heartbeat = 0
 actuator_speeds = [0, 0, 0, 0] # Placeholder for actuator speeds
-yaw = 0.0
+yaw = -1.94
 mouse_x_buffer, mouse_y_buffer = 0,0
 effect1, effect2, effect3 = False, False, False
 effect_begin1, effect_begin2, begin_execute, effect_begin3 = False, False, False, False
@@ -284,20 +284,20 @@ class DroneGuiNode(Node):
             10
             
         )
-        #self.subscription = self.create_subscription(
-        #    ProbeGlobalLocations,
-        #    '/probe_detector/global_probe_locations',
-        #    self.probe_callback,
-        #    qos
-        #    
-        #)
         self.subscription = self.create_subscription(
-            ProbeGlobalLocations,
-            '/thyra/out/probe_locations_global',
-            self.probe_callback,
-            10
-            
+           ProbeGlobalLocations,
+           '/probe_detector/global_probe_locations',
+           self.probe_callback,
+           qos
+           
         )
+        # self.subscription = self.create_subscription(
+        #     ProbeGlobalLocations,
+        #     '/thyra/out/probe_locations_global',
+        #     self.probe_callback,
+        #     10
+            
+        # )
         self.publisher_ = self.create_publisher(
            GcsHeartbeat, 
            "/thyra/in/gcs_heartbeat",
