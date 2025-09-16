@@ -293,7 +293,7 @@ docker build -t probe_perception:latest -f docker/dockerfile_perception .
 %Vertiual enviroment
 source ~/drone-software/venv/bin/activate
 
-
+source /opt/ros/jazzy/setup.bash
 
 Matlab:
 ros2genmsg('/home/daroe/drone-software/src', CreateShareableFile=true);

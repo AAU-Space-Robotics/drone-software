@@ -28,7 +28,6 @@ from OpenGL.GL import *
 import re
 import math
 
-import GUI
 import GUI_Objects
 drone_kill = False
 show_popup = True
