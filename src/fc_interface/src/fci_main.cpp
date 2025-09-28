@@ -57,7 +57,7 @@ public:
         this->get_parameter("use_sim_time", use_sim_time);
         clock_ = std::make_shared<rclcpp::Clock>(use_sim_time ? RCL_ROS_TIME : RCL_SYSTEM_TIME);
         RCLCPP_INFO(get_logger(), "Using %s time source", use_sim_time ? "simulation" : "system");
-
+        
         // Declare position source parameter
         std::string position_source = "px4";
         if (!this->has_parameter("position_source")) {
@@ -170,7 +170,9 @@ public:
         state_manager_.setAttitude(StampedQuaternion(get_time(), Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0)));
         state_manager_.setManualControlInput(Stamped4DVector(get_time(), 0.0, 0.0, 0.0, 0.0));
         state_manager_.setGroundDistanceState(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
+        timestamp_last_position_control_ = get_time();
 
+        
         // Publishers
         offboard_control_mode_pub_ = create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
         attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
@@ -1514,9 +1516,10 @@ private:
     FCI_PathPlanner path_planner_;
 
     PositionError prev_position_error_;
+    
     VelocityError prev_velocity_error_;
     AccelerationError prev_acceleration_error_;
-    static constexpr float yaw_sensitivity_ = 1.0f / 20.0f;
+    static constexpr float yaw_sensitivity_ = 1.0f / 20.0f; // !! Why define this here?....
 
     // Setup variables
     float lidar_offset_; // Describes what the Lidar measures, in meteres when standing on the ground
@@ -1542,7 +1545,7 @@ private:
     float safety_geofence_height_;
 
     //controller specific variables
-    rclcpp::Time timestamp_last_position_control_ = get_time();
+    rclcpp::Time timestamp_last_position_control_;
     double period_position_control_ = 1/50.0; // ms
 
     // Last X Ground Distance Sensor readings
