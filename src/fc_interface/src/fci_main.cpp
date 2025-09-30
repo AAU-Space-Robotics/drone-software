@@ -816,7 +816,7 @@ private:
         StampedQuaternion attitude = state_manager_.getAttitude();
         Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
         //Stamped3DVector target_velocity_3d(target_velocity_profile.timestamp, target_velocity_profile.vector().x(), target_velocity_profile.vector().y(), target_velocity_profile.vector().z());
-        Stamped3DVector target_velocity_3d(target_velocity_profile.timestamp, 0.0, 0.0, 1.0);
+        Stamped3DVector target_velocity_3d(target_velocity_profile.timestamp, 0.0, 0.0, -1.0);
         
         double dt = (get_time() - position.getTime()).seconds();
         
@@ -843,15 +843,16 @@ private:
 
         // Calculate control output using PID controller
         Eigen::Vector4d output = controller_.velocityControl(dt, prev_velocity_error_, velocity, attitude, target_velocity_3d, last_control_signal);
-
+        
 
         // Replace zero yaw with the planned yaw from quaternion
         Eigen::Vector3d target_euler = transformations_.quaternionToEuler(state_manager_.getTargetAttitude().quaternion());
-
+ 
 
         //RCLCPP_INFO(get_logger(), "target yaw: %.2f", target_euler.x());
 
         output.z() = target_euler.x();
+        RCLCPP_INFO(get_logger(), "thrust_being_send: %.2f", output.w());
         return output;
     }
 
@@ -888,6 +889,7 @@ private:
 
         //Lock the current control mode
         std::lock_guard<std::mutex> lock(current_control_mode_mutex_);
+
 
         Eigen::Vector4d control_input;
         switch (current_control_mode_)
@@ -1365,6 +1367,24 @@ private:
             {
                 setDroneMode(FlightMode::POSITION);
                 ensureControlLoopRunning(4);
+
+                // setTargetVelocityProfile
+                // Set the current position and orientation
+                // StampedQuaternion attitude = state_manager_.getAttitude();
+                // Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+                // Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
+                // // make target velocity profile
+
+                // Eigen::Quaterniond takeoff_quat = attitude.quaternion().normalized();
+                // float target_yaw = transformations_.unwrapAngle(goal->yaw, 2*M_PI, 0);
+                // Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
+                // Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
+
+                // Eigen::Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
+
+
+
+
             }
             else if (goal->command_type == "spin")
             {

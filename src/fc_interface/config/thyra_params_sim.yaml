@@ -16,9 +16,9 @@ flight_controller_interface:
           Ki: 0.0
           Kd: 0.05
         thrust:
-          Kp: 1.3
-          Ki: 0.0
-          Kd: 0.15
+          Kp: 1.5
+          Ki: 0.15
+          Kd: 0.5
       ema:
         alpha: 0.15 # Exponential moving average factor for smoothing
     
@@ -34,10 +34,10 @@ flight_controller_interface:
       
     # Safety Parameters
     safety:
-      check_gcs_timeout: true          # Check for ground control station timeout
+      check_gcs_timeout: false          # Check for ground control station timeout
       check_position_timeout: false     # Check for position data timeout
       check_battery: true               # Check battery status
-      check_geofence: true              # Check for geofence violations
+      check_geofence: false              # Check for geofence violations
       battery_threshold: 0.05           # Battery threshold for safety (0-1 scale)
       gcs_timeout_threshold: 1.0        # Timeout for ground control station input (seconds)
       position_timeout_threshold: 0.2   # Timeout for position data (seconds)
@@ -46,7 +46,7 @@ flight_controller_interface:
       safety_thrustdown_rate: 0.0       # Rate of thrust decrease during safety landing
       geofence_radius: 20.0             # Geofence radius (meters)
       geofence_height: 10.0             # Geofence height (meters)
-      do_mode_change_delay: true        # Enable mode change delay
+      do_mode_change_delay: false        # Enable mode change delay
       mode_change_delay: 5.0            # Mode change delay (seconds)
 
     # Setup Parameters

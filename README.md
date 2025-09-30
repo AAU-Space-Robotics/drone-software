@@ -225,6 +225,16 @@ Run this command from the workspace root (e.g., `~/drone-software`). Ensure the 
       - **yaw**: Desired orientation in radians (0 to 2π).
    - The command will be rejected if any coordinate is missing.
 
+- **Velocity:**
+   ```bash
+   ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'velocity', target_pose: [0, 0, -2], yaw: 0.0}"
+   ```
+   - Moves the drone to the specified `[x, y, z]` position in meters.
+      - **x, y, z**: Target coordinates. All three values are required.
+      - **z**: Altitude, with negative values indicating upward movement (e.g., `-2` for 2 meters above the origin).
+      - **yaw**: Desired orientation in radians (0 to 2π).
+   - The command will be rejected if any coordinate is missing.
+
 - **Spin:**
    ```bash
    ros2 action send_goal /thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'spin', target_pose: [1.57, 2.0, 0], yaw: 0.0}"
