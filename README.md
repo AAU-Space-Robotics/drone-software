@@ -297,3 +297,6 @@ source ~/drone-software/venv/bin/activate
 
 Matlab:
 ros2genmsg('/home/daroe/drone-software/src', CreateShareableFile=true);
+
+source ros2 
+source /opt/ros/jazzy/setup.bash

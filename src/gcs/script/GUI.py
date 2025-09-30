@@ -614,12 +614,12 @@ def speed_field(node):
         if imgui.button("Send S", width=70, height=50):
             try:
                 speed = float(speed_buffer.strip())
-                node.send_command("set_linear_speed", [speed])  
-                node.get_logger().info(f"Speed set to {speed}")
-                node.imgui_logger.info(f"Speed set to {speed}")
+                node.send_command("velocity", [speed])  
+                node.get_logger().info(f"KEK set to {speed}")
+                node.imgui_logger.info(f"KEK set to {speed}")
             except ValueError as e:
-                node.get_logger().warn(f"Invalid speed input: {e}")
-                node.imgui_logger.warn(f"Invalid speed input: {e}")
+                node.get_logger().warn(f"KEK speed input: {e}")
+                node.imgui_logger.warn(f"KEK speed input: {e}")
     imgui.pop_style_color(3)
     imgui.pop_style_var()
  

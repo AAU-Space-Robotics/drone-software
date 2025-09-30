@@ -364,15 +364,20 @@ private:
     }
 
     bool geofence_violated(Eigen::Vector3d position)
-    {
-        Eigen::Vector2d xy_position(position.x(), position.y());
-        float z_position = position.z();
+        {
+            // If the geofence should not be follower, it cannot be violated (kek)
+            if (!safety_check_geofence_){
+                return false;
+            }
+            Eigen::Vector2d xy_position(position.x(),
+            position.y());
+            float z_position = position.z();
+            float xy_distance = xy_position.norm();
+            float z_distance = std::abs(z_position);
 
-        float xy_distance = xy_position.norm();
-        float z_distance = std::abs(z_position);
+            return (xy_distance >= safety_geofence_radius_ || z_distance >= safety_geofence_height_);
 
-        return (xy_distance >= safety_geofence_radius_ || z_distance >= safety_geofence_height_);
-    }
+        }
 
     void safetyCheckCallback()
     {
@@ -852,6 +857,10 @@ private:
         //RCLCPP_INFO(get_logger(), "target yaw: %.2f", target_euler.x());
 
         output.z() = target_euler.x();
+        // ! Roll = 0 Pitch = 0 Yaw = 0 Thrust = howdi
+        output.x() = 0; 
+        output.y() = 0;
+        
         return output;
     }
 
