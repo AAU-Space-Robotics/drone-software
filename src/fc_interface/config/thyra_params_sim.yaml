@@ -16,10 +16,9 @@ flight_controller_interface:
           Ki: 0.0
           Kd: 0.05
         thrust:
-          Kp: 0.8 # TODO THIS ONE MTFER 
-          # * 0.5 gives strange takeoff
-          Ki: 0.0
-          Kd: 0.15
+          Kp: 2.5 # TODO THIS ONE MTFER
+          Ki: 1.0
+          Kd: 1.5
       ema:
         alpha: 0.15 # Exponential moving average factor for smoothing
     
@@ -35,7 +34,7 @@ flight_controller_interface:
       
     # Safety Parameters
     safety:
-      check_gcs_timeout: true          # Check for ground control station timeout
+      check_gcs_timeout: false          # Check for ground control station timeout
       check_position_timeout: false     # Check for position data timeout
       check_battery: true               # Check battery status
       check_geofence: false              # Check for geofence violations
@@ -48,7 +47,7 @@ flight_controller_interface:
       geofence_radius: 50.0          # Geofence radius (meters)
       geofence_height: 50.0            # Geofence height (meters)
       do_mode_change_delay: false        # Enable mode change delay
-      mode_change_delay: 0           # Mode change delay (seconds)
+      mode_change_delay: 0.0           # Mode change delay (seconds)
 
     # Setup Parameters
     setup:

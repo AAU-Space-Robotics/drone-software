@@ -91,6 +91,7 @@ install(PROGRAMS
   script/manual_controller.py
   script/manual_arrow_controller.py
   script/GUI.py
+  script/sampler.py
   script/drone_state_publisher.py
   script/MotionCaptureReceiver.py
   script/gcs_heartbeat.py
