@@ -9,6 +9,10 @@ void FCI_Controller::setPIDGains(const PIDControllerGains& gains) {
     attitude_pid_gains_ = gains;
 }
 
+void FCI_Controller::setPOSPIDGains(const PIDPosControllerGains& gains) {
+    position_pid_gains_ = gains;
+}
+
 Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
                                            PositionError& previous_position_error,
                                            const Stamped3DVector& position_ned_earth,
@@ -70,6 +74,48 @@ Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
     // Return control outputs (roll, pitch, yaw, thrust)
     return {roll, -pitch, 0.0, thrust};
 }
+
+Eigen::Vector3d FCI_Controller::PositionControl(double sample_time,
+                                               PositionError& previous_position_error,
+                                               const Stamped3DVector& position_ned_earth,
+                                               const StampedQuaternion& attitude,
+                                               const Stamped3DVector& target_position_ned_earth,
+                                               const Eigen::Vector4d& /*previous_control_signal*/) 
+{
+    // Position error in NED
+    Eigen::Vector3d position_error_ned = target_position_ned_earth.vector() - position_ned_earth.vector();
+
+    // Derivative (guard against zero sample time)
+    Eigen::Vector3d position_error_ned_d = Eigen::Vector3d::Zero();
+    if (sample_time > 0.0) {
+        position_error_ned_d = (position_error_ned -
+                                Eigen::Vector3d(previous_position_error.X.error,
+                                                previous_position_error.Y.error,
+                                                previous_position_error.Z.error)) / sample_time;
+    }
+
+    // Transform errors to FRD frame
+    Eigen::Vector3d position_error_frd = transformations_.errorGlobalToLocal(position_error_ned, attitude.quaternion());
+    Eigen::Vector3d position_error_frd_d = transformations_.errorGlobalToLocal(position_error_ned_d, attitude.quaternion());
+
+    // PD controller -> produce desired velocities (vx, vy, vz) in FRD frame
+    double vx = position_pid_gains_.x.Kp * position_error_frd.x()
+                + position_pid_gains_.x.Kd * position_error_frd_d.x();
+
+    double vy = position_pid_gains_.y.Kp * position_error_frd.y()
+                + position_pid_gains_.y.Kd * position_error_frd_d.y();
+
+    double vz = position_pid_gains_.z.Kp * position_error_frd.z()
+                + position_pid_gains_.z.Kd * position_error_frd_d.z();
+
+    // Update previous position error (NED) for next derivative computation
+    previous_position_error.X.error = position_error_ned.x();
+    previous_position_error.Y.error = position_error_ned.y();
+    previous_position_error.Z.error = position_error_ned.z();
+
+    return Eigen::Vector3d(vx, vy, vz);
+}
+
 
 Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
                                                 VelocityError& previous_velocity_error,

@@ -2,6 +2,20 @@ flight_controller_interface:
   ros__parameters:
     # Controller Parameters
     controller:
+      position_controller:
+        x:
+          Kp: 1.0
+          Ki: 0.0
+          Kd: 0.1
+        y:
+          Kp: 1.0
+          Ki: 0.0
+          Kd: 0.1
+        z:
+          Kp: 1.0
+          Ki: 0.0
+          Kd: 0.1
+        
       pid_gains:
         pitch:
           Kp: 0.25

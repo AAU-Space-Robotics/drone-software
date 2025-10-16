@@ -73,6 +73,40 @@ public:
         load_pid_gains("yaw", pid_gains.yaw, 0.1, 0.0, 0.05);
         load_pid_gains("thrust", pid_gains.thrust, 0.8, 0.0, 0.1);
 
+        // Load position gains
+        // Position controller gains - X, Y, Z
+        PIDPosControllerGains pos_pid_gains;
+        this->declare_parameter("controller.position_controller.x.Kp", 1.0);
+        this->declare_parameter("controller.position_controller.x.Ki", 0.0);
+        this->declare_parameter("controller.position_controller.x.Kd", 0.1);
+        this->get_parameter("controller.position_controller.x.Kp", pos_pid_gains.x.Kp);
+        this->get_parameter("controller.position_controller.x.Ki", pos_pid_gains.x.Ki);
+        this->get_parameter("controller.position_controller.x.Kd", pos_pid_gains.x.Kd);
+        RCLCPP_INFO(get_logger(), "Position X PID gains: Kp=%.2f, Ki=%.2f, Kd=%.2f",
+                pos_pid_gains.x.Kp, pos_pid_gains.x.Ki, pos_pid_gains.x.Kd);
+
+        this->declare_parameter("controller.position_controller.y.Kp", 1.0);
+        this->declare_parameter("controller.position_controller.y.Ki", 0.0);
+        this->declare_parameter("controller.position_controller.y.Kd", 0.1);
+        this->get_parameter("controller.position_controller.y.Kp", pos_pid_gains.y.Kp);
+        this->get_parameter("controller.position_controller.y.Ki", pos_pid_gains.y.Ki);
+        this->get_parameter("controller.position_controller.y.Kd", pos_pid_gains.y.Kd);
+        RCLCPP_INFO(get_logger(), "Position Y PID gains: Kp=%.2f, Ki=%.2f, Kd=%.2f",
+                pos_pid_gains.y.Kp, pos_pid_gains.y.Ki, pos_pid_gains.y.Kd);
+
+        this->declare_parameter("controller.position_controller.z.Kp", 1.0);
+        this->declare_parameter("controller.position_controller.z.Ki", 0.0);
+        this->declare_parameter("controller.position_controller.z.Kd", 0.1);
+        this->get_parameter("controller.position_controller.z.Kp", pos_pid_gains.z.Kp);
+        this->get_parameter("controller.position_controller.z.Ki", pos_pid_gains.z.Ki);
+        this->get_parameter("controller.position_controller.z.Kd", pos_pid_gains.z.Kd);
+        RCLCPP_INFO(get_logger(), "Position Z PID gains: Kp=%.2f, Ki=%.2f, Kd=%.2f",
+                pos_pid_gains.z.Kp, pos_pid_gains.z.Ki, pos_pid_gains.z.Kd);
+
+        // Apply position PID gains to controller
+        controller_.setPositionPIDGains(pos_pid_gains);
+
+
         this->declare_parameter("controller.ema.alpha",0.0);
         this->get_parameter("controller.ema.alpha", controller_.ema_filter_alpha_);
 
