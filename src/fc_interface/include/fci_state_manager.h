@@ -325,8 +325,8 @@ public:
     void setAccelerationError(const AccelerationError& new_data);
     AccelerationError getAccelerationError();
 
-    void setLatestControlSignalPositionOnly(const Eigen::Vector3d& new_data);
-    Eigen::Vector3d getLatestControlSignalPositionOnly();
+    void setLatestControlSignalPositionOnly(const Eigen::Vector4d& new_data);
+    Eigen::Vector4d getLatestControlSignalPositionOnly();
 
     void setLatestControlSignalPosition(const Eigen::Vector3d& new_data);
     Eigen::Vector3d getLatestControlSignalPosition();

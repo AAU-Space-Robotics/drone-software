@@ -177,11 +177,11 @@ PositionError FCI_StateManager::getPositionError() {
 
 // ---
 
-void FCI_StateManager::setLatestControlSignalPositionOnly(const Eigen::Vector3d& new_data) {
+void FCI_StateManager::setLatestControlSignalPositionOnly(const Eigen::Vector4d& new_data) {
     std::lock_guard<std::mutex> lock(latest_control_signal_position_only_mutex_);
     latest_control_signal_position_only_ = new_data;   
 }
-Eigen::Vector3d FCI_StateManager::getLatestControlSignalPositionOnly() {
+Eigen::Vector4d FCI_StateManager::getLatestControlSignalPositionOnly() {
     std::lock_guard<std::mutex> lock(latest_control_signal_position_only_mutex_);
     return latest_control_signal_position_only_;   
 }
