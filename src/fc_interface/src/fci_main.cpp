@@ -793,11 +793,12 @@ private:
             return Eigen::Vector4d::Zero();
         }
 
-        Eigen::Vector4d last_control_signal = state_manager_.getLatestControlSignal();
+        Eigen::Vector3d last_control_signal_position = state_manager_.getLatestControlSignalPositionOnly();
+
 
         // Calculate control output using PID controller
-        Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d, last_control_signal);
-        
+        Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d, last_control_signal_position);
+
         // Replace zero yaw with the planned yaw from quaternion
         Eigen::Vector3d target_euler = transformations_.quaternionToEuler(state_manager_.getTargetAttitude().quaternion());
 
@@ -848,42 +849,43 @@ private:
         //         cleanupControlLoop();
         // }
 
+        // Get target profiles
         Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
         Stamped3DVector target_velocity_profile = state_manager_.getTargetVelocityProfile();
-        Stamped3DVector position = state_manager_.getGlobalPosition();
-        Stamped3DVector velocity = state_manager_.getGlobalVelocity();
-        StampedQuaternion attitude = state_manager_.getAttitude();
         Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
         //Stamped3DVector target_velocity_3d(target_velocity_profile.timestamp, target_velocity_profile.vector().x(), target_velocity_profile.vector().y(), target_velocity_profile.vector().z());
-        Stamped3DVector target_velocity_3d(target_velocity_profile.timestamp, 0.0, 0.0, -1.0);
+        
+
+        // Get current states
+        Stamped3DVector position = state_manager_.getGlobalPosition();
+        Stamped3DVector velocity = state_manager_.getGlobalVelocity();
+        StampedQuaternion attitude = state_manager_.getAttitude(); // Current orientation
         
         double dt = (get_time() - position.getTime()).seconds();
         
+        // Health check of data
         if (dt > timeout_threshold_)
         {
             RCLCPP_WARN(get_logger(), "No position or velocity data received in the last %.2f seconds!", timeout_threshold_);
             return Eigen::Vector4d::Zero();
         }
+        Eigen::Vector3d vel_cmd = Eigen::Vector3d::Zero();
 
-        // if((getTime() - timestamp_last_position_control_).seconds() >= period_position_control_){
-        //     Eigen::Vector4d last_control_signal = state_manager_.getLatestControlSignal();
-
-        //     // Calculate control output using P Controller
-        //     Eigen::Vector3d = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d, last_control_signal); 
-            
-        //     // Update this value only at the position control rate
-
-        //     // Lastly set previous update
-        //     timestamp_last_position_control_ = get_time();
-        // }
+        // Calculate position control every nth iteration
+        if (position_loop_counter_ == position_loop_trigger_){
+            vel_cmd = controller_.positionControl(dt, prev_position_error_, position, attitude, target_position_3d, state_manager_.getLatestControlSignalPosition()); // !!!FIX
+            position_loop_counter_ = 0;
+            state_manager_.setLatestControlSignalPosition(vel_cmd);
+        }
+        position_loop_counter_++;
+        Stamped3DVector target_velocity_3d(target_velocity_profile.timestamp, 0.0, 0.0, vel_cmd.z()); // add setpoint velocity z from position controller
         
-        //placeholder for output
-        Eigen::Vector3d last_control_signal(0.0, 0.0, 0.0);
-
         // Calculate control output using PID controller
-        Eigen::Vector4d output = controller_.velocityControl(dt, prev_velocity_error_, velocity, attitude, target_velocity_3d, last_control_signal);
+        Eigen::Vector4d output = controller_.velocityControl(dt, prev_velocity_error_, velocity, attitude, target_velocity_3d, state_manager_.getLatestControlSignalVelocity()); // ABOVE CODE IS NOT COMPATIBLE WITH ALPHABLEND
         
-
+        // Set last velocity control signal
+        state_manager_.setLatestControlSignalVelocity(output);
+        
         // Replace zero yaw with the planned yaw from quaternion
         Eigen::Vector3d target_euler = transformations_.quaternionToEuler(state_manager_.getTargetAttitude().quaternion());
  
@@ -1608,7 +1610,12 @@ private:
 
     //controller specific variables
     rclcpp::Time timestamp_last_position_control_;
-    double period_position_control_ = 1/50.0; // ms
+    double period_position_control_ = 1/25.0; // ms
+    double period_velocity_control_ = 1/50.0; // ms
+
+    int position_loop_counter_ = 2;
+    const int position_loop_trigger_ = 2;
+
 
     // Last X Ground Distance Sensor readings
     static constexpr int max_ground_distance_readings_ = 10;

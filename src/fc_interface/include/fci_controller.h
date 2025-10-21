@@ -41,7 +41,7 @@ public:
     // Set PID gains for attitude and thrust
     void setPIDGains(const PIDControllerGains& gains);
 
-    void setPOSPIDGains(const PIDPosControllerGains& gains)
+    void setPositionPIDGains(const PIDPosControllerGains& gains);
 
     // Position PID control (returns roll, pitch, yaw, thrust)
     Eigen::Vector4d pidControl(double sample_time,
@@ -51,12 +51,19 @@ public:
                                const Stamped3DVector& target_position_ned_earth,
                                const Eigen::Vector4d& previous_control_signal);
 
+    Eigen::Vector3d positionControl(double sample_time,
+                                    PositionError& previous_position_error,
+                                    const Stamped3DVector& position_ned_earth,
+                                    const StampedQuaternion& attitude,
+                                    const Stamped3DVector& target_position_ned_earth,
+                                    const Eigen::Vector3d& previous_control_signal);
+
     Eigen::Vector4d velocityControl(double sample_time,
                                      VelocityError& previous_velocity_error,
                                      const Stamped3DVector& velocity_ned_earth,
                                      const StampedQuaternion& attitude,
                                      const Stamped3DVector& target_velocity_ned_earth,
-                                     const Eigen::Vector3d& previous_control_signal);
+                                     const Eigen::Vector4d& previous_control_signal);
 
     // Utility function to map normalized values to angles
     double mapNormToAngle(double norm) const;

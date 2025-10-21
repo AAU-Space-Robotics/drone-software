@@ -9,7 +9,7 @@ void FCI_Controller::setPIDGains(const PIDControllerGains& gains) {
     attitude_pid_gains_ = gains;
 }
 
-void FCI_Controller::setPOSPIDGains(const PIDPosControllerGains& gains) {
+void FCI_Controller::setPositionPIDGains(const PIDPosControllerGains& gains) {
     position_pid_gains_ = gains;
 }
 
@@ -75,12 +75,12 @@ Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
     return {roll, -pitch, 0.0, thrust};
 }
 
-Eigen::Vector3d FCI_Controller::PositionControl(double sample_time,
+Eigen::Vector3d FCI_Controller::positionControl(double sample_time,
                                                PositionError& previous_position_error,
                                                const Stamped3DVector& position_ned_earth,
                                                const StampedQuaternion& attitude,
                                                const Stamped3DVector& target_position_ned_earth,
-                                               const Eigen::Vector4d& /*previous_control_signal*/) 
+                                               const Eigen::Vector3d& /*previous_control_signal*/) 
 {
     // Position error in NED
     Eigen::Vector3d position_error_ned = target_position_ned_earth.vector() - position_ned_earth.vector();
@@ -122,7 +122,7 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
                                                 const Stamped3DVector& velocity_ned_earth,
                                                 const StampedQuaternion& attitude,
                                                 const Stamped3DVector& target_velocity_ned_earth,
-                                                const Eigen::Vector3d& previous_control_signal) {
+                                                const Eigen::Vector4d& previous_control_signal) {
     // Calculate velocity error in NED frame
     Eigen::Vector3d velocity_error_ned = target_velocity_ned_earth.vector() - velocity_ned_earth.vector();
     Eigen::Vector3d velocity_error_ned_d = (velocity_error_ned -
@@ -195,7 +195,8 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
     previous_velocity_error.Z.error = velocity_error_ned.z();
 
     // Return control outputs (roll, pitch, yaw, thrust)
-    return {roll_cmd, -pitch_cmd, yaw_cmd, thrust_cmd};
+    return Eigen::Vector4d(roll_cmd, -pitch_cmd, yaw_cmd, thrust_cmd);
+
 }
 
 

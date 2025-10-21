@@ -177,13 +177,31 @@ PositionError FCI_StateManager::getPositionError() {
 
 // ---
 
-void FCI_StateManager::setLatestControlSignal(const Eigen::Vector4d& new_data) {
-    std::lock_guard<std::mutex> lock(latest_control_signal_mutex_);
-    latest_control_signal_ = new_data;   
+void FCI_StateManager::setLatestControlSignalPositionOnly(const Eigen::Vector3d& new_data) {
+    std::lock_guard<std::mutex> lock(latest_control_signal_position_only_mutex_);
+    latest_control_signal_position_only_ = new_data;   
 }
-Eigen::Vector4d FCI_StateManager::getLatestControlSignal() {
-    std::lock_guard<std::mutex> lock(latest_control_signal_mutex_);
-    return latest_control_signal_;   
+Eigen::Vector3d FCI_StateManager::getLatestControlSignalPositionOnly() {
+    std::lock_guard<std::mutex> lock(latest_control_signal_position_only_mutex_);
+    return latest_control_signal_position_only_;   
+}
+
+void FCI_StateManager::setLatestControlSignalPosition(const Eigen::Vector3d& new_data) {
+    std::lock_guard<std::mutex> lock(latest_control_signal_position_mutex_);
+    latest_control_signal_position_ = new_data;   
+}
+Eigen::Vector3d FCI_StateManager::getLatestControlSignalPosition() {
+    std::lock_guard<std::mutex> lock(latest_control_signal_position_mutex_);
+    return latest_control_signal_position_;   
+}
+
+void FCI_StateManager::setLatestControlSignalVelocity(const Eigen::Vector4d& new_data) {
+    std::lock_guard<std::mutex> lock(latest_control_signal_velocity_mutex_);
+    latest_control_signal_velocity_ = new_data;   
+}
+Eigen::Vector4d FCI_StateManager::getLatestControlSignalVelocity() {
+    std::lock_guard<std::mutex> lock(latest_control_signal_velocity_mutex_);
+    return latest_control_signal_velocity_;   
 }
 
 // ---
