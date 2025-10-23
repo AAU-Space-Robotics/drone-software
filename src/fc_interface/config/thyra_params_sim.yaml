@@ -14,7 +14,7 @@ flight_controller_interface:
         z:
           Kp: 1.0
           Ki: 0.0
-          Kd: 0.1
+          Kd: 0.15
         
       pid_gains:
         pitch:

@@ -873,10 +873,11 @@ private:
 
         // Initialize velocity command with target trajectory velocities (XY from trajectory, Z from position controller)
         Eigen::Vector3d vel_cmd = target_velocity_profile.vector();
-
+    
         // Calculate position control for Z-axis every nth iteration
         if (position_loop_counter_ >= position_loop_trigger_) {
             // Get position control output (3D vector with vx, vy, vz commands)
+           
             Eigen::Vector3d pos_control_output = controller_.positionControl(
                 dt, 
                 prev_position_error_, 
@@ -888,16 +889,21 @@ private:
             
             // Override Z velocity command with position controller output
             // Keep XY from trajectory, use Z from position controller
-            vel_cmd.z() = pos_control_output.z();
+            vel_cmd += pos_control_output;
             
             position_loop_counter_ = 0;
             state_manager_.setLatestControlSignalPosition(pos_control_output);
         }
+        else{
+            // Keep previous position control signal for non-Z axes
+            vel_cmd += state_manager_.getLatestControlSignalPosition();   
+        }
         position_loop_counter_++;
-
+        
         // Create target velocity with Z from position controller
         Stamped3DVector target_velocity_3d(get_time(), vel_cmd.x(), vel_cmd.y(), vel_cmd.z());
-        
+        //Stamped3DVector target_velocity_3d(get_time(), 0, 0, -1.0);
+        std::cout << "Target Velocity Command: " << target_velocity_3d.vector().transpose() << std::endl;
         // Calculate control output using velocity PID controller
         Eigen::Vector4d output = controller_.velocityControl(
             dt, 
@@ -913,7 +919,8 @@ private:
         
         // Replace yaw with the planned yaw from quaternion
         Eigen::Vector3d target_euler = transformations_.quaternionToEuler(state_manager_.getTargetAttitude().quaternion());
-        output.z() = target_euler.x();  // Set yaw
+        
+        output.z() = target_euler.z();  // Set yaw
         
         // For Z-only tuning: Zero out roll and pitch
         // This keeps the drone level while you tune the Z controller

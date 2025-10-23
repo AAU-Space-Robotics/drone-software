@@ -45,6 +45,7 @@ class DroneSamplerNode(Node):
 
         # Declaration of class variables
         self.velocity = np.empty((3, 0), dtype=np.float32)  # 3xN matrix for velocity measurements
+        self.position = np.empty((3, 0), dtype=np.float32)  # 3xN matrix for position measurements
         self.timestamps = np.empty((1, 0), dtype=np.float32)  # 1xN matrix for timestamps
         self.goal_handle = None
         self.flight_time = 0.0
@@ -54,9 +55,22 @@ class DroneSamplerNode(Node):
         measurement_time = msg.timestamp
         self.velocity = np.hstack((self.velocity, new_measurement))
         self.timestamps = np.hstack((self.timestamps, np.array([[measurement_time]], dtype=np.float32)))
+    
 
     def state_callback(self, msg):
         self.flight_time = msg.flight_time
+        if len(msg.position) >= 3:
+            new_measurement = np.array([[msg.position[0]],
+                                         [msg.position[1]],
+                                         [msg.position[2]]],
+                                        dtype=np.float32)
+            self.position = np.hstack((self.position, new_measurement))
+        
+            # If your message has a timestamp field:
+            measurement_time = getattr(msg, "timestamp", time.time())
+            self.timestamps = np.hstack((self.timestamps, np.array([[measurement_time]], dtype=np.float32)))
+
+
     # ---- GETTERS ----
 
     def get_velocity_history(self):
@@ -72,9 +86,21 @@ class DroneSamplerNode(Node):
         if self.velocity.shape[1] == 0:
             return np.array([0.0, 0.0, 0.0], dtype=np.float32)
         return self.velocity[:, -1]
+    def get_position_history(self):
+        """
+        Get the full array of position measurements. Returns a 3xN numpy array.
+        """
+        return self.position
+    def get_latest_position(self):
+        """
+        Get the latest position measurement. Returns a 1D numpy array of size 3.
+        """
+        if self.position.shape[1] == 0:
+            return np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        return self.position[:, -1]
     
     def get_sample_size(self):
-        return self.velocity.shape[1]
+        return self.velocity.shape[1], self.position.shape[1]
     
     def get_sample_time_difference_history(self):
         """
@@ -194,7 +220,7 @@ def save_to_csv(velocity_samples,velocity_metrics, velocity_idx):
         'min_velocity': combined_data[:, 4],
     })
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    filename = os.path.join(script_dir, "velocity_sample.csv")
+    filename = os.path.join(script_dir, "sample.csv")
     df.to_csv(filename, index=False)
     #print(f"✅ Velocity samples saved to {filename}")
     print("Saving CSV to:", filename)
@@ -219,24 +245,24 @@ def main(arg=None):
         flight_time = DroneSamplerNode.get_flight_time(node)
     print("flight started")
      
-    start_index = DroneSamplerNode.get_sample_size(node)
-    print(f"starting at sample size: {start_index}")
-    while DroneSamplerNode.get_sample_size(node) < start_index + sample_size:
+    start_index_v, start_index_p = DroneSamplerNode.get_sample_size(node)
+    print(f"starting at sample size: {start_index_p}")
+    while DroneSamplerNode.get_sample_size(node)[1] < start_index_p + sample_size:
         time.sleep(0.1)
         current_samples = DroneSamplerNode.get_sample_size(node)
-        print(f"Samples collected: {DroneSamplerNode.get_sample_size(node) - start_index}", end='\r')
+        print(f"Samples collected: {DroneSamplerNode.get_sample_size(node)[1] - start_index_p}", end='\r')
         
 
 
-    velocity_samples = DroneSamplerNode.get_velocity_history(node)
+    position_samples = DroneSamplerNode.get_position_history(node)
 
-    sliced_velocity_samples = velocity_samples[:,start_index : start_index + sample_size]
-    print(sliced_velocity_samples)
+    sliced_position_samples = DroneSamplerNode.get_position_history(node)[:,start_index_p : start_index_p + sample_size]
+    print(sliced_position_samples)
 
-    velocity_metrics = calculate_moving_average_metrics(sliced_velocity_samples[:, :sample_size - 1], window_size) 
-    
-    plot_signal_axis(velocity_metrics, axis_idx=2)  # Plot for vx axis
-    save_to_csv(velocity_samples, velocity_metrics,2) # Save velocity samples to CSV
+    position_metrics = calculate_moving_average_metrics(sliced_position_samples[:, :sample_size - 1], window_size)
+
+    plot_signal_axis(position_metrics, axis_idx=2)  # Plot for vx axis
+    save_to_csv(position_samples, position_metrics, 2) # Save position samples to CSV
 
 if __name__ == '__main__':
     main()

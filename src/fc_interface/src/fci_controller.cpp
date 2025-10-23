@@ -107,12 +107,15 @@ Eigen::Vector3d FCI_Controller::positionControl(double sample_time,
 
     double vz = position_pid_gains_.z.Kp * position_error_frd.z()
                 + position_pid_gains_.z.Kd * position_error_frd_d.z();
-
+    std::cout << "Vz = " << vz << std::endl;
     // Update previous position error (NED) for next derivative computation
     previous_position_error.X.error = position_error_ned.x();
     previous_position_error.Y.error = position_error_ned.y();
     previous_position_error.Z.error = position_error_ned.z();
 
+
+    vz =std::clamp(vz, -1.0, 1.0); // Constrain vertical velocity
+    std::cout << "Vz (clamped) = " << vz << std::endl;
     return Eigen::Vector3d(vx, vy, vz);
 }
 
@@ -178,7 +181,7 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
                         attitude_pid_gains_.thrust.Ki * integral_velocity_error_frd.z() +
                         attitude_pid_gains_.thrust.Kd * velocity_error_frd_d.z();
 
-    std::cout << "Raw Control: thrust=" << thrust_cmd << std::endl;
+    //std::cout << "Raw Control: thrust=" << thrust_cmd << std::endl;
 
     // Constrain outputs
     // roll_cmd = constrainAngle(roll_cmd);
@@ -186,8 +189,8 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
     roll_cmd = 0.0;
     pitch_cmd = 0.0;
     thrust_cmd = constrainThrust(thrust_cmd);
-
-    //thrust_cmd = EMA_filter(thrust_cmd, previous_control_signal.z());
+    
+    //thrust_cmd = EMA_filter(thrust_cmd, previous_control_signal.w());
 
     // Update previous error
     previous_velocity_error.X.error = velocity_error_ned.x();
