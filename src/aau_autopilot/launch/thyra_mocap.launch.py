@@ -11,7 +11,7 @@ from launch.actions import TimerAction
 def generate_launch_description():
     # Define workspace directory (one level up from package)
     workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-    pkg_share = FindPackageShare('fc_interface')
+    pkg_share = FindPackageShare('aau_autopilot')
 
     
     # directory which workspace is located in
@@ -49,8 +49,8 @@ def generate_launch_description():
             period=20.0,  # Delay in seconds
             actions=[
                 Node(
-                    package='fc_interface',
-                    executable='fci',
+                    package='aau_autopilot',
+                    executable='aau_autopilot_mocap_node',
                     name='flight_controller_interface',
                     output='screen',
                     parameters=[

@@ -23,10 +23,10 @@
 #include <interfaces/msg/gcs_heartbeat.hpp>
 #include <interfaces/msg/probe_global_locations.hpp>
 
-#include "fci_controller.h"
-#include "fci_state_manager.h"
-#include "fci_transformations.h"
-#include "fci_path_planner.h"
+#include "controller.h"
+#include "state_manager.h"
+#include "transformations.h"
+#include "path_planner.h"
 
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;

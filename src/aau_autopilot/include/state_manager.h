@@ -1,5 +1,5 @@
-#ifndef FCI_UTILITIES_H
-#define FCI_UTILITIES_H
+#ifndef STATE_MANAGER_H
+#define STATE_MANAGER_H
 
 #include <atomic>
 #include <stdint.h>
@@ -376,4 +376,4 @@ private:
 
 };
 
-#endif // FCI_STATEMANAGER_H
+#endif // STATE_MANAGER_H

@@ -1,8 +1,8 @@
-#ifndef FCI_PATHPLANNER_H
-#define FCI_PATHPLANNER_H
+#ifndef PATHPLANNER_H
+#define PATHPLANNER_H
 
 #include <eigen3/Eigen/Dense>
-#include "fci_transformations.h"
+#include "transformations.h"
 #include <vector>
 
 struct TrajectoryPoint {
@@ -96,4 +96,4 @@ private:
     FCI_Transformations transformations_;
 };
 
-#endif // FCI_PATHPLANNER_H
+#endif // PATHPLANNER_H

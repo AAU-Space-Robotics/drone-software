@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # ------------------------------------------------------------------------------
-project(fc_interface)
+project(aau_autopilot)
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
@@ -24,10 +24,10 @@ find_package(interfaces REQUIRED)
 include_directories(include)
 
 # Create the C++ executable
-add_executable(fci src/fci_main.cpp src/fci_controller.cpp src/fci_state_manager.cpp src/fci_transformations.cpp src/fci_path_planner.cpp)
+add_executable(aau_autopilot src/main.cpp src/controller.cpp src/state_manager.cpp src/transformations.cpp src/path_planner.cpp)
 
-# Add dependencies for fci executable
-ament_target_dependencies(fci
+# Add dependencies for aau_autopilot executable
+ament_target_dependencies(aau_autopilot
   rclcpp
   rclcpp_action
   interfaces
@@ -36,7 +36,7 @@ ament_target_dependencies(fci
 
 # Install C++ executables
 install(TARGETS
-  fci
+  aau_autopilot
   DESTINATION lib/${PROJECT_NAME}
 )
 

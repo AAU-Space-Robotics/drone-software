@@ -2,8 +2,8 @@
 #define FCI_CONTROLLER_H
 
 #include <eigen3/Eigen/Dense>
-#include "fci_state_manager.h" // For Stamped3DVector, StampedQuaternion, etc.
-#include "fci_transformations.h" // For coordinate transformations
+#include "state_manager.h" // For Stamped3DVector, StampedQuaternion, etc.
+#include "transformations.h" // For coordinate transformations
 
 // PID gains structure
 struct PIDGains {
@@ -66,4 +66,4 @@ private:
     double constrainThrust(double thrust) const;
 };
 
-#endif // FCI_CONTROLLER_H
+#endif // CONTROLLER_H
