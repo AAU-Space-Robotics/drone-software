@@ -14,7 +14,7 @@ flight_controller_interface:
         z:
           Kp: 1.0
           Ki: 0.0
-          Kd: 0.15
+          Kd: 0.115 #! Too high, maybe someplace around 0.1 but alittle higher
         
       pid_gains:
         pitch:
