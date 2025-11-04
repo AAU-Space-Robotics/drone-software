@@ -69,6 +69,12 @@ class DroneSamplerNode(Node):
             # If your message has a timestamp field:
             measurement_time = getattr(msg, "timestamp", time.time())
             self.timestamps = np.hstack((self.timestamps, np.array([[measurement_time]], dtype=np.float32)))
+        if len(msg.velocity) >= 3:
+            new_measurement = np.array([[msg.velocity[0]],
+                                         [msg.velocity[1]],
+                                         [msg.velocity[2]]],
+                                        dtype=np.float32)
+            self.drone_state_velocity = np.hstack((self.velocity, new_measurement))
 
 
     # ---- GETTERS ----
@@ -99,9 +105,16 @@ class DroneSamplerNode(Node):
             return np.array([0.0, 0.0, 0.0], dtype=np.float32)
         return self.position[:, -1]
     
+    def get_drone_state_velocity_history(self):
+        return self.drone_state_velocity
+    def get_latest_drone_state_velocity(self):
+        if self.drone_state_velocity.shape[1] == 0:
+            return np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        return self.drone_state_velocity[:, -1]
+
     def get_sample_size(self):
-        return self.velocity.shape[1], self.position.shape[1]
-    
+        return self.velocity.shape[1], self.position.shape[1], self.drone_state_velocity.shape[1]
+
     def get_sample_time_difference_history(self):
         """
         Get the time differences between consecutive samples. Returns a 1D numpy array of size N (same as number of samples).
@@ -154,7 +167,7 @@ def calculate_moving_average_metrics(samples, window_length):
 def plot_signals(velocity_metrics):
     # Plot all axes for each metric in subplots
     time_axis = np.arange(velocity_metrics.shape[1])
-    signal_labels = ['vx', 'vy', 'vz']
+    signal_labels = ['x', 'y', 'z']
     metric_labels = ['Mean', 'Std Dev', 'Max', 'Min']
     colors = ['blue', 'orange', 'green']
 
@@ -168,7 +181,7 @@ def plot_signals(velocity_metrics):
                 label=f'{signal_labels[signal_idx]}',
                 color=colors[signal_idx]
             )
-        plt.ylabel(f'{metric_labels[metric_idx]} Velocity (m/s)')
+        plt.ylabel(f'{metric_labels[metric_idx]} Position (m)')
         plt.legend()
     plt.xlabel('Samples')
     plt.tight_layout()
@@ -178,12 +191,12 @@ def plot_signal_axis(velocity_metrics, axis_idx):
     """
     Plots four subplots for metrics (Mean, Std Dev, Max, Min) of a specified axis (0: vx, 1: vy, 2: vz).
     Args:
-        velocity_metrics: numpy array of shape (num_signals, num_windows, 4)
+        velocity_metrics or position_metrics: numpy array of shape (num_signals, num_windows, 4)
         axis_idx: int, index of axis to plot (0, 1, or 2)
     """
     time_axis = np.arange(velocity_metrics.shape[1])
     metric_labels = ['Mean', 'Std Dev', 'Max', 'Min']
-    axis_labels = ['vx', 'vy', 'vz']
+    axis_labels = ['x', 'y', 'z']
     plt.figure(figsize=(12, 8))
     for metric_idx in range(4):
         plt.subplot(4, 1, metric_idx + 1)
@@ -192,13 +205,13 @@ def plot_signal_axis(velocity_metrics, axis_idx):
             velocity_metrics[axis_idx, :, metric_idx],
             color='blue'
         )
-        plt.ylabel(f'{metric_labels[metric_idx]} Velocity (m/s)')
+        plt.ylabel(f'{metric_labels[metric_idx]} velocity (m/s)')
         plt.title(f'{metric_labels[metric_idx]} for {axis_labels[axis_idx]} axis')
     plt.xlabel('Samples')
     plt.tight_layout()
     plt.show()
 
-def save_to_csv(velocity_samples,velocity_metrics, velocity_idx):
+def save_to_csv(velocity_samples,velocity_metrics, velocity_idx, working_axis):
     """
     Save velocity samples to a CSV file.
     Args:
@@ -213,7 +226,7 @@ def save_to_csv(velocity_samples,velocity_metrics, velocity_idx):
     combined_data = np.column_stack((velocity_samples, mean, std, max_v, min_v))
 
     df = pd.DataFrame({
-        'velocity': combined_data[:, 0],
+        f'velocity{working_axis}': combined_data[:, 0],
         'mean_velocity': combined_data[:, 1],
         'std_velocity': combined_data[:, 2],
         'max_velocity': combined_data[:, 3],
@@ -238,31 +251,34 @@ def main(arg=None):
     sample_size = 1000
     window_size = 50
     flight_time = DroneSamplerNode.get_flight_time(node)
-    axis = 2 #to decide if x (0) y (1) or z (2) axis looking at
+    axis = 0 #to decide if x (0) y (1) or z (2) axis looking at
     
     while flight_time == 0:
         time.sleep(0.1)
         flight_time = DroneSamplerNode.get_flight_time(node)
     print("flight started")
      
-    start_index_v, start_index_p = DroneSamplerNode.get_sample_size(node)
+    start_index_v, start_index_p, start_index_ds_v = DroneSamplerNode.get_sample_size(node)
     print(f"starting at sample size: {start_index_p}")
-    while DroneSamplerNode.get_sample_size(node)[1] < start_index_p + sample_size:
+    while DroneSamplerNode.get_sample_size(node)[0] < start_index_v + sample_size:
         time.sleep(0.1)
         current_samples = DroneSamplerNode.get_sample_size(node)
-        print(f"Samples collected: {DroneSamplerNode.get_sample_size(node)[1] - start_index_p}", end='\r')
+        print(f"Samples collected: {DroneSamplerNode.get_sample_size(node)[0] - start_index_v}", end='\r')
         
 
 
     position_samples = DroneSamplerNode.get_position_history(node)
-
-    sliced_position_samples = DroneSamplerNode.get_position_history(node)[:,start_index_p : start_index_p + sample_size]
-    print(sliced_position_samples)
-
-    position_metrics = calculate_moving_average_metrics(sliced_position_samples[:, :sample_size - 1], window_size)
-
-    plot_signal_axis(position_metrics, axis_idx=2)  # Plot for vx axis
-    save_to_csv(position_samples, position_metrics, 2) # Save position samples to CSV
+    drone_state_velocity_samples = DroneSamplerNode.get_drone_state_velocity_history(node)
+    #sliced_drone_state_velocity_samples = DroneSamplerNode.get_drone_state_velocity_history(node)[:,start_index_ds_v : start_index_ds_v + sample_size]
+    #sliced_position_samples = DroneSamplerNode.get_position_history(node)[:,start_index_p : start_index_p + sample_size]
+    
+    velocity_metrics = calculate_moving_average_metrics(drone_state_velocity_samples[:, :sample_size - 1], window_size)
+    plot_signal_axis(velocity_metrics, axis_idx=axis)  # Plot for some axis
+    save_to_csv(drone_state_velocity_samples, velocity_metrics, axis, 'v') # Save velocity samples to CSV
+    #position_metrics = calculate_moving_average_metrics(sliced_position_samples[:, :sample_size - 1], window_size)
+    #drone_state_velocity_metrics = calculate_moving_average_metrics(sliced_drone_state_velocity_samples[:, :sample_size - 1], window_size)
+    #plot_signal_axis(position_metrics, axis_idx=axis)  # Plot for some axis
+    #save_to_csv(sliced_position_samples, position_metrics, axis, 'y') # Save position samples to CSV
 
 if __name__ == '__main__':
     main()

@@ -4,33 +4,33 @@ flight_controller_interface:
     controller:
       position_controller:
         x:
-          Kp: 1.0
-          Ki: 0.0
-          Kd: 0.1
+          Kp: 2.5
+          Ki: 1.4
+          Kd: 1.3
         y:
-          Kp: 1.0
-          Ki: 0.0
-          Kd: 0.1
+          Kp: 2.5
+          Ki: 1.4
+          Kd: 1.3
         z:
           Kp: 1.0
           Ki: 0.0
-          Kd: 0.115 #! Too high, maybe someplace around 0.1 but alittle higher
+          Kd: 0.110
         
       pid_gains:
-        pitch:
-          Kp: 0.25
-          Ki: 0.0
-          Kd: 0.1
         roll:
-          Kp: 0.25
+          Kp: 0.34
+          Ki: 0.05
+          Kd: 0.08
+        pitch:
+          Kp: 0.34
           Ki: 0.0
-          Kd: 0.1
+          Kd: 0.05
         yaw:
           Kp: 0.15
           Ki: 0.0
           Kd: 0.05
         thrust:
-          Kp: 2.5 # TODO THIS ONE MTFER
+          Kp: 2.5 
           Ki: 1.0
           Kd: 1.5
       ema:

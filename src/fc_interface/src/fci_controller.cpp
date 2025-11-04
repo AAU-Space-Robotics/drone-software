@@ -107,7 +107,7 @@ Eigen::Vector3d FCI_Controller::positionControl(double sample_time,
 
     double vz = position_pid_gains_.z.Kp * position_error_frd.z()
                 + position_pid_gains_.z.Kd * position_error_frd_d.z();
-    std::cout << "Vz = " << vz << std::endl;
+  
     // Update previous position error (NED) for next derivative computation
     previous_position_error.X.error = position_error_ned.x();
     previous_position_error.Y.error = position_error_ned.y();
@@ -115,7 +115,6 @@ Eigen::Vector3d FCI_Controller::positionControl(double sample_time,
 
 
     vz =std::clamp(vz, -1.0, 1.0); // Constrain vertical velocity
-    std::cout << "Vz (clamped) = " << vz << std::endl;
     return Eigen::Vector3d(vx, vy, vz);
 }
 
@@ -184,10 +183,8 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
     //std::cout << "Raw Control: thrust=" << thrust_cmd << std::endl;
 
     // Constrain outputs
-    // roll_cmd = constrainAngle(roll_cmd);
-    // pitch_cmd = constrainAngle(pitch_cmd);
-    roll_cmd = 0.0;
-    pitch_cmd = 0.0;
+    roll_cmd = constrainAngle(roll_cmd);
+    pitch_cmd = constrainAngle(pitch_cmd);
     thrust_cmd = constrainThrust(thrust_cmd);
     
     //thrust_cmd = EMA_filter(thrust_cmd, previous_control_signal.w());
@@ -196,6 +193,10 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
     previous_velocity_error.X.error = velocity_error_ned.x();
     previous_velocity_error.Y.error = velocity_error_ned.y();
     previous_velocity_error.Z.error = velocity_error_ned.z();
+
+    // print roll and pitch commands
+    std::cout << "Control Commands: roll=" << roll_cmd
+              << ", pitch=" << pitch_cmd << std::endl;    
 
     // Return control outputs (roll, pitch, yaw, thrust)
     return Eigen::Vector4d(roll_cmd, -pitch_cmd, yaw_cmd, thrust_cmd);
@@ -208,12 +209,12 @@ double FCI_Controller::EMA_filter(double new_value, double previous_value) const
 }
 
 double FCI_Controller::mapNormToAngle(double norm) const {
-    constexpr double max_angle = M_PI / 18.0; // ~10 degrees
+    constexpr double max_angle = M_PI / 9.0; // ~19.5 degrees
     return norm * max_angle;
 }
 
 double FCI_Controller::constrainAngle(double angle) const {
-    constexpr double max_angle = M_PI / 18.0; // ~10 degrees
+    constexpr double max_angle = M_PI / 9.0; // ~19.5 degrees
     return std::clamp(angle, -max_angle, max_angle);
 }
 
