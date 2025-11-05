@@ -132,25 +132,25 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
                                                             previous_velocity_error.Y.error,
                                                             previous_velocity_error.Z.error)) / sample_time;
 
-    std::cout << "Target velocity NED: x=" << target_velocity_ned_earth.x()
-              << ", y=" << target_velocity_ned_earth.y()
-              << ", z=" << target_velocity_ned_earth.z() << std::endl;
-    std::cout << "Current velocity NED: x=" << velocity_ned_earth.x()
-              << ", y=" << velocity_ned_earth.y()
-              << ", z=" << velocity_ned_earth.z() << std::endl;
-
-    std::cout << "Velocity error NED: x=" << velocity_error_ned.x()
-              << ", y=" << velocity_error_ned.y()
-              << ", z=" << velocity_error_ned.z() << std::endl;
+    //std::cout << "Target velocity NED: x=" << target_velocity_ned_earth.x()
+    //          << ", y=" << target_velocity_ned_earth.y()
+    //          << ", z=" << target_velocity_ned_earth.z() << std::endl;
+    //std::cout << "Current velocity NED: x=" << velocity_ned_earth.x()
+    //          << ", y=" << velocity_ned_earth.y()
+    //          << ", z=" << velocity_ned_earth.z() << std::endl;
+//
+    //std::cout << "Velocity error NED: x=" << velocity_error_ned.x()
+    //          << ", y=" << velocity_error_ned.y()
+    //          << ", z=" << velocity_error_ned.z() << std::endl;
                                                             
     // Update integral error
     previous_velocity_error.X.error_integral += velocity_error_ned.x() * sample_time;
     previous_velocity_error.Y.error_integral += velocity_error_ned.y() * sample_time;
     previous_velocity_error.Z.error_integral += velocity_error_ned.z() * sample_time;
 
-    std::cout << "Integral Velocity error NED: x=" << previous_velocity_error.X.error_integral
-              << ", y=" << previous_velocity_error.Y.error_integral
-              << ", z=" << previous_velocity_error.Z.error_integral << std::endl;
+    //std::cout << "Integral Velocity error NED: x=" << previous_velocity_error.X.error_integral
+    //          << ", y=" << previous_velocity_error.Y.error_integral
+    //          << ", z=" << previous_velocity_error.Z.error_integral << std::endl;
 
     // Transform errors to FRD frame
     Eigen::Vector3d velocity_error_frd = transformations_.errorGlobalToLocal(velocity_error_ned, attitude.quaternion());
@@ -161,9 +161,9 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
                         previous_velocity_error.Z.error_integral),
         attitude.quaternion());
     
-    std::cout << "Velocity error FRD: x=" << velocity_error_frd.x()
-              << ", y=" << velocity_error_frd.y()
-              << ", z=" << velocity_error_frd.z() << std::endl;
+    //std::cout << "Velocity error FRD: x=" << velocity_error_frd.x()
+    //          << ", y=" << velocity_error_frd.y()
+    //          << ", z=" << velocity_error_frd.z() << std::endl;
 
     // Calculate control outputs
     double roll_cmd = attitude_pid_gains_.roll.Kp * velocity_error_frd.y() +
@@ -195,9 +195,9 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
     previous_velocity_error.Z.error = velocity_error_ned.z();
 
     // print roll and pitch commands
-    std::cout << "Control Commands: roll=" << roll_cmd
-              << ", pitch=" << pitch_cmd << std::endl;    
-
+    //std::cout << "Control Commands: roll=" << roll_cmd
+    //          << ", pitch=" << pitch_cmd << std::endl;    
+//
     // Return control outputs (roll, pitch, yaw, thrust)
     return Eigen::Vector4d(roll_cmd, -pitch_cmd, yaw_cmd, thrust_cmd);
 

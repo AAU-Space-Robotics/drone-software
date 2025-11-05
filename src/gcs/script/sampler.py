@@ -252,8 +252,8 @@ def main(arg=None):
     sample_size = 2000
     window_size = 50
     flight_time = DroneSamplerNode.get_flight_time(node)
-    axis = 1 #to decide if x (0) y (1) or z (2) axis looking at
-    collection_mode = 'velocity'  # set to 'position' or 'velocity' or 'drone_state_velocity'
+    axis = 0 #to decide if x (0) y (1) or z (2) axis looking at
+    collection_mode = 'position'  # set to 'position' or 'velocity' or 'drone_state_velocity'
     while flight_time == 0:
         time.sleep(0.1)
         flight_time = DroneSamplerNode.get_flight_time(node)

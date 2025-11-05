@@ -850,13 +850,13 @@ private:
         // }
 
         // Get target profiles
-        //Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-        Stamped4DVector target_profile(get_time(), 0.0, 0.0, -3.0, 0.0);
+        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+        //Stamped4DVector target_profile(get_time(), 0.0, 0.0, 0.0, 0.0);
 
         
         Stamped3DVector target_velocity_profile = state_manager_.getTargetVelocityProfile();
         Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
-
+        
         // Get current states
         Stamped3DVector position = state_manager_.getGlobalPosition();
         Stamped3DVector velocity = state_manager_.getGlobalVelocity();
@@ -903,8 +903,8 @@ private:
         // Create target velocity with Z from position controller
         //Stamped3DVector target_velocity_3d(get_time(), vel_cmd.x(), vel_cmd.y(), vel_cmd.z());
 
-        Stamped3DVector target_velocity_3d(get_time(), target_velocity_profile.vector().x(), target_velocity_profile.vector().y(), vel_cmd.z());
-        std::cout << "wtf Velocity: " << target_velocity_profile.vector().y() << std::endl;
+        Stamped3DVector target_velocity_3d(get_time(), vel_cmd.x(), vel_cmd.y(), vel_cmd.z());
+      
         std::cout << "Target Velocity Command: " << target_velocity_3d.vector().transpose() << std::endl;
         // Calculate control output using velocity PID controller
         Eigen::Vector4d output = controller_.velocityControl(
@@ -1446,19 +1446,16 @@ private:
             {
                 setDroneMode(FlightMode::POSITION);
                 ensureControlLoopRunning(4);
-
-                double target_vel_x = goal->target_pose[0];
-                double target_vel_y = goal->target_pose[1];
-                double target_vel_z = goal->target_pose[2];
-
-                Stamped3DVector target_velocity_profile(get_time(), target_vel_x, target_vel_y, 0.0);
-                state_manager_.setTargetVelocityProfile(target_velocity_profile);
-
-                // ! Here after perfect tuned
+                double target_profile_x = goal->target_pose[0];
+                double target_profile_y = goal->target_pose[1];
+                double target_profile_z = goal->target_pose[2];
+                //Stamped3DVector target_velocity_profile(get_time(), 0, 0, 0);
+                //state_manager_.setTargetVelocityProfile(target_velocity_profile);
+                state_manager_.setTargetPositionProfile(Stamped4DVector(get_time(), target_profile_x, target_profile_y, target_profile_z, 0.0));
                 // setTargetVelocityProfile
                 // Set the current position and orientation
                 // StampedQuaternion attitude = state_manager_.getAttitude();
-                // Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+                //Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
                 // Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
                 // // make target velocity profile
 
