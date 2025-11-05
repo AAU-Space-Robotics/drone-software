@@ -33,7 +33,7 @@ class DroneSamplerNode(Node):
         self.velocity_subscription = self.create_subscription(
             VehicleLocalPosition,
             '/fmu/out/vehicle_local_position',
-            self.velocity_callback,
+            self.local_callback,
             qos
         )
         self.state_subscription = self.create_subscription(
@@ -50,12 +50,13 @@ class DroneSamplerNode(Node):
         self.goal_handle = None
         self.flight_time = 0.0
 
-    def velocity_callback(self, msg):
+    def local_callback(self, msg):
         new_measurement = np.array([[msg.vx], [msg.vy], [msg.vz]], dtype=np.float32)
         measurement_time = msg.timestamp
         self.velocity = np.hstack((self.velocity, new_measurement))
+        self.position = np.hstack((self.position, np.array([[msg.x], [msg.y], [msg.z]], dtype=np.float32)))
         self.timestamps = np.hstack((self.timestamps, np.array([[measurement_time]], dtype=np.float32)))
-    
+   
 
     def state_callback(self, msg):
         self.flight_time = msg.flight_time
@@ -248,37 +249,68 @@ def main(arg=None):
     start_time = time.time()
 
     # Define runtime parameters
-    sample_size = 1000
+    sample_size = 2000
     window_size = 50
     flight_time = DroneSamplerNode.get_flight_time(node)
-    axis = 0 #to decide if x (0) y (1) or z (2) axis looking at
-    
+    axis = 1 #to decide if x (0) y (1) or z (2) axis looking at
+    collection_mode = 'velocity'  # set to 'position' or 'velocity' or 'drone_state_velocity'
     while flight_time == 0:
         time.sleep(0.1)
         flight_time = DroneSamplerNode.get_flight_time(node)
     print("flight started")
-     
-    start_index_v, start_index_p, start_index_ds_v = DroneSamplerNode.get_sample_size(node)
-    print(f"starting at sample size: {start_index_p}")
-    while DroneSamplerNode.get_sample_size(node)[0] < start_index_v + sample_size:
+
+   
+
+    # Record starting indices for each buffer
+    start_index_v, start_index_p, start_index_ds_v = node.get_sample_size()
+    print(f"starting at sample indices: velocity={start_index_v}, position={start_index_p}, ds_velocity={start_index_ds_v}")
+
+    # choose which buffer to wait for based on collection_mode
+    if collection_mode == 'velocity':
+        start_index = start_index_v
+        idx = 0
+        name = 'velocity'
+    elif collection_mode == 'position':
+        start_index = start_index_p
+        idx = 1
+        name = 'position'
+    else:
+        start_index = start_index_ds_v
+        idx = 2
+        name = 'drone_state_velocity'
+
+    # wait until we have collected `sample_size` new samples for the chosen mode
+    while True:
+        current_sizes = node.get_sample_size()
+        current_count = current_sizes[idx]
+        collected = max(0, current_count - start_index)
+        if collected >= sample_size:
+            break
+        print(f"Samples collected ({name}): {collected}/{sample_size}", end='\r')
         time.sleep(0.1)
-        current_samples = DroneSamplerNode.get_sample_size(node)
-        print(f"Samples collected: {DroneSamplerNode.get_sample_size(node)[0] - start_index_v}", end='\r')
-        
+
+    print(f"\nCollected required {sample_size} samples for {name}")
 
 
-    position_samples = DroneSamplerNode.get_position_history(node)
-    drone_state_velocity_samples = DroneSamplerNode.get_drone_state_velocity_history(node)
-    #sliced_drone_state_velocity_samples = DroneSamplerNode.get_drone_state_velocity_history(node)[:,start_index_ds_v : start_index_ds_v + sample_size]
-    #sliced_position_samples = DroneSamplerNode.get_position_history(node)[:,start_index_p : start_index_p + sample_size]
-    
-    velocity_metrics = calculate_moving_average_metrics(drone_state_velocity_samples[:, :sample_size - 1], window_size)
-    plot_signal_axis(velocity_metrics, axis_idx=axis)  # Plot for some axis
-    save_to_csv(drone_state_velocity_samples, velocity_metrics, axis, 'v') # Save velocity samples to CSV
-    #position_metrics = calculate_moving_average_metrics(sliced_position_samples[:, :sample_size - 1], window_size)
-    #drone_state_velocity_metrics = calculate_moving_average_metrics(sliced_drone_state_velocity_samples[:, :sample_size - 1], window_size)
-    #plot_signal_axis(position_metrics, axis_idx=axis)  # Plot for some axis
-    #save_to_csv(sliced_position_samples, position_metrics, axis, 'y') # Save position samples to CSV
+    # Get full histories
+    velocity_samples = node.get_velocity_history()
+    position_samples = node.get_position_history()
+
+    # Slice the desired window starting at the recorded start indices
+    sliced_velocity_samples = velocity_samples[:, start_index_v : start_index_v + sample_size]
+    sliced_position_samples = position_samples[:, start_index_p : start_index_p + sample_size]
+
+    if collection_mode == 'velocity':
+        velocity_metrics = calculate_moving_average_metrics(sliced_velocity_samples, window_size)
+        plot_signal_axis(velocity_metrics, axis_idx=axis)
+        # To save CSV for velocity, uncomment the next line:
+        # save_to_csv(sliced_velocity_samples, velocity_metrics, axis, 'v')
+    elif collection_mode == 'position':
+        position_metrics = calculate_moving_average_metrics(sliced_position_samples, window_size)
+        plot_signal_axis(position_metrics, axis_idx=axis)
+        # To save CSV for position, you can adapt save_to_csv if needed.
+    else:
+        print(f"Unknown collection_mode: {collection_mode}")
 
 if __name__ == '__main__':
     main()

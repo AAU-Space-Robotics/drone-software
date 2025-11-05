@@ -68,10 +68,10 @@ public:
 
         // Load PID gains
         PIDControllerGains pid_gains;
-        load_pid_gains("pitch", pid_gains.pitch, 0.1, 0.0, 0.05);
-        load_pid_gains("roll", pid_gains.roll, 0.1, 0.0, 0.05);
-        load_pid_gains("yaw", pid_gains.yaw, 0.1, 0.0, 0.05);
-        load_pid_gains("thrust", pid_gains.thrust, 0.8, 0.0, 0.1);
+        load_pid_gains("pitch", pid_gains.pitch, 0.0, 0.0, 0.0);
+        load_pid_gains("roll", pid_gains.roll, 0.0, 0.0, 0.0);
+        load_pid_gains("yaw", pid_gains.yaw, 0.0, 0.0, 0.0);
+        load_pid_gains("thrust", pid_gains.thrust, 0.0, 0.0, 0.0);
 
         // Load position gains
         // Position controller gains - X, Y, Z
@@ -851,7 +851,7 @@ private:
 
         // Get target profiles
         //Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-        Stamped4DVector target_profile(get_time(), 0.0, 0.0, -1.0, 0.0);
+        Stamped4DVector target_profile(get_time(), 0.0, 0.0, -3.0, 0.0);
 
         
         Stamped3DVector target_velocity_profile = state_manager_.getTargetVelocityProfile();
@@ -1451,7 +1451,7 @@ private:
                 double target_vel_y = goal->target_pose[1];
                 double target_vel_z = goal->target_pose[2];
 
-                Stamped3DVector target_velocity_profile(get_time(), 0.0, target_vel_y, 0.0);
+                Stamped3DVector target_velocity_profile(get_time(), target_vel_x, target_vel_y, 0.0);
                 state_manager_.setTargetVelocityProfile(target_velocity_profile);
 
                 // ! Here after perfect tuned
