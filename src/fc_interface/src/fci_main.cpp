@@ -861,6 +861,8 @@ private:
         Stamped3DVector position = state_manager_.getGlobalPosition();
         Stamped3DVector velocity = state_manager_.getGlobalVelocity();
         StampedQuaternion attitude = state_manager_.getAttitude();
+        Eigen::Quaterniond target_quat = state_manager_.getTargetAttitude().quaternion();
+        std::cout << "Target Attitude Quaternion: " << target_quat.coeffs().transpose() << std::endl;
         
         double dt = (get_time() - position.getTime()).seconds();
         
@@ -873,7 +875,7 @@ private:
 
         // Initialize velocity command with target trajectory velocities (XY from trajectory, Z from position controller)
         Eigen::Vector3d vel_cmd = target_velocity_profile.vector();
-    
+        
         // Calculate position control for Z-axis every nth iteration
         if (position_loop_counter_ >= position_loop_trigger_) {
             // Get position control output (3D vector with vx, vy, vz commands)
@@ -905,7 +907,7 @@ private:
 
         Stamped3DVector target_velocity_3d(get_time(), vel_cmd.x(), vel_cmd.y(), vel_cmd.z());
       
-        std::cout << "Target Velocity Command: " << target_velocity_3d.vector().transpose() << std::endl;
+        //std::cout << "Target Velocity Command: " << target_velocity_3d.vector().transpose() << std::endl;
         // Calculate control output using velocity PID controller
         Eigen::Vector4d output = controller_.velocityControl(
             dt, 
@@ -918,11 +920,12 @@ private:
         
         // Set last velocity control signal
         state_manager_.setLatestControlSignalVelocity(output);
-        
+        target_quat = state_manager_.getTargetAttitude().quaternion();
+        std::cout << "target attitude " << target_quat.coeffs().transpose() << std::endl;
         // Replace yaw with the planned yaw from quaternion
         Eigen::Vector3d target_euler = transformations_.quaternionToEuler(state_manager_.getTargetAttitude().quaternion());
-        
-        output.z() = target_euler.z();  // Set yaw
+        std::cout << "Target Euler Angles: " << target_euler.transpose() << std::endl;
+        output.z() = target_euler.x();  // Set yaw
         
         // For Z-only tuning: Zero out roll and pitch
         // This keeps the drone level while you tune the Z controller
@@ -930,7 +933,7 @@ private:
         //output.y() = 0.0;  // Pitch = 0
         //output.z() is yaw (already set above)
         //output.w() is thrust (from velocity controller)
-        
+
         return output;
     }
 
@@ -1449,9 +1452,14 @@ private:
                 double target_profile_x = goal->target_pose[0];
                 double target_profile_y = goal->target_pose[1];
                 double target_profile_z = goal->target_pose[2];
+                double target_yaw = transformations_.unwrapAngle(goal->yaw, 2*M_PI, 0);
                 //Stamped3DVector target_velocity_profile(get_time(), 0, 0, 0);
                 //state_manager_.setTargetVelocityProfile(target_velocity_profile);
                 state_manager_.setTargetPositionProfile(Stamped4DVector(get_time(), target_profile_x, target_profile_y, target_profile_z, 0.0));
+                Eigen::Quaterniond takeoff_quat = state_manager_.getAttitude().quaternion().normalized();
+                Eigen::Quaterniond target_quat = transformations_.eulerToQuaternion(0.0, 0.0, target_yaw).normalized();
+                std::cout << "Velocity target: " << target_profile_x << ", " << target_profile_y << ", " << target_profile_z << ", yaw: " << goal->yaw << std::endl;
+                state_manager_.setTargetAttitude(StampedQuaternion(get_time(), target_quat));
                 // setTargetVelocityProfile
                 // Set the current position and orientation
                 // StampedQuaternion attitude = state_manager_.getAttitude();

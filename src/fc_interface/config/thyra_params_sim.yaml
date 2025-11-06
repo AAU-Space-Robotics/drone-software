@@ -4,19 +4,19 @@ flight_controller_interface:
     controller:
       position_controller:
         x:
-          Kp: 0.95
+          Kp: 1.0
           Ki: 0.0
-          Kd: 0.25
+          Kd: 0.01
 
         y:
-          Kp: 0.08
+          Kp: 1.0
           Ki: 0.0
-          Kd: 0.25
+          Kd: 0.01
 
         z:
-          Kp: 0.95
+          Kp: 1.0
           Ki: 0.0
-          Kd: 0.25
+          Kd: 0.01
 
       pid_gains:
         roll:
@@ -32,9 +32,9 @@ flight_controller_interface:
           Ki: 0.0
           Kd: 0.05
         thrust:
-          Kp: 2.5 
-          Ki: 1.0
-          Kd: 1.6
+          Kp: 2.3 
+          Ki: 0.8
+          Kd: 1.2
       ema:
         alpha: 0.15 # Exponential moving average factor for smoothing
     

@@ -125,10 +125,11 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
                                                 const StampedQuaternion& attitude,
                                                 const Stamped3DVector& target_velocity_ned_earth,
                                                 const Eigen::Vector4d& previous_control_signal) {
-    // Calculate velocity error in NED frame
+
     Eigen::Vector3d velocity_error_ned = target_velocity_ned_earth.vector() - velocity_ned_earth.vector();
-    Eigen::Vector3d velocity_error_ned_d = (velocity_error_ned -
-                                            Eigen::Vector3d(previous_velocity_error.X.error,
+    Eigen::Vector3d velocity_error_frd = transformations_.errorGlobalToLocal(velocity_error_ned, attitude.quaternion());
+                                             
+    Eigen::Vector3d velocity_error_frd_d = (velocity_error_frd-Eigen::Vector3d(previous_velocity_error.X.error,
                                                             previous_velocity_error.Y.error,
                                                             previous_velocity_error.Z.error)) / sample_time;
 
@@ -144,23 +145,23 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
     //          << ", z=" << velocity_error_ned.z() << std::endl;
                                                             
     // Update integral error
-    previous_velocity_error.X.error_integral += velocity_error_ned.x() * sample_time;
-    previous_velocity_error.Y.error_integral += velocity_error_ned.y() * sample_time;
-    previous_velocity_error.Z.error_integral += velocity_error_ned.z() * sample_time;
+    // Update integral error in the body (FRD) frame
+    
+    previous_velocity_error.X.error_integral += velocity_error_frd.x() * sample_time;
+    previous_velocity_error.Y.error_integral += velocity_error_frd.y() * sample_time;
+    previous_velocity_error.Z.error_integral += velocity_error_frd.z() * sample_time;
+    Eigen::Vector3d integral_velocity_error_frd(
+        previous_velocity_error.X.error_integral,
+        previous_velocity_error.Y.error_integral,
+        previous_velocity_error.Z.error_integral);
 
     //std::cout << "Integral Velocity error NED: x=" << previous_velocity_error.X.error_integral
     //          << ", y=" << previous_velocity_error.Y.error_integral
     //          << ", z=" << previous_velocity_error.Z.error_integral << std::endl;
 
     // Transform errors to FRD frame
-    Eigen::Vector3d velocity_error_frd = transformations_.errorGlobalToLocal(velocity_error_ned, attitude.quaternion());
-    Eigen::Vector3d velocity_error_frd_d = transformations_.errorGlobalToLocal(velocity_error_ned_d, attitude.quaternion());
-    Eigen::Vector3d integral_velocity_error_frd = transformations_.errorGlobalToLocal(
-        Eigen::Vector3d(previous_velocity_error.X.error_integral,
-                        previous_velocity_error.Y.error_integral,
-                        previous_velocity_error.Z.error_integral),
-        attitude.quaternion());
-    
+
+
     //std::cout << "Velocity error FRD: x=" << velocity_error_frd.x()
     //          << ", y=" << velocity_error_frd.y()
     //          << ", z=" << velocity_error_frd.z() << std::endl;
