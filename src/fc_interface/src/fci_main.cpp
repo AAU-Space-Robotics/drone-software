@@ -1473,8 +1473,6 @@ private:
                 result->message = "Drone moving to target position.";
                 std::cout << "Velocity target: " << target_position.transpose() << ", yaw: " << target_yaw << std::endl;
 
- 
-            
             }
             else if (goal->command_type == "spin")
             {
@@ -1512,7 +1510,7 @@ private:
                 cleanupControlLoop();
                 setDroneMode(FlightMode::MANUAL);
                 ensureControlLoopRunning(0);
-                result->success = true;
+                result->success = true; 
                 result->message = "Drone in manual mode.";
             }
             else if (goal->command_type == "manual_aided")

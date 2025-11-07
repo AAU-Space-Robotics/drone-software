@@ -28,12 +28,12 @@ flight_controller_interface:
         #  Ki: 0.05
         #  Kd: 0.095
         roll:
-          Kp: 0.005
-          Ki: 0.00
+          Kp: 0.15
+          Ki: 0.01
           Kd: 0.001
         pitch:
-          Kp: 0.005
-          Ki: 0.00
+          Kp: 0.15
+          Ki: 0.01
           Kd: 0.001
         yaw:
           Kp: 0.15
