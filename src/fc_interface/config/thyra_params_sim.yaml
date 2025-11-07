@@ -19,14 +19,22 @@ flight_controller_interface:
           Kd: 0.01
 
       pid_gains:
+        #roll:
+        #  Kp: 0.34
+        #  Ki: 0.05
+        #  Kd: 0.08
+        #pitch:
+        #  Kp: 0.30
+        #  Ki: 0.05
+        #  Kd: 0.095
         roll:
-          Kp: 0.34
-          Ki: 0.05
-          Kd: 0.08
+          Kp: 0.005
+          Ki: 0.00
+          Kd: 0.001
         pitch:
-          Kp: 0.30
-          Ki: 0.05
-          Kd: 0.095
+          Kp: 0.005
+          Ki: 0.00
+          Kd: 0.001
         yaw:
           Kp: 0.15
           Ki: 0.0
