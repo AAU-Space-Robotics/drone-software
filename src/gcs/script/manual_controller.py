@@ -12,7 +12,7 @@ class ManualController(Node):
         qos_settings = rclpy.qos.QoSProfile(depth=10)
         qos_settings.reliability = rclpy.qos.ReliabilityPolicy.BEST_EFFORT
         qos_settings.durability = rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL
-        self.controller_type = 1 #to choose controller. 1 for TX16S and 0 for PS4
+        self.controller_type = 2 #to choose controller. 1 for TX16S and 0 for PS4
 
 
         self.publisher_ = self.create_publisher(ManualControlInput, 'thyra/in/manual_input', qos_settings)
@@ -37,9 +37,12 @@ class ManualController(Node):
         if not(self.controller_type):
             """Reads input from the PS4 controller and updates the drone_cmd."""
             self.read_PS4()
-        elif (self.controller_type):
+        elif (self.controller_type ==1):
             """Reads input from the TX16S controller and updates the drone_cmd."""
             self.read_TX16S()
+        elif (self.controller_type == 2):
+            self.get_logger().warn('Controller unknown!')
+            self.read_unknown()
     def read_TX16S(self):
         """Reads input from the TX16S controller and updates the drone_cmd."""
         if self.joystick is None:
@@ -111,7 +114,55 @@ class ManualController(Node):
         self.drone_cmd.yaw_velocity =yaw_value if abs(yaw_value) > 0.02 else 0.0  # Right stick X-axis
         self.drone_cmd.thrust = self.joystick.get_axis(4) if abs(self.joystick.get_axis(4)) > 0.05 else 0.0  # Right stick Y-axis, mapped from [-1,1] to [0,-1]
  
+    def read_unknown(self):
+        """Handles unknown controller types."""
+        pygame.event.pump()  # Process pygame events
+         # --- Buttons ---
+        #num_buttons = self.joystick.get_numbuttons()
+        #for i in range(num_buttons):
+        #    if self.joystick.get_button(i):
+        #        print(f"Button {i} pressed")
+#
+        ## --- Axes (analog sticks, triggers, etc.) ---
+        #num_axes = self.joystick.get_numaxes()
+        #for i in range(num_axes):
+        #    val = self.joystick.get_axis(i)
+        #    if abs(val) > 0.2:  # small threshold to ignore drift
+        #        print(f"Axis {i} moved: {val:.2f}")
+#
+        ## --- Hats (D-pad) ---
+        #num_hats = self.joystick.get_numhats()
+        #for i in range(num_hats):
+        #    hat_val = self.joystick.get_hat(i)
+        #    if hat_val != (0, 0):
+        #        print(f"Hat {i} pressed: {hat_val}")
+        #! Axi:
+        '''
+        0 = left stick lef - right +
+        1 = left stick up - down +
+        2 = right stick lef - right +
+        3 = right stick up - down +
 
+        #! Buttons:
+        0 = Y
+        1 = B
+        2 = A
+        3 = X
+        4 = L1
+        5 = R1
+
+        '''
+        left_trigger = ((self.joystick.get_button(4) + 1.0)/2.0)
+        right_trigger = (self.joystick.get_button(5) + 1.0)/2.0
+        yaw_value = right_trigger - left_trigger
+        
+        # Read joystick axes (values range from -1 to 1)
+        self.drone_cmd.roll = self.joystick.get_axis(0) if abs(self.joystick.get_axis(0)) > 0.05 else 0.0  # Left stick X-axis
+        self.drone_cmd.pitch = self.joystick.get_axis(1) if abs(self.joystick.get_axis(1)) > 0.05 else 0.0  # Left stick Y-axis (inverted for correct mapping)
+        #self.drone_cmd.yaw_velocity =self.joystick.get_axis(3) if abs(self.joystick.get_axis(3)) > 0.05 else 0.0  # Right stick X-axis
+        self.drone_cmd.yaw_velocity =yaw_value if abs(yaw_value) > 0.02 else 0.0  # Right stick X-axis
+        self.drone_cmd.thrust = self.joystick.get_axis(3) if abs(self.joystick.get_axis(3)) > 0.05 else 0.0  # Right stick Y-axis, mapped from [-1,1] to [0,-1]
+ 
     def publish_control(self):
         self.controller_choice()
         self.publisher_.publish(self.drone_cmd)
@@ -121,12 +172,12 @@ class ManualController(Node):
             f'Arm={self.drone_cmd.arm}, estop={self.drone_cmd.estop}, '
             #print(self.hello)
         )
-def start_ros():
-    rclpy.init()
-    node = DroneGuiNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+#def start_ros():
+#    rclpy.init()
+#    node = DroneGuiNode()
+#    rclpy.spin(node)
+#    node.destroy_node()
+#    rclpy.shutdown()
     
 def main(args=None):
     rclpy.init(args=args)

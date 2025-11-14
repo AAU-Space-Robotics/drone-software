@@ -157,7 +157,9 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
                         attitude_pid_gains_.thrust.Kd * velocity_error_frd_d.z();
 
     //std::cout << "Raw Control: thrust=" << thrust_cmd << std::endl;
-
+    double tilt_compensation = 1.0 / std::max(std::cos(roll_cmd) * std::cos(pitch_cmd), 0.5);
+    double compensation_factor = 0.3; // Vi kan skrue op og ned på denne
+    thrust_cmd *= (1.0 + (tilt_compensation - 1.0) * compensation_factor);
     // Constrain outputs
     roll_cmd = constrainAngle(roll_cmd);
     pitch_cmd = constrainAngle(pitch_cmd);
@@ -198,4 +200,26 @@ double FCI_Controller::constrainThrust(double thrust) const {
     constexpr double max_thrust = -0.05;
     constexpr double min_thrust = -1.0;
     return std::clamp(thrust, min_thrust, max_thrust);
+}
+
+Eigen::Vector4d FCI_Controller::map_controls(const Stamped4DVector& input) const {
+    Eigen::Vector4d output;
+    if (std::abs(input.x()) < 1e-6 && std::abs(input.y()) < 1e-6) {
+        // If both roll and pitch are near zero, return zero velocities
+        return Eigen::Vector4d(0.0, 0.0, 0.0, input.w());
+    }
+    else {
+        double max_velocity = 3.0; // m/s, adjust as needed
+        output.x() = max_velocity * std::sin(input.y()); // pitch controls forward/backward
+        output.y() = max_velocity * std::sin(input.x()); // roll controls left/right
+        std::cout << "Mapped velocities: vx=" << output.x() << ", vy=" << output.y() << std::endl;
+    }
+    
+    output.z() = input.z(); // thrust
+
+    output.w() = 0.0;
+
+
+
+    return output;
 }

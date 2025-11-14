@@ -626,7 +626,7 @@ def speed_field(node):
 def Dropdown_Menu():
     global current_item
 
-    items = ["No Controller", "PS4", "TX16S"]
+    items = ["No Controller", "PS4", "TX16S", "Custom"]
     imgui.set_cursor_pos((450,90))
     imgui.set_next_item_width(300)
 
@@ -1057,7 +1057,7 @@ def manual(node):
                     button_color = (0.0, 0.5, 0.0)  # Green color for connected joystick
                     hover_color = (0.0, 0.8, 0.0)  # Lighter green for hover
                     active_color = (0.0, 0.2, 0.0)
-                    node.send_command("manual")
+                    node.send_command("manual_aided")
                     #GuiConsoleLogger("Manual mode activated.")
                     node.imgui_logger.info("Manual mode activated")
                 else:
@@ -1123,9 +1123,11 @@ def start_joystick(node):
     elif node.joystick.get_name() == "OpenTX RM TX16S Joystick":
         current_item = 2
         #print(f"Initialized joystick: {node.joystick.get_name()}")
-
-    elif not node.joystick.get_init():
-        print("Joystick initialization failed.")
+    else: #node.joystick.get_name() == "Xbox Series X|S Controller":
+        current_item = 3
+        print(f"Initialized joystick: {node.joystick.get_name()}")
+    #elif not node.joystick.get_init():
+     #   print("Joystick initialization failed.")
 
     
     
@@ -1215,6 +1217,26 @@ def start_joystick(node):
                         drone_kill = True
 
                     node.send_manual_control(roll_m, pitch_m, yaw_velocity_m, thrust)
+                    clock.tick(20)  # 20 Hz update rate
+            except KeyboardInterrupt:
+                pass
+            finally:
+                pygame.quit()
+        case 3:
+            try:
+                while rclpy.ok():
+                    pygame.event.pump()  # Process internal queue
+                    #while arming_state == 7:
+                    #print(f"Flight mode: {flight_mode}")
+                    
+                    roll_m = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
+                    pitch_m = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
+                    yaw_velocity_m = node.joystick.get_axis(2) if abs(node.joystick.get_axis(2)) > DEAD_ZONE else 0.0
+                    thrust = -node.joystick.get_axis(3) if abs(node.joystick.get_axis(3)) > DEAD_ZONE else 0.0
+                    
+
+                    node.send_manual_control(roll_m, pitch_m, yaw_velocity_m, thrust)
+                   
                     clock.tick(20)  # 20 Hz update rate
             except KeyboardInterrupt:
                 pass
@@ -1994,7 +2016,7 @@ def main(args=None):
         grid()
         Arm_Button(node)
         Kill_command(node)
-        Goto_field(node)
+        #Goto_field(node)
         speed_field(node)
         Dropdown_Menu()
         XYZ_Text_Field(msg=drone_data)
@@ -2015,7 +2037,7 @@ def main(args=None):
         GUIButton.button1(1068, 635, font_small, "Set Origin", "set_origin", node)
   
         manual(node) 
-        send_map_pos(node)
+        #send_map_pos(node)
         route_planner(node)
         execute_route(node)
         plan_card.goto_card(1288, 190, node, flight_plan[0], flight_plan_coord[0], 0)

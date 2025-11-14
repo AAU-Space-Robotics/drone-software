@@ -746,6 +746,7 @@ private:
     Eigen::Vector4d manualMode()
     {
         Stamped4DVector manual_input = state_manager_.getManualControlInput();
+        
         return {manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w()};
     }
 
@@ -900,7 +901,7 @@ private:
 
         // Pass NED velocity to velocity controller
         Stamped3DVector target_velocity_3d(get_time(), vel_cmd_ned.x(), vel_cmd_ned.y(), vel_cmd_ned.z());
-
+        
         // Velocity controller handles NED input correctly
         Eigen::Vector4d output = controller_.velocityControl(
             dt, 
@@ -925,23 +926,38 @@ private:
     //! Does not work... yet
     Eigen::Vector4d manualAidedMode()
     {
+        RCLCPP_WARN(get_logger(), "Manual aided mode is not implemented yet, defaulting to manual mode.");
         Stamped4DVector manual_input = state_manager_.getManualControlInput();
-        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-        target_profile.setZ(target_profile.z() + manual_input.w() / 10.0);
-        state_manager_.setTargetPositionProfile(target_profile);
-        Stamped3DVector position = state_manager_.getGlobalPosition();
+        //RCLCPP_INFO(get_logger(), "Manual input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
+        //             manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w());
+        // Convert manual input to target velocity in NED frame
+        
+  
+
+        Eigen::Vector4d vel_cmd = controller_.map_controls(manual_input);
+        //RCLCPP_INFO(get_logger(), "Velocity command from manual input: vy=%.2f, vx=%.2f, yaw=%.2f, vz=%.2f",
+        //             vel_cmd.x(), vel_cmd.y(), vel_cmd.z(), vel_cmd.w());
+       //
+        Stamped3DVector velocity = state_manager_.getGlobalVelocity();
         StampedQuaternion attitude = state_manager_.getAttitude();
-        Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
+        Eigen::Quaterniond target_quat = state_manager_.getTargetAttitude().quaternion();
+        double dt = (get_time() - velocity.getTime()).seconds();
 
-        double dt = (get_time() - position.getTime()).seconds();
-        if (dt > timeout_threshold_)
-        {
-            RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", timeout_threshold_);
-            return Eigen::Vector4d::Zero();  
-        }
+        Stamped3DVector target_velocity_3d(get_time(), vel_cmd.x(), vel_cmd.y(), vel_cmd.w()); //this fucker
+        
+        Eigen::Vector4d output = controller_.velocityControl(
+           dt, 
+           prev_velocity_error_, 
+           velocity, 
+           attitude, 
+           target_velocity_3d, 
+           state_manager_.getLatestControlSignalVelocity()
+        );
+       //Eigen::Vector4d output  = {0,0,0,0};
+        return output;
+       // ////Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
+   
 
-        //Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
-        return {manual_input.x(), manual_input.y(), manual_input.z(), 0.0};
     }
 
     void controlLoop()
@@ -964,6 +980,7 @@ private:
             control_input = manualMode();
             break;
         case 1:
+            
             control_input = manualAidedMode();
             break;
         case 2:
@@ -1299,6 +1316,13 @@ private:
                             goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]);
                 return rclcpp_action::GoalResponse::REJECT;
             }
+            else if (goal->command_type == "manual_aided") {
+            if (drone_state.flight_mode == FlightMode::MANUAL_AIDED || drone_state.arming_state != ArmingState::ARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: already in manual aided mode or drone not armed.");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
+            }
+
         }
 
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;

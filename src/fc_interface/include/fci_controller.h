@@ -70,6 +70,8 @@ public:
     
     float ema_filter_alpha_ = 0.01; // Alpha value for EMA filter
 
+    Eigen::Vector4d map_controls(const Stamped4DVector& input) const;
+
 private:
     const FCI_Transformations& transformations_; // Reference to transformations utility
     PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust
@@ -82,5 +84,6 @@ private:
     double constrainAngle(double angle) const;
     double constrainThrust(double thrust) const;
 };
+
 
 #endif // FCI_CONTROLLER_H
