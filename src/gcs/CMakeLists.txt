@@ -121,5 +121,37 @@ install(TARGETS gcs_node
 install(DIRECTORY fonts DESTINATION share/${PROJECT_NAME}/)
 install(DIRECTORY images DESTINATION share/${PROJECT_NAME}/)
 
+
+# Interface node executable
+add_executable(interface
+  src/Interface.cpp
+  src/interfaceutils.cpp
+  ${imgui_SOURCE_DIR}/imgui.cpp
+  ${imgui_SOURCE_DIR}/imgui_demo.cpp
+  ${imgui_SOURCE_DIR}/imgui_draw.cpp
+  ${imgui_SOURCE_DIR}/imgui_tables.cpp
+  ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+  ${implot_SOURCE_DIR}/implot.cpp           # Add ImPlot source
+  ${implot_SOURCE_DIR}/implot_items.cpp     # Add ImPlot items source
+)
+
+ament_target_dependencies(interface
+  rclcpp
+  std_msgs
+  interfaces
+)
+
+install(TARGETS interface
+  DESTINATION lib/${PROJECT_NAME}
+)
+target_link_libraries(interface
+  OpenGL::GL      # Link OpenGL
+  glfw            # Link GLFW
+  tinyxml2        # Link tinyxml2 from FetchContent
+)
+
+
 # Ament package
 ament_package()
