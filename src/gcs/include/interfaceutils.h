@@ -5,6 +5,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <iostream>
+#include "imgui_internal.h"
 
 
 namespace windowVar {
@@ -15,9 +16,29 @@ namespace windowVar {
     extern ImVec4 BackgroundColor;
 }
 
-void GetPrimaryMonitorResolution(int& width, int& height);
-void Setup();
-void UpdateWindowSize();
+class WindowInitializer {
+public:
+    
+    void GetPrimaryMonitorResolution(int& width, int& height);
+    void Setup();
+    void UpdateWindowSize();
+    
+    void Render();
+    void DrawMultiColor();
+    void loadFonts();     // load all fonts once
+    ImFont* getFont(int size);
+
+private:
+    ImFont* font18 = nullptr;
+    ImFont* font24 = nullptr;
+    ImFont* font28 = nullptr;
+    ImFont* font40 = nullptr;
+};
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void Render();
-void DrawMultiColor();
+ImU32 DarkenColor(ImU32 col, float factor);
+class Widgets {
+public:
+    bool costum_square_button(const char* id, ImVec2 pos, ImVec2 size, ImFont* font, float font_size, ImU32 color);
+    bool costum_round_button(ImVec2 center, float radius, int segments, ImU32 color);
+    bool DrawCircleGradientButton(ImDrawList* draw_list, ImFont* font, float scale, ImVec2 center, float radius, const char* id, float font_size);
+};
