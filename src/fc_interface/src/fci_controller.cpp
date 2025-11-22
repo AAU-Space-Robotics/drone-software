@@ -151,8 +151,9 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
                        attitude_pid_gains_.pitch.Kd * velocity_error_frd_d.x();
 
     double yaw_cmd = 0.0; // Yaw command
+    double hover_thrust_estimate_ = -0.5; // Estimated hover thrust. Should be made adaptive later.
 
-    double thrust_cmd = attitude_pid_gains_.thrust.Kp * velocity_error_frd.z() +
+    double thrust_cmd = hover_thrust_estimate_ + attitude_pid_gains_.thrust.Kp * velocity_error_frd.z() +
                         attitude_pid_gains_.thrust.Ki * integral_velocity_error_frd.z() +
                         attitude_pid_gains_.thrust.Kd * velocity_error_frd_d.z();
 
