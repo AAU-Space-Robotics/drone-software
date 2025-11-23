@@ -171,10 +171,6 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
     previous_velocity_error.Y.error = velocity_error_ned.y();
     previous_velocity_error.Z.error = velocity_error_ned.z();
 
-    // print roll and pitch commands
-    std::cout << "Control Commands: roll=" << roll_cmd
-              << ", pitch=" << pitch_cmd << std::endl;    
-//
     // Return control outputs (roll, pitch, yaw, thrust)
     return Eigen::Vector4d(roll_cmd, -pitch_cmd, yaw_cmd, thrust_cmd);
 
