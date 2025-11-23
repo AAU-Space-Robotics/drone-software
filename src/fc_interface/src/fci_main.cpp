@@ -1,5 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include <rcutils/logging.h>
 #include "geometry_msgs/msg/pose_stamped.hpp"
 
 #include <px4_msgs/msg/offboard_control_mode.hpp>
@@ -49,6 +50,44 @@ public:
         qos.reliability(rclcpp::ReliabilityPolicy::BestEffort);
         qos.durability(rclcpp::DurabilityPolicy::TransientLocal);
 
+        // Load and apply logging configuration from YAML
+        this->declare_parameter("logging.enabled", true);
+        this->declare_parameter("logging.console_level", "INFO");
+
+        bool logging_enabled = this->get_parameter("logging.enabled").as_bool();
+        std::string console_level = this->get_parameter("logging.console_level").as_string();
+
+        if (logging_enabled) {
+            // Map string to logger severity level
+            int severity = RCUTILS_LOG_SEVERITY_INFO;  // USE int, NOT rcutils_log_severity_t
+            
+            if (console_level == "DEBUG") {
+                severity = RCUTILS_LOG_SEVERITY_DEBUG;
+            } else if (console_level == "INFO") {
+                severity = RCUTILS_LOG_SEVERITY_INFO;
+            } else if (console_level == "WARN") {
+                severity = RCUTILS_LOG_SEVERITY_WARN;
+            } else if (console_level == "ERROR") {
+                severity = RCUTILS_LOG_SEVERITY_ERROR;
+            } else {
+                RCLCPP_WARN(this->get_logger(), 
+                            "Unknown log level '%s', defaulting to INFO", 
+                            console_level.c_str());
+                severity = RCUTILS_LOG_SEVERITY_INFO;
+            }
+            
+            auto ret = rcutils_logging_set_logger_level(this->get_logger().get_name(), severity);
+            if (ret != RCUTILS_RET_OK) {
+                RCLCPP_ERROR(this->get_logger(), "Failed to set logger level");
+            }
+        } else {
+            // Disable logging by setting to FATAL level (only fatal errors will show)
+            auto ret = rcutils_logging_set_logger_level(this->get_logger().get_name(), 
+                                                        RCUTILS_LOG_SEVERITY_FATAL);
+            if (ret != RCUTILS_RET_OK) {
+                RCLCPP_ERROR(this->get_logger(), "Failed to disable logging");
+            }
+        }
         // Determine time source at initialization
         bool use_sim_time = false;
         if (!this->has_parameter("use_sim_time")) {
@@ -194,6 +233,15 @@ public:
         RCLCPP_INFO(get_logger(), "Takeoff height: %.2f", takeoff_height_);
         RCLCPP_INFO(get_logger(), "Motor speed min: %.2f", motor_speed_min_);
         RCLCPP_INFO(get_logger(), "Motor speed max: %.2f", motor_speed_max_);
+
+        // hover_thrust_estimate_
+        this->declare_parameter("controller.pid_gains.hover_thrust_setpoint.base_value", -0.5);
+        this->declare_parameter("controller.pid_gains.hover_thrust_setpoint.learning_rate", 0.0001);
+        this->get_parameter("controller.pid_gains.hover_thrust_setpoint.base_value", controller_.hover_thrust_estimate_);
+        this->get_parameter("controller.pid_gains.hover_thrust_setpoint.learning_rate", controller_.hover_learning_rate_);
+
+        RCLCPP_INFO(get_logger(), "Hover thrust estimate: %.3f", controller_.hover_thrust_estimate_);
+        RCLCPP_INFO(get_logger(), "Hover thrust learning rate: %.6f", controller_.hover_learning_rate_);
 
         // Set initial state
         state_manager_.setHeartbeat(GCSHeartbeat(get_time(),0));
@@ -1649,6 +1697,9 @@ private:
     int position_loop_counter_ = 2;
     const int position_loop_trigger_ = 2;
 
+    // Logging variables
+    bool logging_enabled_ = false;
+    std::string console_level_ = "INFO";
 
     // Last X Ground Distance Sensor readings
     static constexpr int max_ground_distance_readings_ = 10;

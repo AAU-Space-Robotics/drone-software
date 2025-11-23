@@ -70,6 +70,9 @@ public:
     
     float ema_filter_alpha_ = 0.01; // Alpha value for EMA filter
 
+    double hover_thrust_estimate_ = -0.5; // Initial estimated hover thrust for most drones
+    double hover_learning_rate_ = 0.0001;
+
 private:
     const FCI_Transformations& transformations_; // Reference to transformations utility
     PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust
@@ -77,7 +80,7 @@ private:
     PIDPosControllerGains position_pid_gains_;   // PID gains for position control
 
     double EMA_filter(double current_value, double previous_value) const;
-
+    
     // Constrain control outputs
     double constrainAngle(double angle) const;
     double constrainThrust(double thrust) const;
