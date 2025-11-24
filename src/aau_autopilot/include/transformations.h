@@ -8,9 +8,9 @@
 #include <rclcpp/rclcpp.hpp>
 #include "state_manager.h" 
 
-class FCI_Transformations {
+class Transformations {
 public:
-    FCI_Transformations(){}
+    Transformations(){}
 
     // GPS Origin Management
     void setGPSOrigin(const rclcpp::Time& timestamp, double latitude, double longitude, double altitude);

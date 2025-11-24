@@ -2,14 +2,14 @@
 #include <cmath>
 #include <iostream>
 
-FCI_Controller::FCI_Controller(const FCI_Transformations& transformations) 
+Controller::Controller(const Transformations& transformations) 
     : transformations_(transformations), attitude_pid_gains_() {}
 
-void FCI_Controller::setPIDGains(const PIDControllerGains& gains) {
+void Controller::setPIDGains(const PIDControllerGains& gains) {
     attitude_pid_gains_ = gains;
 }
 
-Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
+Eigen::Vector4d Controller::pidControl(double sample_time,
                                            PositionError& previous_position_error,
                                            const Stamped3DVector& position_ned_earth,
                                            const StampedQuaternion& attitude,
@@ -71,7 +71,7 @@ Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
     return {roll, -pitch, 0.0, thrust};
 }
 
-Eigen::Vector4d FCI_Controller::accelerationControl(double sample_time,
+Eigen::Vector4d Controller::accelerationControl(double sample_time,
                                                     AccelerationError& previous_acceleration_error,
                                                     const Stamped3DVector& acceleration_frd,
                                                     const Stamped3DVector& target_acceleration_frd) {
@@ -129,21 +129,21 @@ Eigen::Vector4d FCI_Controller::accelerationControl(double sample_time,
     return {0.0, 0.0, 0.0, thrust};
 }
 
-double FCI_Controller::EMA_filter(double new_value, double previous_value) const {
+double Controller::EMA_filter(double new_value, double previous_value) const {
     return ema_filter_alpha_ * previous_value + (1.0f - ema_filter_alpha_) * new_value;
 }
 
-double FCI_Controller::mapNormToAngle(double norm) const {
+double Controller::mapNormToAngle(double norm) const {
     constexpr double max_angle = M_PI / 18.0; // ~10 degrees
     return norm * max_angle;
 }
 
-double FCI_Controller::constrainAngle(double angle) const {
+double Controller::constrainAngle(double angle) const {
     constexpr double max_angle = M_PI / 18.0; // ~10 degrees
     return std::clamp(angle, -max_angle, max_angle);
 }
 
-double FCI_Controller::constrainThrust(double thrust) const {
+double Controller::constrainThrust(double thrust) const {
     constexpr double max_thrust = -0.05;
     constexpr double min_thrust = -1.0;
     return std::clamp(thrust, min_thrust, max_thrust);

@@ -3,15 +3,15 @@
 #include <eigen3/Eigen/Geometry>
 #include <iostream>
 
-FCI_PathPlanner::FCI_PathPlanner() {
+PathPlanner::PathPlanner() {
     // start_vel and start_acc are initialized to zero by Vector3d's default constructor
 }
 
-double FCI_PathPlanner::getTotalTime() const {
+double PathPlanner::getTotalTime() const {
     return total_time;
 }
 
-float FCI_PathPlanner::calculateDuration(float distance, float velocity, float min_velocity, float max_velocity) const {
+float PathPlanner::calculateDuration(float distance, float velocity, float min_velocity, float max_velocity) const {
     // Clamp velocity to valid range
     float safe_velocity = std::clamp(velocity, min_velocity, max_velocity);
 
@@ -19,7 +19,7 @@ float FCI_PathPlanner::calculateDuration(float distance, float velocity, float m
     return distance / safe_velocity;
 }
 
-bool FCI_PathPlanner::GenerateTrajectory(
+bool PathPlanner::GenerateTrajectory(
     const Eigen::Vector3d& start_pos,
     const Eigen::Vector3d& end_pos,
     const Eigen::Quaterniond& start_quat,
@@ -51,7 +51,7 @@ bool FCI_PathPlanner::GenerateTrajectory(
     return true;
 }
 
-bool FCI_PathPlanner::GenerateSpinTrajectory(
+bool PathPlanner::GenerateSpinTrajectory(
     const Eigen::Vector3d& position,
     const Eigen::Quaterniond& start_quat,
     double target_yaw,
@@ -113,7 +113,7 @@ bool FCI_PathPlanner::GenerateSpinTrajectory(
     return true;
 }
 
-TrajectoryPoint FCI_PathPlanner::evaluatePolynomial(const std::vector<double>& coefficients, double t) {
+TrajectoryPoint PathPlanner::evaluatePolynomial(const std::vector<double>& coefficients, double t) {
     TrajectoryPoint point{0.0, 0.0, 0.0};
     for (size_t i = 0; i < coefficients.size(); ++i) {
         point.position += coefficients[i] * std::pow(t, i);
@@ -127,7 +127,7 @@ TrajectoryPoint FCI_PathPlanner::evaluatePolynomial(const std::vector<double>& c
     return point;
 }
 
-FullTrajectoryPoint FCI_PathPlanner::getTrajectoryPoint(double t, trajectoryMethod method) {
+FullTrajectoryPoint PathPlanner::getTrajectoryPoint(double t, trajectoryMethod method) {
     FullTrajectoryPoint point;
     if (method == MIN_SNAP) {
         TrajectoryPoint x = evaluatePolynomial(segments[0].coefficient, t);
@@ -157,7 +157,7 @@ FullTrajectoryPoint FCI_PathPlanner::getTrajectoryPoint(double t, trajectoryMeth
 }
 
 
-std::vector<double> FCI_PathPlanner::generatePolynomialCoefficients(
+std::vector<double> PathPlanner::generatePolynomialCoefficients(
     double start, double end, double start_vel, double start_acc, double time, trajectoryMethod method) {
 
     Eigen::MatrixXd A(8, 8);
@@ -179,7 +179,7 @@ std::vector<double> FCI_PathPlanner::generatePolynomialCoefficients(
     return std::vector<double>{coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5], coeffs[6], coeffs[7]};
 }
 
-bool FCI_PathPlanner::setLinearVelocity(float linear_velocity) {
+bool PathPlanner::setLinearVelocity(float linear_velocity) {
     if (linear_velocity < min_linear_velocity_ || linear_velocity > max_linear_velocity_) {
         return false; // Invalid velocity
     }
@@ -187,7 +187,7 @@ bool FCI_PathPlanner::setLinearVelocity(float linear_velocity) {
     return true;
 }
 
-bool FCI_PathPlanner::setAngularVelocity(float angular_velocity) {
+bool PathPlanner::setAngularVelocity(float angular_velocity) {
     if (angular_velocity < min_angular_velocity_ || angular_velocity > max_angular_velocity_) {
         return false; // Invalid velocity
     }

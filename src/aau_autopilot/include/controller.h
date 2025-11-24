@@ -1,5 +1,5 @@
-#ifndef FCI_CONTROLLER_H
-#define FCI_CONTROLLER_H
+#ifndef CONTROLLER_H
+#define CONTROLLER_H
 
 #include <eigen3/Eigen/Dense>
 #include "state_manager.h" // For Stamped3DVector, StampedQuaternion, etc.
@@ -28,9 +28,9 @@ struct AccelerationControllerGains {
     PIDGains thrust{0.4, 0.0, 0.0};
 };
 
-class FCI_Controller {
+class Controller {
 public:
-    explicit FCI_Controller(const FCI_Transformations& transformations);
+    explicit Controller(const Transformations& transformations);
 
     // Set PID gains for attitude and thrust
     void setPIDGains(const PIDControllerGains& gains);
@@ -55,7 +55,7 @@ public:
     float ema_filter_alpha_ = 0.01; // Alpha value for EMA filter
 
 private:
-    const FCI_Transformations& transformations_; // Reference to transformations utility
+    const Transformations& transformations_; // Reference to transformations utility
     PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust
     AccelerationControllerGains acceleration_pid_gains_; // PID gains for acceleration
 

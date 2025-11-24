@@ -270,8 +270,8 @@ struct PositionError {
     PIDError Yaw;
 };
 
-// FCI_StateManager class definition
-class FCI_StateManager {
+// StateManager class definition
+class StateManager {
 public:
     // Thread-safe setters and getters for NED_Data
     void setGlobalPosition(const Stamped3DVector& new_data);

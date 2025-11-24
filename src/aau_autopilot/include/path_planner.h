@@ -26,9 +26,9 @@ enum trajectoryMethod {
     MIN_SNAP
 };
 
-class FCI_PathPlanner {
+class PathPlanner {
 public:
-    FCI_PathPlanner();
+    PathPlanner();
 
     float current_linear_velocity_ = 0.15;    
     float current_angular_velocity_ = 0.15;   
@@ -93,7 +93,7 @@ private:
 
     float calculateDuration(float distance, float velocity, float min_velocity, float max_velocity) const;
 
-    FCI_Transformations transformations_;
+    Transformations transformations_;
 };
 
 #endif // PATHPLANNER_H
