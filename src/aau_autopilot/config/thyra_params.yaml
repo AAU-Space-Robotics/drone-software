@@ -1,4 +1,4 @@
-flight_controller_interface:
+aau_autopilot_node:
   ros__parameters:
     # Controller Parameters
     controller:
@@ -19,6 +19,10 @@ flight_controller_interface:
           Kp: 0.8
           Ki: 0.0
           Kd: 0.12
+        hover_thrust_setpoint_estimate:
+          base_value: -0.7        # Base value for hover thrust estimate
+          learned_value: -0.7      # Initial learned value for hover thrust estimate
+          learning_rate: 0.0001      # Learning rate for hover thrust adaptation
       ema:
         alpha: 0.15 # Exponential moving average factor for smoothing
       constraints:
@@ -39,7 +43,7 @@ flight_controller_interface:
     safety:
       check_gcs_timeout: true           # Check for ground control station timeout
       check_position_timeout: false     # Check for position data timeout
-      check_geofence: true              # Check for geofence violations
+      check_geofence: false              # Check for geofence violations
       check_battery: true               # Check battery status
       battery_threshold: 0.05           # Battery threshold for safety (0-1 scale)
       gcs_timeout_threshold: 1.0        # Timeout for ground control station input (seconds)

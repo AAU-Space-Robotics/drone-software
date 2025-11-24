@@ -83,7 +83,7 @@ def generate_launch_description():
                 Node(
                     package='aau_autopilot',
                     executable='aau_autopilot',
-                    name='aau_autopilot_simulato_node',
+                    name='aau_autopilot_node',
                     remappings=[
                         ('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),
                         ('/fmu/out/battery_status', '/fmu/out/battery_status_v1'),

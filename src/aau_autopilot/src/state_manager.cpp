@@ -71,6 +71,16 @@ Stamped4DVector StateManager::getTargetPositionProfile() {
     return target_position_profile_;   
 }
 
+void StateManager::setTargetVelocityProfile(const Stamped3DVector& new_data) {
+    std::lock_guard<std::mutex> lock(target_velocity_profile_mutex_);
+    target_velocity_profile_ = new_data;   
+}
+
+Stamped3DVector StateManager::getTargetVelocityProfile() {
+    std::lock_guard<std::mutex> lock(target_velocity_profile_mutex_);
+    return target_velocity_profile_;
+}
+
 void StateManager::setTargetAttitude(const StampedQuaternion& new_data) {
     std::lock_guard<std::mutex> lock(target_attitude_mutex_);
     target_attitude_ = new_data;   
@@ -167,13 +177,31 @@ PositionError StateManager::getPositionError() {
 
 // ---
 
-void StateManager::setLatestControlSignal(const Eigen::Vector4d& new_data) {
-    std::lock_guard<std::mutex> lock(latest_control_signal_mutex_);
-    latest_control_signal_ = new_data;   
+void StateManager::setLatestControlSignalPositionOnly(const Eigen::Vector4d& new_data) {
+    std::lock_guard<std::mutex> lock(latest_control_signal_position_only_mutex_);
+    latest_control_signal_position_only_ = new_data;   
 }
-Eigen::Vector4d StateManager::getLatestControlSignal() {
-    std::lock_guard<std::mutex> lock(latest_control_signal_mutex_);
-    return latest_control_signal_;   
+Eigen::Vector4d StateManager::getLatestControlSignalPositionOnly() {
+    std::lock_guard<std::mutex> lock(latest_control_signal_position_only_mutex_);
+    return latest_control_signal_position_only_;   
+}
+
+void StateManager::setLatestControlSignalPosition(const Eigen::Vector3d& new_data) {
+    std::lock_guard<std::mutex> lock(latest_control_signal_position_mutex_);
+    latest_control_signal_position_ = new_data;   
+}
+Eigen::Vector3d StateManager::getLatestControlSignalPosition() {
+    std::lock_guard<std::mutex> lock(latest_control_signal_position_mutex_);
+    return latest_control_signal_position_;   
+}
+
+void StateManager::setLatestControlSignalVelocity(const Eigen::Vector4d& new_data) {
+    std::lock_guard<std::mutex> lock(latest_control_signal_velocity_mutex_);
+    latest_control_signal_velocity_ = new_data;   
+}
+Eigen::Vector4d StateManager::getLatestControlSignalVelocity() {
+    std::lock_guard<std::mutex> lock(latest_control_signal_velocity_mutex_);
+    return latest_control_signal_velocity_;   
 }
 
 // ---

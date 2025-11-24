@@ -50,8 +50,8 @@ def generate_launch_description():
             actions=[
                 Node(
                     package='aau_autopilot',
-                    executable='aau_autopilot_mocap_node',
-                    name='flight_controller_interface',
+                    executable='aau_autopilot',
+                    name='aau_autopilot_node',
                     output='screen',
                     parameters=[
                         params_path,

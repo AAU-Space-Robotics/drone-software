@@ -51,7 +51,7 @@ def generate_launch_description():
             ],
         ),
 
-        # Start Lidar node
+        # Start LED node
         Node(
             package='sensors',
             executable='LED.py',

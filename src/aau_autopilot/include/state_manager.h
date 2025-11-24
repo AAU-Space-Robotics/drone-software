@@ -257,17 +257,24 @@ struct PIDError {
     double error_integral;
 };
 
-struct AccelerationError {
-    PIDError X;
-    PIDError Y;
-    PIDError Z;
-};
-
 struct PositionError {
     PIDError X;
     PIDError Y;
     PIDError Z;
     PIDError Yaw;
+};
+
+
+struct VelocityError {
+    PIDError X;
+    PIDError Y;
+    PIDError Z;
+};
+
+struct AccelerationError {
+    PIDError X;
+    PIDError Y;
+    PIDError Z;
 };
 
 // StateManager class definition
@@ -291,6 +298,9 @@ public:
 
     void setTargetPositionProfile(const Stamped4DVector& new_data);
     Stamped4DVector getTargetPositionProfile();
+
+    void setTargetVelocityProfile(const Stamped3DVector& new_data);
+    Stamped3DVector getTargetVelocityProfile();
 
     void setTargetAttitude(const StampedQuaternion& new_data);
     StampedQuaternion getTargetAttitude();
@@ -316,8 +326,14 @@ public:
     void setAccelerationError(const AccelerationError& new_data);
     AccelerationError getAccelerationError();
 
-    void setLatestControlSignal(const Eigen::Vector4d& new_data);
-    Eigen::Vector4d getLatestControlSignal();
+    void setLatestControlSignalPositionOnly(const Eigen::Vector4d& new_data);
+    Eigen::Vector4d getLatestControlSignalPositionOnly();
+
+    void setLatestControlSignalPosition(const Eigen::Vector3d& new_data);
+    Eigen::Vector3d getLatestControlSignalPosition();
+
+    void setLatestControlSignalVelocity(const Eigen::Vector4d& new_data);
+    Eigen::Vector4d getLatestControlSignalVelocity();
 
     void setGroundDistanceState(const Stamped3DVector& new_data);
     Stamped3DVector getGroundDistanceState();
@@ -341,13 +357,16 @@ private:
     std::mutex ground_distance_state_mutex_;
     std::mutex attitude_data_mutex_;
     std::mutex target_position_profile_mutex_;
+    std::mutex target_velocity_profile_mutex_;
     std::mutex target_attitude_mutex_;
     std::mutex drone_cmd_ack_mutex_;
     std::mutex drone_state_mutex_;
     std::mutex manual_control_input_mutex_;
     std::mutex acceleration_error_mutex_;
     std::mutex position_error_mutex_;
-    std::mutex latest_control_signal_mutex_;
+    std::mutex latest_control_signal_position_only_mutex_;
+    std::mutex latest_control_signal_position_mutex_;
+    std::mutex latest_control_signal_velocity_mutex_;
     std::mutex battery_state_mutex_;
     std::mutex actuator_speeds_mutex_;
     std::mutex probe_global_locations_mutex_;
@@ -363,6 +382,7 @@ private:
     Stamped3DVector ground_distance_state_;
     StampedQuaternion attitude_;
     Stamped4DVector target_position_profile_;
+    Stamped3DVector target_velocity_profile_;
     StampedQuaternion target_attitude_;
     DroneCmdAck drone_cmd_ack_;
     DroneState drone_state_;
@@ -370,7 +390,9 @@ private:
     Stamped4DVector manual_control_input_;
     AccelerationError acceleration_error_;
     PositionError position_error_;
-    Eigen::Vector4d latest_control_signal_ = Eigen::Vector4d::Zero(); // Initialize to zero
+    Eigen::Vector4d latest_control_signal_position_only_ = Eigen::Vector4d::Zero(); // Initialize to zero
+    Eigen::Vector3d latest_control_signal_position_ = Eigen::Vector3d::Zero(); // Initialize to zero
+    Eigen::Vector4d latest_control_signal_velocity_ = Eigen::Vector4d::Zero(); // Initialize to zero
     Stamped4DVector actuator_speeds_ = Stamped4DVector(rclcpp::Time(0, 0), 0.0, 0.0, 0.0, 0.0);
     GlobalProbeLocations probe_global_locations_;
 
