@@ -44,17 +44,17 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(implot)
 
 # tinyxml2
-FetchContent_Declare(
-  tinyxml2
-  GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
-  GIT_TAG        master
-)
+# FetchContent_Declare(
+#   tinyxml2
+#   GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
+#   GIT_TAG        master
+# )
 # Disable testing for tinyxml2
-set(BUILD_TESTING OFF CACHE BOOL "Disable tinyxml2 tests" FORCE)
-FetchContent_MakeAvailable(tinyxml2)
+#set(BUILD_TESTING OFF CACHE BOOL "Disable tinyxml2 tests" FORCE)
+#FetchContent_MakeAvailable(tinyxml2)
 
 # Ensure tinyxml2 is built with -fPIC
-set_target_properties(tinyxml2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+#set_target_properties(tinyxml2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
 
@@ -67,7 +67,7 @@ include_directories(
   ${imgui_SOURCE_DIR}/backends
   ${glfw_SOURCE_DIR}/include
   ${implot_SOURCE_DIR}      # Add ImPlot include directory
-  ${tinyxml2_SOURCE_DIR}    # Add tinyxml2 include directory
+  #${tinyxml2_SOURCE_DIR}    # Add tinyxml2 include directory
   ${CMAKE_SOURCE_DIR}/include
 )
 
@@ -91,6 +91,7 @@ install(PROGRAMS
   script/manual_controller.py
   script/manual_arrow_controller.py
   script/GUI.py
+  script/sampler.py
   script/drone_state_publisher.py
   script/MotionCaptureReceiver.py
   script/gcs_heartbeat.py
@@ -103,7 +104,7 @@ install(PROGRAMS
 target_link_libraries(gcs_node
   OpenGL::GL      # Link OpenGL
   glfw            # Link GLFW
-  tinyxml2        # Link tinyxml2 from FetchContent
+  #tinyxml2        # Link tinyxml2 from FetchContent
 )
 
 # Ensure ROS 2 dependencies are added correctly

@@ -11,7 +11,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 def generate_launch_description():
     # Define workspace directory (one level up from package)
-    pkg_share = FindPackageShare('fc_interface')
+    pkg_share = FindPackageShare('aau_autopilot')
     sensors_pkg_share = FindPackageShare('sensors')
     
     # Path to the simulation config file
@@ -51,7 +51,7 @@ def generate_launch_description():
             ],
         ),
 
-        # Start Lidar node
+        # Start LED node
         Node(
             package='sensors',
             executable='LED.py',
@@ -71,9 +71,9 @@ def generate_launch_description():
             period=15.0,  # Delay in seconds
             actions=[
                 Node(
-                    package='fc_interface',
-                    executable='fci',
-                    name='flight_controller_interface',
+                    package='aau_autopilot',
+                    executable='aau_autopilot',
+                    name='aau_autopilot_node',
                     remappings=[
                         ('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),
                         ('/fmu/in/vehicle_attitude_setpoint', '/fmu/in/vehicle_attitude_setpoint_v1'),
