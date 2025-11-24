@@ -34,10 +34,10 @@ flight_controller_interface:
       
     # Safety Parameters
     safety:
-      check_gcs_timeout: true          # Check for ground control station timeout
+      check_gcs_timeout: false          # Check for ground control station timeout
       check_position_timeout: false     # Check for position data timeout
       check_battery: true               # Check battery status
-      check_geofence: true              # Check for geofence violations
+      check_geofence: false              # Check for geofence violations
       battery_threshold: 0.05           # Battery threshold for safety (0-1 scale)
       gcs_timeout_threshold: 1.0        # Timeout for ground control station input (seconds)
       position_timeout_threshold: 0.2   # Timeout for position data (seconds)
