@@ -70,7 +70,7 @@ flight_controller_interface:
 
     # Logging Parameters
     logging:
-      enabled: false
+      enabled: true
       console_level: INFO # INFO, DEBUG, WARN, ERROR
 
     # Setup Parameters
