@@ -1347,17 +1347,19 @@ private:
                 setDroneMode(FlightMode::POSITION);
                 ensureControlLoopRunning(2); // Magic number 2 is position control mode
 
-                // Set the takeoff position and orientation based on current state
+                // Set the current position and orientation
+                Eigen::Quaterniond takeoff_quat = state_manager_.getAttitude().quaternion().normalized();;
                 Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-                Eigen::Quaterniond takeoff_quat = state_manager_.getAttitude().quaternion().normalized();
                 Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
-
                 Eigen::Vector3d current_velocity = state_manager_.getGlobalVelocity().vector();
                 Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
+                
+                // Get current yaw and make roll and pitch be zero
+                float takeoff_yaw = transformations_.quaternionToEuler(takeoff_quat).z();
+                Eigen::Quaterniond target_quat = transformations_.eulerToQuaternion(0.0, 0.0, takeoff_yaw).normalized();
 
                 // Set the target takeoff goal, at least 1.5m above current position with current orientation
                 Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], takeoff_height_ + target_profile.z())};
-                Eigen::Quaterniond target_quat = takeoff_quat; // Preserve current orientation for takeoff
 
                 // Generate takeoff trajectory
                 path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, trajectoryMethod::MIN_SNAP);
