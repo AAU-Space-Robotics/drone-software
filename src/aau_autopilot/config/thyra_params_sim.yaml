@@ -1,4 +1,4 @@
-flight_controller_interface:
+aau_autopilot_node:
   ros__parameters:
     # Controller Parameters
     controller:
@@ -17,16 +17,7 @@ flight_controller_interface:
           Kp: 1.0
           Ki: 0.0
           Kd: 0.01
-
       pid_gains:
-        #roll:
-        #  Kp: 0.34
-        #  Ki: 0.05
-        #  Kd: 0.08
-        #pitch:
-        #  Kp: 0.30
-        #  Ki: 0.05
-        #  Kd: 0.095
         roll:
           Kp: 0.15
           Ki: 0.01
@@ -40,12 +31,16 @@ flight_controller_interface:
           Ki: 0.0
           Kd: 0.05
         thrust:
-          Kp: 2.3 
-          Ki: 0.8
-          Kd: 1.2
+          Kp: 0.5 
+          Ki: 0.1
+          Kd: 0.01
+        hover_thrust_setpoint:
+          base_value: -0.7        # Base value for hover thrust estimate
+          learned_value: -0.7      # Initial learned value for hover thrust estimate
+          learning_rate: 0.0001      # Learning rate for hover thrust adaptation
       ema:
         alpha: 0.15 # Exponential moving average factor for smoothing
-    
+
     path_planner:
       default:
         linear_velocity: 0.4    # Default linear velocity (m/s)
@@ -72,6 +67,11 @@ flight_controller_interface:
       geofence_height: 50.0            # Geofence height (meters)
       do_mode_change_delay: false        # Enable mode change delay
       mode_change_delay: 0.0           # Mode change delay (seconds)
+
+    # Logging Parameters
+    logging:
+      enabled: true
+      console_level: INFO # INFO, DEBUG, WARN, ERROR
 
     # Setup Parameters
     setup:

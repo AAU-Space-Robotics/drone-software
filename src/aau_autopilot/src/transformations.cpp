@@ -1,6 +1,6 @@
-#include "fci_transformations.h"
+#include "transformations.h"
 
-Stamped3DVector FCI_Transformations::accelerationLocalToGlobal(const rclcpp::Time& timestamp, 
+Stamped3DVector Transformations::accelerationLocalToGlobal(const rclcpp::Time& timestamp, 
                                                               const Eigen::Quaterniond& attitude, 
                                                               const Eigen::Vector3d& acceleration_local) const {
     Eigen::Vector3d acceleration_global = attitude * acceleration_local;
@@ -12,14 +12,14 @@ Stamped3DVector FCI_Transformations::accelerationLocalToGlobal(const rclcpp::Tim
     return result;
 }
 
-Eigen::Quaterniond FCI_Transformations::eulerToQuaternion(double roll, double pitch, double yaw) const {
+Eigen::Quaterniond Transformations::eulerToQuaternion(double roll, double pitch, double yaw) const {
     Eigen::Quaterniond q = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) *
                            Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) *
                            Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
     return q.normalized();
 }
 
-Eigen::Vector3d FCI_Transformations::quaternionToEuler(const Eigen::Quaterniond& q) const {
+Eigen::Vector3d Transformations::quaternionToEuler(const Eigen::Quaterniond& q) const {
     // Get Euler angles in ZYX convention (yaw, pitch, roll)
     Eigen::Vector3d euler = q.toRotationMatrix().eulerAngles(2, 1, 0);
     
@@ -45,20 +45,20 @@ Eigen::Vector3d FCI_Transformations::quaternionToEuler(const Eigen::Quaterniond&
     return Eigen::Vector3d(yaw, pitch, roll);
 }
 
-Eigen::Vector3d FCI_Transformations::errorGlobalToLocal(const Eigen::Vector3d& error_ned_earth, 
+Eigen::Vector3d Transformations::errorGlobalToLocal(const Eigen::Vector3d& error_ned_earth, 
                                                        const Eigen::Quaterniond& attitude_frd_to_ned) const {
     return attitude_frd_to_ned.conjugate() * error_ned_earth;
 }
 
-double FCI_Transformations::degToRad(double degrees) const {
+double Transformations::degToRad(double degrees) const {
     return degrees * M_PI / 180.0;
 }
 
-double FCI_Transformations::radToDeg(double radians) const {
+double Transformations::radToDeg(double radians) const {
     return radians * 180.0 / M_PI;
 }
 
-double FCI_Transformations::unwrapAngle(double angle, double max, double min) const {
+double Transformations::unwrapAngle(double angle, double max, double min) const {
     // Unwrap the angle to be within the range [min, max]    
     while (angle > max) angle -= 2.0 * M_PI;
     while (angle < min) angle += 2.0 * M_PI;

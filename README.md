@@ -166,13 +166,13 @@ source install/setup.bash
 
 This step ensures your ROS 2 environment recognizes the drone software and message definitions. You’ll need to run this command in every new terminal session unless you add it to your `~/.bashrc` for automatic sourcing.
 
-## fc_interface Package
+## aau_autopilot Package
 
-Currently, `fc_interface` is the only package containing nodes that must be run directly on the onboard computer. This package includes a set of custom software stacks that enable drone control using the methods described below.
+Currently, `aau_autopilot` is the only package containing nodes that must be run directly on the onboard computer. This package includes a set of custom software stacks that enable drone control using the methods described below.
 
 ### 1. Establish Connection with the Flight Controller
 
-For the `fc_interface` package to function, it requires the ROS 2 communication channel established by the `MicroXRCEAgent`. If the setup steps in Section 1 have not been performed, return and complete them. If setup is complete, use the following command to open the node, which publishes and subscribes to a specific set of ROS 2 topics:
+For the `aau_autopilot` package to function, it requires the ROS 2 communication channel established by the `MicroXRCEAgent`. If the setup steps in Section 1 have not been performed, return and complete them. If setup is complete, use the following command to open the node, which publishes and subscribes to a specific set of ROS 2 topics:
 
 ```bash
 MicroXRCEAgent serial --dev /dev/serial0 -b 921600
@@ -303,7 +303,7 @@ docker build -t probe_perception:latest -f docker/dockerfile_perception .
 %Vertiual enviroment
 source ~/drone-software/venv/bin/activate
 
-
+source /opt/ros/jazzy/setup.bash
 
 Matlab:
 ros2genmsg('/home/daroe/drone-software/src', CreateShareableFile=true);

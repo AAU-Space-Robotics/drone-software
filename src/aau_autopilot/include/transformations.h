@@ -1,16 +1,16 @@
-#ifndef FCI_TRANSFORMATIONS_H
-#define FCI_TRANSFORMATIONS_H
+#ifndef TRANSFORMATIONS_H
+#define TRANSFORMATIONS_H
 
 #include <mutex>
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/Geometry>
 #include <cmath>
 #include <rclcpp/rclcpp.hpp>
-#include "fci_state_manager.h" 
+#include "state_manager.h" 
 
-class FCI_Transformations {
+class Transformations {
 public:
-    FCI_Transformations(){}
+    Transformations(){}
 
     // GPS Origin Management
     void setGPSOrigin(const rclcpp::Time& timestamp, double latitude, double longitude, double altitude);
@@ -40,4 +40,4 @@ private:
 
 };
 
-#endif // FCI_TRANSFORMATIONS_H
+#endif // TRANSFORMATIONS_H

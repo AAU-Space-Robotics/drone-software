@@ -1,24 +1,25 @@
-#include "fci_controller.h"
+#include "controller.h"
 #include <cmath>
 #include <iostream>
 
-FCI_Controller::FCI_Controller(const FCI_Transformations& transformations) 
+Controller::Controller(const Transformations& transformations) 
     : transformations_(transformations), attitude_pid_gains_() {}
 
-void FCI_Controller::setPIDGains(const PIDControllerGains& gains) {
+void Controller::setPIDGains(const PIDControllerGains& gains) {
     attitude_pid_gains_ = gains;
 }
 
-void FCI_Controller::setPositionPIDGains(const PIDPosControllerGains& gains) {
+
+void Controller::setPositionPIDGains(const PIDPosControllerGains& gains) {
     position_pid_gains_ = gains;
 }
 
-Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
-                                           PositionError& previous_position_error,
-                                           const Stamped3DVector& position_ned_earth,
-                                           const StampedQuaternion& attitude,
-                                           const Stamped3DVector& target_position_ned_earth,
-                                           const Eigen::Vector4d& previous_control_signal) {
+Eigen::Vector4d Controller::pidControl( double sample_time,
+                                        PositionError& previous_position_error,
+                                        const Stamped3DVector& position_ned_earth,
+                                        const StampedQuaternion& attitude,
+                                        const Stamped3DVector& target_position_ned_earth,
+                                        const Eigen::Vector4d& previous_control_signal) {
     // Calculate position error in NED frame
     Eigen::Vector3d position_error_ned = target_position_ned_earth.vector() - position_ned_earth.vector();
     Eigen::Vector3d position_error_ned_d = (position_error_ned - 
@@ -75,12 +76,12 @@ Eigen::Vector4d FCI_Controller::pidControl(double sample_time,
     return {roll, -pitch, 0.0, thrust};
 }
 
-Eigen::Vector3d FCI_Controller::positionControl(double sample_time,
-                                               PositionError& previous_position_error,
-                                               const Stamped3DVector& position_ned_earth,
-                                               const StampedQuaternion& attitude,
-                                               const Stamped3DVector& target_position_ned_earth,
-                                               const Eigen::Vector3d& /*previous_control_signal*/) 
+Eigen::Vector3d Controller::positionControl(double sample_time,
+                                           PositionError& previous_position_error,
+                                           const Stamped3DVector& position_ned_earth,
+                                           const StampedQuaternion& attitude,
+                                           const Stamped3DVector& target_position_ned_earth,
+                                           const Eigen::Vector3d& /*previous_control_signal*/) 
 {
     // Position error in NED
     Eigen::Vector3d position_error_ned = target_position_ned_earth.vector() - position_ned_earth.vector();
@@ -119,7 +120,7 @@ Eigen::Vector3d FCI_Controller::positionControl(double sample_time,
 }
 
 
-Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
+Eigen::Vector4d Controller::velocityControl(double sample_time,
                                                 VelocityError& previous_velocity_error,
                                                 const Stamped3DVector& velocity_ned_earth,
                                                 const StampedQuaternion& attitude,
@@ -152,15 +153,11 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
 
     double yaw_cmd = 0.0; // Yaw command
 
-    double thrust_cmd = attitude_pid_gains_.thrust.Kp * velocity_error_frd.z() +
+    double thrust_cmd = hover_thrust_estimate_ + attitude_pid_gains_.thrust.Kp * velocity_error_frd.z() +
                         attitude_pid_gains_.thrust.Ki * integral_velocity_error_frd.z() +
                         attitude_pid_gains_.thrust.Kd * velocity_error_frd_d.z();
 
-    //std::cout << "Raw Control: thrust=" << thrust_cmd << std::endl;
-    double tilt_compensation = 1.0 / std::max(std::cos(roll_cmd) * std::cos(pitch_cmd), 0.5);
-    double compensation_factor = 0.3; // Vi kan skrue op og ned på denne
-    thrust_cmd *= (1.0 + (tilt_compensation - 1.0) * compensation_factor);
-    // Constrain outputs
+     // Constrain outputs
     roll_cmd = constrainAngle(roll_cmd);
     pitch_cmd = constrainAngle(pitch_cmd);
     thrust_cmd = constrainThrust(thrust_cmd);
@@ -172,31 +169,26 @@ Eigen::Vector4d FCI_Controller::velocityControl(double sample_time,
     previous_velocity_error.Y.error = velocity_error_ned.y();
     previous_velocity_error.Z.error = velocity_error_ned.z();
 
-    // print roll and pitch commands
-    std::cout << "Control Commands: roll=" << roll_cmd
-              << ", pitch=" << pitch_cmd << std::endl;    
-//
     // Return control outputs (roll, pitch, yaw, thrust)
     return Eigen::Vector4d(roll_cmd, -pitch_cmd, yaw_cmd, thrust_cmd);
 
 }
 
-
-double FCI_Controller::EMA_filter(double new_value, double previous_value) const {
+double Controller::EMA_filter(double new_value, double previous_value) const {
     return ema_filter_alpha_ * previous_value + (1.0f - ema_filter_alpha_) * new_value;
 }
 
-double FCI_Controller::mapNormToAngle(double norm) const {
-    constexpr double max_angle = M_PI / 9.0; // ~19.5 degrees
+double Controller::mapNormToAngle(double norm) const {
+    constexpr double max_angle = M_PI / 9.0; // ~19.5 degrees //! Make configurable?
     return norm * max_angle;
 }
 
-double FCI_Controller::constrainAngle(double angle) const {
-    constexpr double max_angle = M_PI / 9.0; // ~19.5 degrees
+double Controller::constrainAngle(double angle) const {
+    constexpr double max_angle = M_PI / 9.0; // ~19.5 degrees //! Make configurable?
     return std::clamp(angle, -max_angle, max_angle);
 }
 
-double FCI_Controller::constrainThrust(double thrust) const {
+double Controller::constrainThrust(double thrust) const {
     constexpr double max_thrust = -0.05;
     constexpr double min_thrust = -1.0;
     return std::clamp(thrust, min_thrust, max_thrust);

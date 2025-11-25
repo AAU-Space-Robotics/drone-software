@@ -1,5 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include <rcutils/logging.h>
 #include "geometry_msgs/msg/pose_stamped.hpp"
 
 #include <px4_msgs/msg/offboard_control_mode.hpp>
@@ -23,22 +24,22 @@
 #include <interfaces/msg/gcs_heartbeat.hpp>
 #include <interfaces/msg/probe_global_locations.hpp>
 
-#include "fci_controller.h"
-#include "fci_state_manager.h"
-#include "fci_transformations.h"
-#include "fci_path_planner.h"
+#include "controller.h"
+#include "state_manager.h"
+#include "transformations.h"
+#include "path_planner.h"
 
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
 
-class FlightControllerInterface : public rclcpp::Node
+class AAUAutopilot : public rclcpp::Node
 {
 public:
     using DroneCommand = interfaces::action::DroneCommand;
     using GoalHandleDroneCommand = rclcpp_action::ServerGoalHandle<DroneCommand>;
 
-    FlightControllerInterface()
-    : Node("flight_controller_interface"),
+    AAUAutopilot()
+    : Node("aau_autopilot_node"),
       controller_(transformations_),
       offboard_setpoint_counter_(0),
       offboard_mode_set_(false),
@@ -48,8 +49,52 @@ public:
         rclcpp::QoS qos(10);
         qos.reliability(rclcpp::ReliabilityPolicy::BestEffort);
         qos.durability(rclcpp::DurabilityPolicy::TransientLocal);
+        
+         std::cout << "\n"
+          << "=============================\n"
+          << "    * THYRA STARTING... *\n"
+          << "=============================\n"
+          << std::endl;
 
-        // Determine time source at initialization
+        // Load and apply logging configuration from YAML
+        this->declare_parameter("logging.enabled", true);
+        this->declare_parameter("logging.console_level", "INFO");
+
+        bool logging_enabled = this->get_parameter("logging.enabled").as_bool();
+        std::string console_level = this->get_parameter("logging.console_level").as_string();
+
+        if (logging_enabled) {
+            // Map string to logger severity level
+            int severity = RCUTILS_LOG_SEVERITY_INFO;
+            
+            if (console_level == "DEBUG") {
+                severity = RCUTILS_LOG_SEVERITY_DEBUG;
+            } else if (console_level == "INFO") {
+                severity = RCUTILS_LOG_SEVERITY_INFO;
+            } else if (console_level == "WARN") {
+                severity = RCUTILS_LOG_SEVERITY_WARN;
+            } else if (console_level == "ERROR") {
+                severity = RCUTILS_LOG_SEVERITY_ERROR;
+            } else {
+                RCLCPP_WARN(this->get_logger(), 
+                            "Unknown log level '%s', defaulting to INFO", 
+                            console_level.c_str());
+                severity = RCUTILS_LOG_SEVERITY_INFO;
+            }
+            
+            auto ret = rcutils_logging_set_logger_level(this->get_logger().get_name(), severity);
+            if (ret != RCUTILS_RET_OK) {
+                RCLCPP_ERROR(this->get_logger(), "Failed to set logger level");
+            }
+        } else {
+            // Disable logging by setting to FATAL level (only fatal errors will show)
+            auto ret = rcutils_logging_set_logger_level(this->get_logger().get_name(), 
+                                                        RCUTILS_LOG_SEVERITY_FATAL);
+            if (ret != RCUTILS_RET_OK) {
+                RCLCPP_ERROR(this->get_logger(), "Failed to disable logging");
+            }
+        }
+        // Determine time source at initialization - simulated or system time
         bool use_sim_time = false;
         if (!this->has_parameter("use_sim_time")) {
             this->declare_parameter("use_sim_time", false);
@@ -127,12 +172,20 @@ public:
         this->get_parameter("path_planner.default.linear_velocity", path_planner_.current_linear_velocity_);
         this->get_parameter("path_planner.default.angular_velocity", path_planner_.current_angular_velocity_);
 
-        RCLCPP_INFO(get_logger(), "Path planner constraints: min_linear_velocity=%.2f, min_angular_velocity=%.2f, "
-                    "max_linear_velocity=%.2f, max_angular_velocity=%.2f",
-                    path_planner_.min_linear_velocity_, path_planner_.min_angular_velocity_,
-                    path_planner_.max_linear_velocity_, path_planner_.max_angular_velocity_);
-        RCLCPP_INFO(get_logger(), "Path planner default velocities: linear=%.2f, angular=%.2f",
-                    path_planner_.current_linear_velocity_, path_planner_.current_angular_velocity_);
+        RCLCPP_INFO(get_logger(),
+            "Path planner parameters:\n"
+            "  min_linear_velocity     = %.2f m/s\n"
+            "  min_angular_velocity    = %.2f rad/s\n"
+            "  max_linear_velocity     = %.2f m/s\n"
+            "  max_angular_velocity    = %.2f rad/s\n"
+            "  default_linear_velocity = %.2f m/s\n"
+            "  default_angular_velocity= %.2f rad/s",
+            path_planner_.min_linear_velocity_,
+            path_planner_.min_angular_velocity_,
+            path_planner_.max_linear_velocity_,
+            path_planner_.max_angular_velocity_,
+            path_planner_.current_linear_velocity_,
+            path_planner_.current_angular_velocity_);
 
 
         // Set PID gains in controller
@@ -169,16 +222,32 @@ public:
         this->get_parameter("safety.do_mode_change_delay", do_mode_change_delay_);
         this->get_parameter("safety.mode_change_delay", mode_change_delay_);
 
-        RCLCPP_INFO(get_logger(), "Safety parameters: gcs_timeout=%.2f, position_timeout=%.2f, "
-            "safety_thrust_initial=%.2f, safety_thrust_final=%.2f, safety_thrustdown_rate=%.4f, "
-            "check_battery=%d, battery_threshold=%.2f, "
-            "check_geofence=%d, geofence_radius=%.2f, geofence_height=%.2f, "
-            "do_mode_change_delay=%d, mode_change_delay=%.2f",
-            gcs_timeout_threshold_, position_timeout_threshold_,
-            safety_thrust_initial_, safety_thrust_final_, safety_thrustdown_rate_,
-            safety_check_battery_, safety_battery_threshold_,
-            safety_check_geofence_, safety_geofence_radius_,
-            safety_geofence_height_, do_mode_change_delay_, mode_change_delay_);
+        RCLCPP_INFO(get_logger(),
+            "Safety parameters:\n"
+            "  gcs_timeout            = %.2f s\n"
+            "  position_timeout       = %.2f s\n"
+            "  safety_thrust_initial  = %.2f\n"
+            "  safety_thrust_final    = %.2f\n"
+            "  safety_thrustdown_rate = %.4f\n"
+            "  check_battery          = %s\n"
+            "  battery_threshold      = %.2f\n"
+            "  check_geofence         = %s\n"
+            "  geofence_radius        = %.2f m\n"
+            "  geofence_height        = %.2f m\n"
+            "  do_mode_change_delay   = %s\n"
+            "  mode_change_delay      = %.2f s",
+            gcs_timeout_threshold_,
+            position_timeout_threshold_,
+            safety_thrust_initial_,
+            safety_thrust_final_,
+            safety_thrustdown_rate_,
+            safety_check_battery_ ? "true" : "false",
+            safety_battery_threshold_,
+            safety_check_geofence_ ? "true" : "false",
+            safety_geofence_radius_,
+            safety_geofence_height_,
+            do_mode_change_delay_ ? "true" : "false",
+            mode_change_delay_);
 
         // Load setup parameters
         this->declare_parameter("setup.lidar_offset", 0.0);
@@ -194,6 +263,15 @@ public:
         RCLCPP_INFO(get_logger(), "Takeoff height: %.2f", takeoff_height_);
         RCLCPP_INFO(get_logger(), "Motor speed min: %.2f", motor_speed_min_);
         RCLCPP_INFO(get_logger(), "Motor speed max: %.2f", motor_speed_max_);
+
+        // hover_thrust_estimate_
+        this->declare_parameter("controller.pid_gains.hover_thrust_setpoint.base_value", -0.5);
+        this->declare_parameter("controller.pid_gains.hover_thrust_setpoint.learning_rate", 0.0001);
+        this->get_parameter("controller.pid_gains.hover_thrust_setpoint.base_value", controller_.hover_thrust_estimate_);
+        this->get_parameter("controller.pid_gains.hover_thrust_setpoint.learning_rate", controller_.hover_learning_rate_);
+
+        RCLCPP_INFO(get_logger(), "Hover thrust estimate: %.3f", controller_.hover_thrust_estimate_);
+        RCLCPP_INFO(get_logger(), "Hover thrust learning rate: %.6f", controller_.hover_learning_rate_);
 
         // Set initial state
         state_manager_.setHeartbeat(GCSHeartbeat(get_time(),0));
@@ -283,14 +361,15 @@ public:
         safety_timer_ = create_wall_timer(200ms, [this]() { safetyCheckCallback(); });
         offset_timer = create_wall_timer(1000ms, [this]() { publish_origin_offset(); });
 
-        RCLCPP_INFO(get_logger(), "FlightControllerInterface initialized.");
-
-        //Set origin
+        std::cout << "\n"
+          << "=============================\n"
+          << "    * THYRA OPERATIONAL *\n"
+          << "=============================\n"
+          << std::endl;
         
+        //Set origin
         Stamped3DVector current_position = state_manager_.getGlobalPosition();
         state_manager_.setOrigin(current_position);
-
-
     }
 
     rclcpp::Time get_time() const {
@@ -398,21 +477,21 @@ private:
     }
 
     bool geofence_violated(Eigen::Vector3d position)
-        {
-            // If the geofence should not be follower, it cannot be violated (kek)
-            if (!safety_check_geofence_){
-                return false;
-            }
-            Eigen::Vector2d xy_position(position.x(),
-            position.y());
-            float z_position = position.z();
-            float xy_distance = xy_position.norm();
-            float z_distance = std::abs(z_position);
-
-            return (xy_distance >= safety_geofence_radius_ || z_distance >= safety_geofence_height_);
-
+    {
+        // Return false if geofence check is disabled - no violation
+        if (!safety_check_geofence_){
+            return false;
         }
+        Eigen::Vector2d xy_position(position.x(),
+        position.y());
+        float z_position = position.z();
+        float xy_distance = xy_position.norm();
+        float z_distance = std::abs(z_position);
 
+        // Check if outside geofence
+        return (xy_distance >= safety_geofence_radius_ || z_distance >= safety_geofence_height_);
+    }
+    
     void safetyCheckCallback()
     {
         DroneState drone_state = state_manager_.getDroneState();
@@ -442,7 +521,6 @@ private:
                 trigger_emergency_land = true;
             }
         }
-
 
         // Check GCS input freshness
         if (check_gcs_timeout_ && !landing_position_mode)
@@ -501,12 +579,10 @@ private:
 
     void localPositionCallback(const VehicleLocalPosition::SharedPtr msg)
     {
-        // Note that local position refers to coordinates being expressed in cartesian coordinates
+        // Note that local position refers to coordinates being expressed in cartesian coordinates from some origin point.
         Stamped3DVector origin = state_manager_.getOrigin();
         Stamped3DVector local_position(get_time(), msg->x - origin.x(), msg->y - origin.y(), msg->z - origin.z());
         state_manager_.setGlobalPosition(local_position);
-
-        //RCLCPP_INFO(get_logger(), "Local position: x=%.2f, y=%.2f, z=%.2f", local_position.x(), local_position.y(), local_position.z());
 
         // Set the velocity in the state manager
         Stamped3DVector local_velocity(get_time(), msg->vx, msg->vy, msg->vz);
@@ -514,10 +590,7 @@ private:
 
         // set the acceleration in the state manager
         Stamped3DVector local_acceleration(get_time(), msg->ax, msg->ay, msg->az);
-        //Stamped3DVector local_acceleration_global = transformations_.accelerationLocalToGlobal(get_time(), state_manager_.getAttitude().quaternion(), local_acceleration);
-        //local_acceleration_global.vector().z() += 9.81; // Remove gravity
         state_manager_.setGlobalAcceleration(local_acceleration);
-        
     }
 
     void motionCaptureLocalPositionCallback(const interfaces::msg::MotionCapturePose::SharedPtr msg)
@@ -525,17 +598,11 @@ private:
         Stamped3DVector origin = state_manager_.getOrigin();
         Stamped3DVector local_position(get_time(), msg->x - origin.x(), msg->y - origin.y(), msg->z- origin.z());
 
-        //RCLCPP_INFO(get_logger(), "Motion capture position: x=%.2f, y=%.2f, z=%.2f", local_position.x(), local_position.y(), local_position.z());
-
         state_manager_.setGlobalPosition(local_position);
     }
 
     void batteryStatusCallback(const BatteryStatus::SharedPtr msg)
     {
-
-        //RCLCPP(get_logger(), "Battery status: cell_count=%d, voltage=%.2f V, remaining=%.2f%%, discharged_mah=%d, current_a=%.2f A",
-          //       msg->cell_count, msg->voltage_v, msg->remaining, msg->discharged_mah, msg->current_a);
-
         BatteryState battery_state;
         battery_state.timestamp = get_time();
         battery_state.cell_count = msg->cell_count;
@@ -644,77 +711,73 @@ private:
     void publish_drone_state()
     {
         interfaces::msg::DroneState msg{};
-
-        //msg.timestamp = get_time().seconds();
-        //int8 id
-        //int8 mode
         
-
-        //Get drone state
-        Stamped3DVector position = state_manager_.getGlobalPosition();
-        msg.position_timestamp = state_manager_.getGlobalPosition().timestamp.seconds();
-        msg.position.resize(3);
-        msg.position[0] = position.x(); 
-        msg.position[1] = position.y(); 
-        msg.position[2] = position.z();
-        Stamped3DVector velocity = state_manager_.getGlobalVelocity();
-        msg.velocity_timestamp = state_manager_.getGlobalVelocity().timestamp.seconds();
-        msg.velocity.resize(3);
-        msg.velocity[0] = velocity.x();
-        msg.velocity[1] = velocity.y();
-        msg.velocity[2] = velocity.z();
-        //float32[] orientation  #roll, pitch, yaw
-        StampedQuaternion attitude = state_manager_.getAttitude();
-        Eigen::Vector3d euler = transformations_.quaternionToEuler(attitude.quaternion());
-        msg.orientation.resize(3);
-        msg.orientation[0] = euler.z(); // roll
-        msg.orientation[1] = euler.y(); // pitch
-        msg.orientation[2] = euler.x(); // yaw
-
-        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-        msg.target_position.resize(3);
-        msg.target_position[0] = target_profile.x();
-        msg.target_position[1] = target_profile.y();
-        msg.target_position[2] = target_profile.z();
-       
-        //float32[] acceleration
-        msg.battery_state_timestamp = state_manager_.getBatteryState().timestamp.seconds();
-        msg.battery_voltage = state_manager_.getBatteryState().voltage;
-        msg.battery_current = state_manager_.getBatteryState().average_current;
-        msg.battery_percentage = state_manager_.getBatteryState().charge_remaining;
-        msg.battery_discharged_mah = state_manager_.getBatteryState().discharged_mah;
-        msg.battery_average_current = state_manager_.getBatteryState().average_current;
+        // Pre-allocate all vectors once
+        msg.position.reserve(3);
+        msg.velocity.reserve(3);
+        msg.orientation.reserve(3);
+        msg.target_position.reserve(3);
+        msg.actuator_speeds.reserve(4);
         
-        //float32 battery_percentage  # 0.0 to 100.0
-        //uint8 arming_state  
-        DroneState drone_state = state_manager_.getDroneState();
+        // Get drone state once (avoid multiple calls)
+        const DroneState& drone_state = state_manager_.getDroneState();
+        
+        // Position - with explicit float casts
+        const Stamped3DVector& position = state_manager_.getGlobalPosition();
+        msg.position_timestamp = position.timestamp.seconds();
+        msg.position = {static_cast<float>(position.x()), 
+                        static_cast<float>(position.y()), 
+                        static_cast<float>(position.z())};
+        
+        // Velocity - with explicit float casts
+        const Stamped3DVector& velocity = state_manager_.getGlobalVelocity();
+        msg.velocity_timestamp = velocity.timestamp.seconds();
+        msg.velocity = {static_cast<float>(velocity.x()), 
+                        static_cast<float>(velocity.y()), 
+                        static_cast<float>(velocity.z())};
+        
+        // Orientation - with explicit float casts
+        const StampedQuaternion& attitude = state_manager_.getAttitude();
+        const Eigen::Vector3d euler = transformations_.quaternionToEuler(attitude.quaternion());
+        msg.orientation = {static_cast<float>(euler.z()), 
+                        static_cast<float>(euler.y()), 
+                        static_cast<float>(euler.x())}; // roll, pitch, yaw
+        
+        // Target position - with explicit float casts
+        const Stamped4DVector& target_profile = state_manager_.getTargetPositionProfile();
+        msg.target_position = {static_cast<float>(target_profile.x()), 
+                            static_cast<float>(target_profile.y()), 
+                            static_cast<float>(target_profile.z())};
+        
+        // Battery
+        const auto& battery_state = state_manager_.getBatteryState();
+        msg.battery_state_timestamp = battery_state.timestamp.seconds();
+        msg.battery_voltage = battery_state.voltage;
+        msg.battery_current = battery_state.average_current;
+        msg.battery_percentage = battery_state.charge_remaining;
+        msg.battery_discharged_mah = battery_state.discharged_mah;
+        msg.battery_average_current = battery_state.average_current;
+        
+        // Drone state fields
         msg.arming_state = static_cast<uint8_t>(drone_state.arming_state);
         msg.trajectory_mode = static_cast<uint8_t>(drone_state.trajectory_mode);
         msg.led_mode = static_cast<int16_t>(drone_state.flight_mode_trait);
-
-        //uint8 estop  
-        FlightMode flightmode = drone_state.flight_mode;
-        msg.flight_mode = static_cast<int16_t>(flightmode);
-        msg.flight_time = static_cast<double>(drone_state.flight_time.seconds());
-        //RCLCPP_INFO(get_logger(), "Flight mode: %d", static_cast<int>(msg.flight_mode));
+        msg.flight_mode = static_cast<int16_t>(drone_state.flight_mode);
+        msg.flight_time = drone_state.flight_time.seconds();
         
-
-        //Acturator speeds
-        Stamped4DVector actuator_speeds = state_manager_.getActuatorSpeeds();
-        msg.actuator_speeds.resize(4);
-        msg.actuator_speeds[0] = actuator_speeds.x();
-        msg.actuator_speeds[1] = actuator_speeds.y();
-        msg.actuator_speeds[2] = actuator_speeds.z();
-        msg.actuator_speeds[3] = actuator_speeds.w();
-
-        // Global probe locations
-        GlobalProbeLocations probe_locations = state_manager_.getGlobalProbeLocations();
-        msg.probes_found = probe_locations.getProbeCount();
-
-        //Publish the drone state message
+        // Actuator speeds - with explicit float casts
+        const Stamped4DVector& actuator_speeds = state_manager_.getActuatorSpeeds();
+        msg.actuator_speeds = {static_cast<float>(actuator_speeds.x()), 
+                            static_cast<float>(actuator_speeds.y()),
+                            static_cast<float>(actuator_speeds.z()), 
+                            static_cast<float>(actuator_speeds.w())};
+        
+        // Probe locations
+        msg.probes_found = state_manager_.getGlobalProbeLocations().getProbeCount();
+        
+        // Publish
         drone_state_pub_->publish(msg);
     }
-
     // Offboard mode handling
     void setOffboardMode()
     {
@@ -748,66 +811,6 @@ private:
         Stamped4DVector manual_input = state_manager_.getManualControlInput();
         
         return {manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w()};
-    }
-
-    Eigen::Vector4d positionMode()
-    {
-       DroneState drone_state = state_manager_.getDroneState();
-
-       if (drone_state.trajectory_mode == TrajectoryMode::ACTIVE) {
-           double dt = (get_time() - drone_state.trajectory_start_time_).seconds();
-           if (dt > path_planner_.getTotalTime()) {
-               drone_state.trajectory_mode = TrajectoryMode::COMPLETED;
-               state_manager_.setDroneState(drone_state);
-               FullTrajectoryPoint final_point = path_planner_.getTrajectoryPoint(path_planner_.getTotalTime(), trajectoryMethod::MIN_SNAP);
-               Stamped4DVector target_profile(get_time(), final_point.position.x(), final_point.position.y(), final_point.position.z(), 0.0); // No yaw in Vector4d
-               state_manager_.setTargetPositionProfile(target_profile);
-               state_manager_.setTargetAttitude(StampedQuaternion(get_time(), final_point.orientation));
-           }
-           FullTrajectoryPoint target_point = path_planner_.getTrajectoryPoint(dt, trajectoryMethod::MIN_SNAP);
-           Stamped4DVector target_profile(get_time(), target_point.position.x(), target_point.position.y(), target_point.position.z(), 0.0); // No yaw in Vector4d
-        
-           state_manager_.setTargetPositionProfile(target_profile);
-           state_manager_.setTargetAttitude(StampedQuaternion(get_time(), target_point.orientation));
-       }
-       else if (drone_state.flight_mode == FlightMode::LAND_POSITION && drone_state.trajectory_mode == TrajectoryMode::COMPLETED)
-       {
-           // Drone is now landed, update state and disarm
-           RCLCPP_INFO(get_logger(), "Drone has landed, disarming...");
-           drone_state.flight_mode = FlightMode::LANDED;
-           drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
-           drone_state.arming_state = ArmingState::DISARMED;
-           drone_state.command = Command::DISARM;
-           drone_state.trajectory_mode = TrajectoryMode::COMPLETED;
-           state_manager_.setDroneState(drone_state);
-           disarm(true);
-           cleanupControlLoop();
-       }
-       Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-       Stamped3DVector position = state_manager_.getGlobalPosition();
-       StampedQuaternion attitude = state_manager_.getAttitude();
-       Stamped3DVector target_position_3d(target_profile.timestamp, target_profile.vector().x(), target_profile.vector().y(), target_profile.vector().z());
-       double dt = (get_time() - position.getTime()).seconds();
-       if (dt > timeout_threshold_)
-       {
-           RCLCPP_WARN(get_logger(), "No position data received in the last %.2f seconds!", timeout_threshold_);
-           return Eigen::Vector4d::Zero();
-       }
-
-       Eigen::Vector4d last_control_signal_position = state_manager_.getLatestControlSignalPositionOnly();
-
-
-       // Calculate control output using PID controller
-       Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d, last_control_signal_position);
-
-       // Replace zero yaw with the planned yaw from quaternion
-       Eigen::Vector3d target_euler = transformations_.quaternionToEuler(state_manager_.getTargetAttitude().quaternion());
-
-       
-       //RCLCPP_INFO(get_logger(), "target yaw: %.2f", target_euler.x());
-
-       output.z() = target_euler.x();
-       return output;
     }
 
     Eigen::Vector4d positionAndVelocityControl()
@@ -858,7 +861,6 @@ private:
         Stamped3DVector position = state_manager_.getGlobalPosition();
         Stamped3DVector velocity = state_manager_.getGlobalVelocity();
         StampedQuaternion attitude = state_manager_.getAttitude();
-        Eigen::Quaterniond target_quat = state_manager_.getTargetAttitude().quaternion();
         
         double dt = (get_time() - position.getTime()).seconds();
 
@@ -984,21 +986,16 @@ private:
             control_input = manualAidedMode();
             break;
         case 2:
-            //control_input = positionMode();
+            control_input = positionAndVelocityControl();
             break;
         case 3:
             control_input = safetyLandBlindMode();
-            break;
-        case 4:
-            control_input = positionAndVelocityControl();
             break;
         default:
             RCLCPP_WARN(get_logger(), "Unknown control mode: %d", current_control_mode_);
             control_input = Eigen::Vector4d::Zero();
             break;
         }
-        // RCLCPP_INFO(get_logger(), "Control input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
-        //              control_input.x(), control_input.y(), control_input.z(), control_input.w());
 
         publishAttitudeSetpoint(control_input);
     }
@@ -1046,10 +1043,6 @@ private:
     }
 
     Eigen::Vector4d safetyLandBlindMode(){
-
-        //Scale thrust down by height
-
-        // Get current state of the drone
         DroneState drone_state = state_manager_.getDroneState();
         // Get current yaw of the drone
         StampedQuaternion attitude = state_manager_.getAttitude(); 
@@ -1092,47 +1085,47 @@ private:
 
     void landPositionMode()
     {
-    // Get current state of the drone
-    DroneState drone_state = state_manager_.getDroneState();
+        // Get current state of the drone
+        DroneState drone_state = state_manager_.getDroneState();
 
-    if (drone_state.flight_mode == FlightMode::BEGIN_LAND_POSITION)
-    {
-        // Make the drone go into safety land mode
-        RCLCPP_INFO(get_logger(), "Position based land mode activated.");
-
-        // Set the takeoff position and orientation based on current state
-        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-        Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
-        Eigen::Quaterniond takeoff_quat = (state_manager_.getAttitude()).quaternion().normalized();
-        Stamped3DVector GroundDistance = state_manager_.getGroundDistanceState();
-        
-        Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
-        Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
-
-        // Calculate the landing position
-        double z_landing = 0.0; // Default landing height
-        if ((get_time() - GroundDistance.getTime()).seconds() < 0.3)
+        if (drone_state.flight_mode == FlightMode::BEGIN_LAND_POSITION)
         {
-            z_landing = takeoff_position.z() + GroundDistance.vector().x();
-            RCLCPP_INFO(get_logger(), "Using ground distance sensor for landing: z_landing=%.2f", z_landing);
+            // Make the drone go into safety land mode
+            RCLCPP_INFO(get_logger(), "Position based land mode activated.");
+
+            // Set the takeoff position and orientation based on current state
+            Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+            Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
+            Eigen::Quaterniond takeoff_quat = (state_manager_.getAttitude()).quaternion().normalized();
+            Stamped3DVector GroundDistance = state_manager_.getGroundDistanceState();
+            
+            Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
+            Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
+
+            // Calculate the landing position
+            double z_landing = 0.0; // Default landing height
+            if ((get_time() - GroundDistance.getTime()).seconds() < 0.3)
+            {
+                z_landing = takeoff_position.z() + GroundDistance.vector().x();
+                RCLCPP_INFO(get_logger(), "Using ground distance sensor for landing: z_landing=%.2f", z_landing);
+            }
+            
+            // Set the target landing position and orientation (maintain current orientation)
+            Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), z_landing}; // Land at z = 0.0
+            Eigen::Quaterniond target_quat = takeoff_quat; // Preserve current orientation
+
+            // Generate landing trajectory
+            path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, trajectoryMethod::MIN_SNAP);
+            float trajectory_duration = path_planner_.getTotalTime();
+
+            // Set trajectory start time and update flight mode
+            drone_state.flight_mode = FlightMode::LAND_POSITION;
+            drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
+            drone_state.trajectory_start_time_ = get_time();
+            drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
+            drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
+            state_manager_.setDroneState(drone_state);
         }
-         
-        // Set the target landing position and orientation (maintain current orientation)
-        Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), z_landing}; // Land at z = 0.0
-        Eigen::Quaterniond target_quat = takeoff_quat; // Preserve current orientation
-
-        // Generate landing trajectory
-        path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, trajectoryMethod::MIN_SNAP);
-        float trajectory_duration = path_planner_.getTotalTime();
-
-        // Set trajectory start time and update flight mode
-        drone_state.flight_mode = FlightMode::LAND_POSITION;
-        drone_state.flight_mode_trait = getFlightModeTraits(drone_state.flight_mode)[0];
-        drone_state.trajectory_start_time_ = get_time();
-        drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
-        drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
-        state_manager_.setDroneState(drone_state);
-    }
     }
 
     void setDroneMode(FlightMode mode)
@@ -1208,7 +1201,7 @@ private:
     rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID & /*uuid*/,
                                                 std::shared_ptr<const DroneCommand::Goal> goal)
     {
-        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed", "set_angular_speed", "spin", "velocity"};
+        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed", "set_angular_speed", "spin"};
         RCLCPP_INFO(get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
 
         DroneState drone_state = state_manager_.getDroneState();
@@ -1266,21 +1259,6 @@ private:
                 goal->target_pose[1] < 0.0 || (goal->target_pose[2] != 0.0 && goal->target_pose[2] != 1.0) ||
                 !std::isfinite(goal->target_pose[0]) || !std::isfinite(goal->target_pose[1]) || !std::isfinite(goal->target_pose[2])) {
                 RCLCPP_WARN(get_logger(), "Rejected: invalid spin parameters, drone not armed, negative rotations, invalid path selection, or non-finite values.");
-                return rclcpp_action::GoalResponse::REJECT;
-            }
-        } else if (goal->command_type == "velocity") {
-            if (goal->target_pose.size() != 3) {
-                RCLCPP_WARN(get_logger(), "Rejected: invalid velocity parameters, expected vx, vy, vz coordinates.");
-                return rclcpp_action::GoalResponse::REJECT;
-            } else if (drone_state.arming_state != ArmingState::ARMED) {
-                RCLCPP_WARN(get_logger(), "Rejected: drone not armed for velocity command.");
-                return rclcpp_action::GoalResponse::REJECT;
-            } else if (!std::isfinite(goal->target_pose[0]) || !std::isfinite(goal->target_pose[1]) || !std::isfinite(goal->target_pose[2])) {
-                RCLCPP_WARN(get_logger(), "Rejected: velocity coordinates are not finite real numbers (vx: %f, vy: %f, vz: %f).", 
-                            goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]);
-                return rclcpp_action::GoalResponse::REJECT;
-            } else if (!std::isfinite(goal->yaw)) {
-                RCLCPP_WARN(get_logger(), "Rejected: velocity yaw is not a finite real number (value: %f).", goal->yaw);
                 return rclcpp_action::GoalResponse::REJECT;
             }
         } else if (goal->command_type == "takeoff") {
@@ -1391,14 +1369,14 @@ private:
             else if (goal->command_type == "takeoff")
             {
                 setDroneMode(FlightMode::POSITION);
-                ensureControlLoopRunning(4);
+                ensureControlLoopRunning(2); // Magic number 2 is position control mode
 
                 // Set the takeoff position and orientation based on current state
                 Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
                 Eigen::Quaterniond takeoff_quat = state_manager_.getAttitude().quaternion().normalized();
                 Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
 
-                Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
+                Eigen::Vector3d current_velocity = state_manager_.getGlobalVelocity().vector();
                 Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
 
                 // Set the target takeoff goal, at least 1.5m above current position with current orientation
@@ -1423,40 +1401,7 @@ private:
             else if (goal->command_type == "goto")
             {
                 setDroneMode(FlightMode::POSITION);
-                ensureControlLoopRunning(3);
-
-                // Set the current position and orientation
-                StampedQuaternion attitude = state_manager_.getAttitude();
-                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-                Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
-                Eigen::Quaterniond takeoff_quat = attitude.quaternion().normalized();
-                float target_yaw = transformations_.unwrapAngle(goal->yaw, 2*M_PI, 0);
-                Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
-                Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
-
-                // Set the target position and orientation with specified yaw
-                Eigen::Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
-                Eigen::Quaterniond target_quat = transformations_.eulerToQuaternion(0.0, 0.0, target_yaw).normalized();
-
-                // Generate trajectory
-                path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, trajectoryMethod::MIN_SNAP);
-                float trajectory_duration = path_planner_.getTotalTime();
-                
-                // Set trajectory start time
-                DroneState drone_state = state_manager_.getDroneState();
-                drone_state.trajectory_start_time_ = get_time();
-                drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
-                drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
-                state_manager_.setDroneState(drone_state);
-
-                result->success = true;
-                result->message = "Drone moving to target position.";
-                std::cout << "Goto target: " << target_position.transpose() << ", yaw: " << target_yaw << std::endl;
-            }
-            else if (goal->command_type == "velocity")
-            {
-                setDroneMode(FlightMode::POSITION);
-                ensureControlLoopRunning(4);
+                ensureControlLoopRunning(2);
 
                 // Set the current position and orientation
                 StampedQuaternion attitude = state_manager_.getAttitude();
@@ -1484,10 +1429,7 @@ private:
 
                 result->success = true;
                 result->message = "Drone moving to target position.";
-                std::cout << "Goto target: " << target_position.transpose() << ", yaw: " << target_yaw << std::endl;
-
-            }
-            else if (goal->command_type == "spin")
+            } else if (goal->command_type == "spin")
             {
                 setDroneMode(FlightMode::POSITION);
                 ensureControlLoopRunning(2);
@@ -1631,10 +1573,10 @@ private:
     rclcpp_action::Server<DroneCommand>::SharedPtr drone_command_server_;
 
 
-    FCI_Transformations transformations_;
-    FCI_StateManager state_manager_;
-    FCI_Controller controller_;
-    FCI_PathPlanner path_planner_;
+    Transformations transformations_;
+    StateManager state_manager_;
+    Controller controller_;
+    PathPlanner path_planner_;
 
     PositionError prev_position_error_;
     
@@ -1673,6 +1615,9 @@ private:
     int position_loop_counter_ = 2;
     const int position_loop_trigger_ = 2;
 
+    // Logging variables
+    bool logging_enabled_ = false;
+    std::string console_level_ = "INFO";
 
     // Last X Ground Distance Sensor readings
     static constexpr int max_ground_distance_readings_ = 10;
@@ -1694,7 +1639,7 @@ private:
 int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<FlightControllerInterface>());
+    rclcpp::spin(std::make_shared<AAUAutopilot>());
     rclcpp::shutdown();
     return 0;
 }

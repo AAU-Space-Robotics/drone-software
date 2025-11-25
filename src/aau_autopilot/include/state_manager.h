@@ -1,5 +1,5 @@
-#ifndef FCI_UTILITIES_H
-#define FCI_UTILITIES_H
+#ifndef STATE_MANAGER_H
+#define STATE_MANAGER_H
 
 #include <atomic>
 #include <stdint.h>
@@ -264,6 +264,7 @@ struct PositionError {
     PIDError Yaw;
 };
 
+
 struct VelocityError {
     PIDError X;
     PIDError Y;
@@ -276,8 +277,8 @@ struct AccelerationError {
     PIDError Z;
 };
 
-// FCI_StateManager class definition
-class FCI_StateManager {
+// StateManager class definition
+class StateManager {
 public:
     // Thread-safe setters and getters for NED_Data
     void setGlobalPosition(const Stamped3DVector& new_data);
@@ -397,4 +398,4 @@ private:
 
 };
 
-#endif // FCI_STATEMANAGER_H
+#endif // STATE_MANAGER_H
