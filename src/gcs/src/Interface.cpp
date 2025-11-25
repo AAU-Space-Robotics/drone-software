@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include "interfaceutils.h"
+#include <algorithm>
 
 WindowInitializer winInit;
 Widgets widgets;
@@ -8,6 +9,7 @@ Widgets widgets;
 
 int main(int argc, char **argv) {
     float armButton = false;
+    float value = 0.0f;
     ImU32 armColor = IM_COL32(26, 204, 26, 255); // Green color
     const char* armText = "Arm";
     glfwSetErrorCallback([](int error, const char* description) {
@@ -49,14 +51,20 @@ int main(int argc, char **argv) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         // Draw multi-color background
-        winInit.DrawMultiColor();
+        //winInit.DrawMultiColor();
         // Set size of font and windows - - - - - - - - - - - - - - - - - - - - - - 
 
         //Update
-        winInit.UpdateWindowSize();
-       
+        
+        const int screen_width = 1920; // Reference screen width
+        const int screen_height = 1080; // Reference screen height
+        int x_sc, y_sc;
+        glfwGetWindowSize(window, &x_sc, &y_sc);
+        float scale = std::max(static_cast<float>(x_sc) / screen_width, static_cast<float>(y_sc) / screen_height);
+        
+        ImGui::GetIO().FontGlobalScale = scale;
         // Set the GLFW window size
-  
+        winInit.UpdateWindowSize(scale);
         glfwSetWindowSize(window, windowVar::display_w, windowVar::display_h);
         //std::cout << "Window size set to: " << windowVar::display_w << "x" << windowVar::display_h << std::endl;
 
@@ -75,33 +83,40 @@ int main(int argc, char **argv) {
 
         // Example content
        
-        if (armButton) {
-            armColor = IM_COL32(204, 26, 26, 255); // Red color
-            armText = "Disarm";
-        } else {
-            armColor = IM_COL32(26, 204, 26, 255); // Green color
-            armText = "Arm";
-        }
-        if (widgets.costum_square_button(armText, ImVec2(800, 50), ImVec2(150, 50), winInit.getFont(28), 28.0f, armColor)) {
-
-            armButton = !armButton; // Toggle button state
-            printf("Arm button clicked. New state: %s\n", armButton ? "Armed" : "Disarmed");
-        }
-        
-        if (widgets.DrawCircleGradientButton(draw_list, winInit.getFont(40), 1.0f, ImVec2(1500, 100), 75.0f, "ESTOP", 40.0f)) {
-            std::cout << "ESTOP Button Clicked!" << std::endl;
-        }
+        //if (armButton) {
+        //    armColor = IM_COL32(204, 26, 26, 255); // Red color
+        //    armText = "Disarm";
+        //} else {
+        //    armColor = IM_COL32(26, 204, 26, 255); // Green color
+        //    armText = "Arm";
+        //}
+        //if (widgets.costum_square_button(armText, ImVec2(800 * scale, 50*scale), ImVec2(150 * scale, 50 * scale), winInit.getFont(28), 28.0f * scale, armColor)) {
+//
+        //    armButton = !armButton; // Toggle button state
+        //    printf("Arm button clicked. New state: %s\n", armButton ? "Armed" : "Disarmed");
+        //}
+        //
+        //if (widgets.DrawCircleGradientButton(draw_list, winInit.getFont(40), 1.0f, ImVec2(1500 * scale, 100 * scale), 75.0f * scale, "ESTOP", 40.0f * scale)) {
+        //    std::cout << "ESTOP Button Clicked!" << std::endl;
+        //}
 
         //ImGui::PushFont(ImGui::GetFont());
         //ImGui::SetWindowFontScale(3.0f); // 150% text size
         
 
-        ImGui::SetWindowPos(ImVec2(20,20));
+        ImGui::SetWindowPos(ImVec2(20 * scale,20 * scale));
         ImGui::PushFont(winInit.getFont(18));
         ImGui::Text("Thyra Ground Control Station");
         ImGui::PopFont(); 
         //ImGui::PopFont(); 
-
+        ImGui::SetNextWindowPos(ImVec2((screen_width/2- 200) * scale, (screen_height -500) * scale));  
+        ImGui::SetNextWindowSize(ImVec2(200 * scale, 200 * scale));  
+       
+        ImDrawList* dl = ImGui::GetWindowDrawList();  // draw *inside* this window  
+        
+        ImGui::SliderFloat("Altitude", &value, 0.0f, 1000.0f);
+        AltitudeTape(value, 300.0f * scale, 20.0f);
+        
         ImGui::End();
 
 
@@ -127,4 +142,4 @@ int main(int argc, char **argv) {
   
 
     return 0;
-}
+}/

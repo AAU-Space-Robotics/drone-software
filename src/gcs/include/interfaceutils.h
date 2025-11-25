@@ -21,7 +21,7 @@ public:
     
     void GetPrimaryMonitorResolution(int& width, int& height);
     void Setup();
-    void UpdateWindowSize();
+    void UpdateWindowSize(float scale);
     
     void Render();
     void DrawMultiColor();
@@ -42,3 +42,7 @@ public:
     bool costum_round_button(ImVec2 center, float radius, int segments, ImU32 color);
     bool DrawCircleGradientButton(ImDrawList* draw_list, ImFont* font, float scale, ImVec2 center, float radius, const char* id, float font_size);
 };
+
+void scroll_wheel(ImDrawList* draw_list, float startx, float starty, float width, float height, float scale);
+
+void AltitudeTape(float altitude, float tapeHeight, float numStep);

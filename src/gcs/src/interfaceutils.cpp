@@ -5,7 +5,7 @@ namespace windowVar {
     int monitor_h = 0;
     int display_w = 0;
     int display_h = 0;
-    ImVec4 BackgroundColor = ImVec4(0.0, 0.0, 0.0, 1.0); // Black background in RGBA
+    ImVec4 BackgroundColor = ImVec4(0.0, 0.0, 0.0, 0.0); // Transparent background in RGBA
 }
 
 void WindowInitializer::DrawMultiColor() {
@@ -50,10 +50,10 @@ void WindowInitializer::Setup() {
     ImGui::StyleColorsDark();
 }
 
-void WindowInitializer::UpdateWindowSize() {
+void WindowInitializer::UpdateWindowSize(float scale) {
     // Update the display size
-    windowVar::display_w = windowVar::monitor_w;
-    windowVar::display_h = windowVar::monitor_h;
+    windowVar::display_w = static_cast<int>(windowVar::monitor_w * scale);
+    windowVar::display_h = static_cast<int>(windowVar::monitor_h * scale);
 }
 
 
@@ -240,4 +240,66 @@ bool Widgets::DrawCircleGradientButton(ImDrawList* draw_list, ImFont* font, floa
     return active;
 }
 
+
+void scroll_wheel(ImDrawList* draw_list, float startx, float starty, float width, float height, float scale) {
+
    
+    draw_list->AddCircleFilled(ImVec2(startx, starty), 100.0f, IM_COL32(255, 255, 255, 255), 20); // Draw white circle at (400,200) with radius 30 
+
+
+
+}
+void AltitudeTape(float altitude, float tapeHeight = 300.0f, float numStep = 20.0f)
+{
+    ImGui::BeginChild("AltitudeTape", ImVec2(80, tapeHeight), true);
+
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    ImVec2 pos = ImGui::GetWindowPos();
+    ImVec2 size = ImGui::GetWindowSize();
+
+    float centerY = pos.y + size.y / 2.0f;
+
+    // How many numbers above/below center to draw
+    int range = 10;
+
+    // Determine the altitude number nearest to center
+    float nearest = roundf(altitude / numStep) * numStep;
+
+    // Vertical offset for smooth scrolling
+    float offset = (altitude - nearest) * 4.0f;  
+    // adjust 4.0f scaling to match your desired scroll speed/size
+
+    for (int i = -range; i <= range; i++)
+    {
+        float value = nearest + i * numStep;
+        float y = centerY + (i * 40.0f) + offset;
+
+        // Draw text centered
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%.0f", value);
+
+        draw->AddText(
+            ImVec2(pos.x + 20, y - ImGui::CalcTextSize(buf).y / 2),
+            IM_COL32(255, 255, 255, 255),
+            buf
+        );
+
+        // small horizontal tick mark
+        draw->AddLine(
+            ImVec2(pos.x + 5, y),
+            ImVec2(pos.x + 18, y),
+            IM_COL32(255, 255, 255, 255),
+            2.0f
+        );
+    }
+
+    // Draw the center reference line
+    draw->AddLine(
+        ImVec2(pos.x, centerY),
+        ImVec2(pos.x + size.x, centerY),
+        IM_COL32(255, 255, 0, 255),
+        3.0f
+    );
+
+    ImGui::EndChild();
+}
