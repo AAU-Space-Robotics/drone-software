@@ -73,6 +73,8 @@ public:
     double hover_thrust_estimate_ = -0.5; // Initial estimated hover thrust for most drones
     double hover_learning_rate_ = 0.0001;
 
+    Eigen::Vector4d map_controls(const Stamped4DVector& input) const;
+
 private:
     const Transformations& transformations_; // Reference to transformations utility
     PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust

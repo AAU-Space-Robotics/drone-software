@@ -925,14 +925,14 @@ private:
         return output;
     }
 
-    //! Does not work... yet
+
     Eigen::Vector4d manualAidedMode()
     {
-        RCLCPP_WARN(get_logger(), "Manual aided mode is not implemented yet, defaulting to manual mode.");
-        Stamped4DVector manual_input = state_manager_.getManualControlInput();
+        //RCLCPP_WARN(get_logger(), "Manual aided mode is not implemented yet, defaulting to manual mode.");
+        //Stamped4DVector manual_input = state_manager_.getManualControlInput();
         //RCLCPP_INFO(get_logger(), "Manual input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
         //             manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w());
-        // Convert manual input to target velocity in NED frame
+         //Convert manual input to target velocity in NED frame
         
   
 

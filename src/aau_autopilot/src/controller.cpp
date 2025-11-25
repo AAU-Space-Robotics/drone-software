@@ -194,7 +194,7 @@ double Controller::constrainThrust(double thrust) const {
     return std::clamp(thrust, min_thrust, max_thrust);
 }
 
-Eigen::Vector4d FCI_Controller::map_controls(const Stamped4DVector& input) const {
+Eigen::Vector4d Controller::map_controls(const Stamped4DVector& input) const {
     Eigen::Vector4d output;
     if (std::abs(input.x()) < 1e-6 && std::abs(input.y()) < 1e-6) {
         // If both roll and pitch are near zero, return zero velocities
