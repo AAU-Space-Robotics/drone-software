@@ -708,6 +708,15 @@ private:
         msg.pose.position.z = Current_origin.z();
         origin_offset_pub_->publish(msg);
     }
+    
+    inline double wrapToPi(double angle) {
+        angle = std::fmod(angle + M_PI, 2.0 * M_PI);
+        if (angle < 0)
+            angle += 2.0 * M_PI;
+        angle -= M_PI;
+        return angle * 180.0 / M_PI; // Convert to degrees
+    }
+
 
     // Drone state publisher
     void publish_drone_state()
@@ -741,9 +750,13 @@ private:
         // Orientation - with explicit float casts
         const StampedQuaternion& attitude = state_manager_.getAttitude();
         const Eigen::Vector3d euler = transformations_.quaternionToEuler(attitude.quaternion());
-        msg.orientation = {static_cast<float>(euler.z()), 
-                        static_cast<float>(euler.y()), 
-                        static_cast<float>(euler.x())}; // roll, pitch, yaw
+        
+     
+
+
+        msg.orientation = {static_cast<float>(wrapToPi(euler.z())), // yaw adjusted to [-pi, pi]
+                        static_cast<float>(wrapToPi(euler.y())), // pitch adjusted to [-pi, pi]
+                        static_cast<float>(wrapToPi(euler.x()))}; // roll, pitch, yaw
         
         // Target position - with explicit float casts
         const Stamped4DVector& target_profile = state_manager_.getTargetPositionProfile();
@@ -1174,11 +1187,12 @@ private:
         msg.timestamp = get_time().nanoseconds() / 1000;
         // Some message definitions do not include a 'mode' field, so we skip assigning it
         msg.orientation = {
-            static_cast<float>(input.x()), // roll
-            static_cast<float>(input.y()), // pitch
-            static_cast<float>(input.z())  // yaw
+            static_cast<float>(wrapToPi(input.x())), // roll
+            static_cast<float>(wrapToPi(input.y())), // pitch
+            static_cast<float>(wrapToPi(input.z()))  // yaw
         };
         msg.thrust = static_cast<double>(input.w());
+        attitude_setpoint_rpy_thrust_pub_->publish(msg);
     }
 
     void publishVehicleCommand(uint16_t command, float param1, float param2)
