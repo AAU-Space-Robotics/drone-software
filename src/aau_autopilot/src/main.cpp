@@ -23,6 +23,7 @@
 #include <interfaces/msg/drone_scope.hpp>
 #include <interfaces/msg/gcs_heartbeat.hpp>
 #include <interfaces/msg/probe_global_locations.hpp>
+#include <interfaces/msg/attitude_setpoint_rpy.hpp>
 
 #include "controller.h"
 #include "state_manager.h"
@@ -288,6 +289,7 @@ public:
         // Publishers
         offboard_control_mode_pub_ = create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
         attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
+        attitude_setpoint_rpy_thrust_pub_ = create_publisher<interfaces::msg::AttitudeSetpointRPY>("/fmu/in/attitude_setpoint_rpy_thrust", 10);
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
         drone_state_pub_ = create_publisher<interfaces::msg::DroneState>("thyra/out/drone_state", 10);
         origin_offset_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>("/thyra/out/origin_offset", 10);
@@ -357,7 +359,7 @@ public:
 
         // Timers
         offboard_timer_ = create_wall_timer(200ms, [this](){ setOffboardMode(); });
-        drone_state_timer = create_wall_timer(100ms, [this](){ publish_drone_state(); });
+        drone_state_timer = create_wall_timer(20ms, [this](){ publish_drone_state(); });
         safety_timer_ = create_wall_timer(200ms, [this]() { safetyCheckCallback(); });
         offset_timer = create_wall_timer(1000ms, [this]() { publish_origin_offset(); });
 
@@ -981,6 +983,7 @@ private:
         }
 
         publishAttitudeSetpoint(control_input);
+        publishAttitudeSetpointRollPitchYawThrust(control_input);
     }
 
     void cleanupControlLoop()
@@ -1163,6 +1166,19 @@ private:
         msg.q_d = {static_cast<float>(q.w()), static_cast<float>(q.x()), static_cast<float>(q.y()), static_cast<float>(q.z())};
         msg.thrust_body = {0.0f, 0.0f, static_cast<float>(input.w())};
         attitude_setpoint_pub_->publish(msg);
+    }
+
+    void publishAttitudeSetpointRollPitchYawThrust(const Eigen::Vector4d &input)
+    {
+        interfaces::msg::AttitudeSetpointRPY msg{};
+        msg.timestamp = get_time().nanoseconds() / 1000;
+        // Some message definitions do not include a 'mode' field, so we skip assigning it
+        msg.orientation = {
+            static_cast<float>(input.x()), // roll
+            static_cast<float>(input.y()), // pitch
+            static_cast<float>(input.z())  // yaw
+        };
+        msg.thrust = static_cast<double>(input.w());
     }
 
     void publishVehicleCommand(uint16_t command, float param1, float param2)
@@ -1527,6 +1543,8 @@ private:
 
     rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_pub_;
     rclcpp::Publisher<VehicleAttitudeSetpoint>::SharedPtr attitude_setpoint_pub_;
+    rclcpp::Publisher<interfaces::msg::AttitudeSetpointRPY>::SharedPtr attitude_setpoint_rpy_thrust_pub_;
+
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_pub_;
     rclcpp::Publisher<interfaces::msg::DroneState>::SharedPtr drone_state_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr origin_offset_pub_;
