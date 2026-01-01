@@ -12,14 +12,15 @@ def generate_launch_description():
     # Define workspace directory (one level up from package)
     workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
     pkg_share = FindPackageShare('asr_autopilot')
+    thyra_pkg_share = FindPackageShare('thyra')
 
     
     # directory which workspace is located in
     general_dir = os.path.abspath(os.path.join(workspace_dir, '..', '..', '..'))
     px4_dir = os.path.join(general_dir, 'PX4-Autopilot')
     
-    # Path to the simulation config file
-    params_path = PathJoinSubstitution([pkg_share, 'config', 'thyra_params.yaml'])
+    # Path to the thyra config file
+    params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'thyra_params.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')

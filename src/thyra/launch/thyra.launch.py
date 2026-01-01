@@ -13,9 +13,10 @@ def generate_launch_description():
     # Define workspace directory (one level up from package)
     pkg_share = FindPackageShare('asr_autopilot')
     sensors_pkg_share = FindPackageShare('asr_sensors')
+    thyra_pkg_share = FindPackageShare('thyra')
     
-    # Path to the simulation config file
-    params_path = PathJoinSubstitution([pkg_share, 'config', 'thyra_params.yaml'])
+    # Path to the thyra config file
+    params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'thyra_params.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
