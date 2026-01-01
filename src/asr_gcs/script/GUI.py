@@ -311,7 +311,7 @@ class DroneGuiNode(Node):
         self.imgui_logger = ImGuiLogger()
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.manual_control_publisher = self.create_publisher(ManualControlInput, '/thyra/in/manual_input',qos)
-        self._action_client = ActionClient(self, DroneCommand, '/thyra/in/drone_command')   
+        self._action_client = ActionClient(self, DroneCommand, '/asr/thyra/in/drone_command')   
         self.imgui_logger.info('DroneCommand client initialized, waiting for action server...')
         self._action_client.wait_for_server()
         self.goal_handle = None 

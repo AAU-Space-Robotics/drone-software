@@ -45,11 +45,11 @@ def generate_launch_description():
         Node(
             package='asr_sensors',
             executable='lidar',
-            name='lidar_node',
+            name='lidar',
             namespace='asr/thyra',
             output='screen',
             remappings=[
-                ('/fmu/in/distance_sensor', '/thyra/out/distance_sensor'),
+                ('/fmu/in/distance_sensor', '/asr/thyra/out/distance_sensor'),
             ],
         ),
 
@@ -57,7 +57,7 @@ def generate_launch_description():
         Node(
             package='asr_sensors',
             executable='LED.py',
-            name='led_node',
+            name='led',
             namespace='asr/thyra',
             output='screen',
         ),
@@ -76,7 +76,7 @@ def generate_launch_description():
                 Node(
                     package='asr_autopilot',
                     executable='asr_autopilot',
-                    name='asr_autopilot_node',
+                    name='autopilot',
                     namespace='asr/thyra',
                     remappings=[
                         ('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),

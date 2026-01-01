@@ -52,7 +52,7 @@ def generate_launch_description():
                 Node(
                     package='asr_autopilot',
                     executable='asr_autopilot',
-                    name='asr_autopilot_node',
+                    name='autopilot',
                     namespace='asr/thyra',
                     output='screen',
                     parameters=[

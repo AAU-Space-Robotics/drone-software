@@ -84,7 +84,7 @@ def generate_launch_description():
                 Node(
                     package='asr_autopilot',
                     executable='asr_autopilot',
-                    name='asr_autopilot_node',
+                    name='autopilot',
                     namespace='asr/thyra',
                     remappings=[
                         ('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),
