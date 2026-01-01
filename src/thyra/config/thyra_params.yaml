@@ -1,0 +1,61 @@
+# Thyra Drone Configuration
+# Hardware-specific parameters for Thyra drone platform
+
+drone:
+  name: "thyra"
+  id: 0  # For multi-drone scenarios
+  
+camera:
+  # RealSense D435 intrinsics
+  intrinsics:
+    fx: 425.8813171386719
+    fy: 425.8813171386719
+    cx: 430.5101623535156
+    cy: 238.53343200683594
+    width: 640
+    height: 480
+  
+  # Camera to drone body transform (4x4 homogeneous matrix)
+  # Rotation: 45° pitch down, Z-forward
+  extrinsics:
+    rotation:  # 3x3 rotation matrix (row-major)
+      - [0.0, -0.70710678, 0.70710678]
+      - [1.0, 0.0, 0.0]
+      - [0.0, 0.70710678, 0.70710678]
+    translation:  # [x, y, z] in meters
+      - 0.137751   # forward
+      - -0.018467  # right
+      - 0.12126    # down
+
+perception:
+  # YOLO model settings
+  model:
+    path: "models/YOLO11m.pt"  # Relative to asr_perception package
+    confidence_threshold: 0.75
+    device: "cuda:0"
+    half_precision: false
+  
+  # Object tracking settings
+  tracker:
+    max_age: 10  # Maximum frames without update before deletion
+    min_hits: 3  # Minimum detections before track confirmation
+    distance_threshold: 0.6  # Maximum distance for association (meters)
+  
+  # Detection filtering
+  filter:
+    max_distance: 4.0  # Maximum detection distance (meters)
+    min_confidence: 0.75
+
+mission:
+  # Probe competition specific parameters
+  probe_search:
+    search_height: -2.0  # meters
+    probe_count: 3
+    search_attempts_max: 3
+  
+  # Landing parameters
+  landing:
+    aruco_marker_id: 102
+    detection_threshold: 5
+    correction_threshold: 5
+    marker_size: 0.150  # meters (150mm)
