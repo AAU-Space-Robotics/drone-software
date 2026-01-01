@@ -11,8 +11,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 def generate_launch_description():
     # Define workspace directory (one level up from package)
-    pkg_share = FindPackageShare('aau_autopilot')
-    sensors_pkg_share = FindPackageShare('sensors')
+    pkg_share = FindPackageShare('asr_autopilot')
+    sensors_pkg_share = FindPackageShare('asr_sensors')
     
     # Path to the simulation config file
     params_path = PathJoinSubstitution([pkg_share, 'config', 'thyra_params.yaml'])
@@ -42,7 +42,7 @@ def generate_launch_description():
         
         # Start Lidar node
         Node(
-            package='sensors',
+            package='asr_sensors',
             executable='lidar',
             name='lidar_node',
             output='screen',
@@ -53,7 +53,7 @@ def generate_launch_description():
 
         # Start LED node
         Node(
-            package='sensors',
+            package='asr_sensors',
             executable='LED.py',
             name='led_node',
             output='screen',
@@ -71,9 +71,9 @@ def generate_launch_description():
             period=15.0,  # Delay in seconds
             actions=[
                 Node(
-                    package='aau_autopilot',
-                    executable='aau_autopilot',
-                    name='aau_autopilot_node',
+                    package='asr_autopilot',
+                    executable='asr_autopilot',
+                    name='asr_autopilot_node',
                     remappings=[
                         ('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),
                         ('/fmu/in/vehicle_attitude_setpoint', '/fmu/in/vehicle_attitude_setpoint_v1'),

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(gcs)
+project(asr_gcs)
 
 # Use C++14 standard
 set(CMAKE_CXX_STANDARD 17)
@@ -72,7 +72,7 @@ include_directories(
 )
 
 # Add executable for the GUI node
-add_executable(gcs_node
+add_executable(asr_gcs_node
   src/gcs.cpp
   src/gcslib.cpp
   ${imgui_SOURCE_DIR}/imgui.cpp
@@ -101,21 +101,21 @@ install(PROGRAMS
 )
 
 # Link the necessary libraries
-target_link_libraries(gcs_node
+target_link_libraries(asr_gcs_node
   OpenGL::GL      # Link OpenGL
   glfw            # Link GLFW
   #tinyxml2        # Link tinyxml2 from FetchContent
 )
 
 # Ensure ROS 2 dependencies are added correctly
-ament_target_dependencies(gcs_node
+ament_target_dependencies(asr_gcs_node
   rclcpp
   std_msgs
   interfaces
 )
 
 # Install the executable
-install(TARGETS gcs_node
+install(TARGETS asr_gcs_node
   DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY fonts DESTINATION share/${PROJECT_NAME}/)

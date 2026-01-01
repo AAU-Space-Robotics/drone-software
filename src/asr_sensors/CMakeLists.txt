@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 
-# ------------------------------------------------------------------------------
-project(aau_autopilot)
+project(asr_sensors)
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
@@ -16,37 +15,47 @@ endif()
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(rclcpp_action REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(px4_msgs REQUIRED)
-find_package(interfaces REQUIRED)
+
 
 # Include directories
 include_directories(include)
 
 # Create the C++ executable
-add_executable(aau_autopilot src/main.cpp src/controller.cpp src/state_manager.cpp src/transformations.cpp src/path_planner.cpp)
+add_executable(lidar src/lidar.cpp)
 
-# Add dependencies for aau_autopilot executable
-ament_target_dependencies(aau_autopilot
+# Add dependencies for lidar executable
+ament_target_dependencies(lidar
   rclcpp
-  rclcpp_action
-  interfaces
+  sensor_msgs
   px4_msgs
 )
 
 # Install C++ executables
 install(TARGETS
-  aau_autopilot
+  lidar
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install Python modules
-ament_python_install_package(${PROJECT_NAME})
-
-# Install Python executables (adjust as needed)
 install(PROGRAMS
-  #src/dds_test.py
+  script/image_republisher.py
+  script/image_republisher_pose.py
+  script/px4_to_cam.py
+  script/static_rgbd_test_node.py
+  script/probe_republisher.py
+  script/LED.py
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install header files
+install(DIRECTORY include/
+  DESTINATION include/${PROJECT_NAME}
+)
+
+# Install data files
+install(DIRECTORY data/
+  DESTINATION share/${PROJECT_NAME}/
 )
 
 # Install launch files
@@ -55,11 +64,5 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/
 )
 
-# Install config files
-install(DIRECTORY
-  config
-  DESTINATION share/${PROJECT_NAME}/
-)
-
 # Mark the package as complete
-ament_package() 
+ament_package()

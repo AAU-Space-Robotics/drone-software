@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>gcs</name>
+  <name>asr_gcs</name>
   <version>0.0.1</version>
-  <description>ROS 2 package for HMI, including a GUI and an Activity display</description>
+  <description>ASR Ground Control Station with GUI and activity display</description>
 
   <maintainer email="mdaro22@student.aau.dk">Magnus</maintainer>
   <license>Apache-2.0</license>

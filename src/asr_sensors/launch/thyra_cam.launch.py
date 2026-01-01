@@ -13,7 +13,7 @@ def generate_launch_description():
         
         # Start image republisher node
         Node(
-            package='sensors',
+            package='asr_sensors',
             executable='image_republisher_pose.py',
             name='image_republisher',
             output='screen',
