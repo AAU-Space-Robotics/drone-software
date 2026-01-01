@@ -98,7 +98,6 @@ ament_python_install_package(${PROJECT_NAME})
 # Install Python executables
 install(PROGRAMS
   scripts/detect_probe.py
-  scripts/detect_probes_global.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
