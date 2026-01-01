@@ -71,8 +71,8 @@ class SegmentationNode(Node):
         self.probe_publisher = self.create_publisher(ProbeLocations, '/probe_detector/probe_locations', 10)
                    
         self.bridge = CvBridge()
-        
-        package_name = 'probe_perception'
+
+        package_name = 'asr_perception'
         try:
             package_share_dir = get_package_share_directory(package_name)
             self.model_path = os.path.join(package_share_dir, 'models', 'YOLO11m.pt')

@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.5)
-project(probe_perception)
+project(asr_perception)
 
-option(BUILD_PROBE_PERCEPTION "Build the probe_perception package" OFF)
-if(NOT BUILD_PROBE_PERCEPTION)
-  message(STATUS "BUILD_PROBE_PERCEPTION is OFF - skipping build of probe_perception")
+option(BUILD_ASR_PERCEPTION "Build the asr_perception package" OFF)
+if(NOT BUILD_ASR_PERCEPTION)
+  message(STATUS "BUILD_ASR_PERCEPTION is OFF - skipping build of asr_perception")
   find_package(ament_cmake REQUIRED)
   ament_package()
   return()
