@@ -1,4 +1,4 @@
-aau_autopilot_node:
+asr_autopilot_node:
   ros__parameters:
     # Controller Parameters
     controller:

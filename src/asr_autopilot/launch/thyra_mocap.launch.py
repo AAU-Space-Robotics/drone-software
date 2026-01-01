@@ -1,26 +1,30 @@
 import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.actions import ExecuteProcess, DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import IncludeLaunchDescription, TimerAction
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import TimerAction
 
 
 def generate_launch_description():
     # Define workspace directory (one level up from package)
+    workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
     pkg_share = FindPackageShare('asr_autopilot')
-    sensors_pkg_share = FindPackageShare('asr_sensors')
     thyra_pkg_share = FindPackageShare('thyra')
+
+    
+    # directory which workspace is located in
+    general_dir = os.path.abspath(os.path.join(workspace_dir, '..', '..', '..'))
+    px4_dir = os.path.join(general_dir, 'PX4-Autopilot')
     
     # Path to the thyra config file
     params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'thyra_params.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
-    position_source = LaunchConfiguration('position_source', default='px4')
+    position_source = LaunchConfiguration('position_source', default='mocap')
 
     return LaunchDescription([
         # Declare launch arguments
@@ -31,7 +35,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'position_source',
-            default_value='px4',
+            default_value='mocap',
             description='Position source: px4 or mocap'
         ),
         
@@ -40,48 +44,15 @@ def generate_launch_description():
             cmd=['MicroXRCEAgent', 'serial', '--dev', '/dev/ttyAMA0', '-b', '921600'],
             output='log',
         ),
-        
-        # Start Lidar node
-        Node(
-            package='asr_sensors',
-            executable='lidar',
-            name='lidar_node',
-            namespace='asr/thyra',
-            output='screen',
-            remappings=[
-                ('/fmu/in/distance_sensor', '/thyra/out/distance_sensor'),
-            ],
-        ),
-
-        # Start LED node
-        Node(
-            package='asr_sensors',
-            executable='LED.py',
-            name='led_node',
-            namespace='asr/thyra',
-            output='screen',
-        ),
-
-        # Include thyra_cam launch file
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                PathJoinSubstitution([sensors_pkg_share, 'launch', 'thyra_cam.launch.py'])
-            ),
-        ),
 
         # Delay and launch FlightControllerInterface node
         TimerAction(
-            period=15.0,  # Delay in seconds
+            period=20.0,  # Delay in seconds
             actions=[
                 Node(
                     package='asr_autopilot',
                     executable='asr_autopilot',
                     name='asr_autopilot_node',
-                    namespace='asr/thyra',
-                    remappings=[
-                        ('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),
-                        ('/fmu/in/vehicle_attitude_setpoint', '/fmu/in/vehicle_attitude_setpoint_v1'),
-                    ],
                     output='screen',
                     parameters=[
                         params_path,
