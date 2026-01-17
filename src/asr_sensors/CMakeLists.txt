@@ -17,6 +17,9 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(serial_driver REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 
 
 # Include directories
@@ -32,9 +35,18 @@ ament_target_dependencies(lidar
   px4_msgs
 )
 
+# Radio
+add_executable(radio_sender src/radio_sender.cpp)
+ament_target_dependencies(radio_sender rclcpp std_msgs serial_driver diagnostic_msgs)
+
+add_executable(radio_receiver src/radio_receiver.cpp)
+ament_target_dependencies(radio_receiver rclcpp std_msgs serial_driver diagnostic_msgs)
+
 # Install C++ executables
 install(TARGETS
   lidar
+  radio_sender
+  radio_receiver
   DESTINATION lib/${PROJECT_NAME}
 )
 
