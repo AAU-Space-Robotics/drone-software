@@ -13,6 +13,8 @@ Establish a serial connection between the Raspberry Pi 4 (RPi4) and the PX4 Cube
 | 10                    | Pin 2               | RPi4 RX → PX4 TX       |
 | 9                     | Pin 6               | RPi4 GND → PX4 GND     |
 
+Red should go to pi RXD, and blue to pi TXD.
+
 *Note:* PX4 Telem 2 uses a 6-pin JST-GH connector; pins 1, 4, and 5 are unused. For details, see [Cube Orange Overview](https://ardupilot.org/copter/docs/common-thecubeorange-overview.html).
 
 ## Software Setup
@@ -282,6 +284,10 @@ Lidar:
 sudo apt-get update
 sudo apt-get upgrade -y
 sudo apt install -y i2c-tools
+
+Red wire in pi in 2, and black in pin 14. 
+Blue is in 3 (SDA), and Green is in 5 (SCL)
+
 
 Simulation:
 src/modules/simulation/simulator_mavlink/sitl_targets_gazebo-classic.cmake
