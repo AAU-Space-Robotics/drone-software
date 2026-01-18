@@ -285,6 +285,10 @@ sudo apt-get update
 sudo apt-get upgrade -y
 sudo apt install -y i2c-tools
 
+Red wire in pi in 2, and black in pin 14. 
+Blue is in 3 (SDA), and Green is in 5 (SCL)
+
+
 Simulation:
 src/modules/simulation/simulator_mavlink/sitl_targets_gazebo-classic.cmake
 
