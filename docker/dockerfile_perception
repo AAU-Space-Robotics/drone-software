@@ -80,11 +80,11 @@ RUN pip install --no-cache-dir catkin_pkg lark
 # Create ROS2 workspace directory
 WORKDIR /ros2_ws/src
 
-COPY src/probe_perception/ probe_perception/ 
+COPY src/asr_perception/ asr_perception/ 
 COPY src/interfaces/ interfaces/
 
 WORKDIR /ros2_ws 
-RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build --packages-select probe_perception interfaces --cmake-args -DBUILD_PROBE_PERCEPTION=ON"
+RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build --packages-select asr_perception interfaces --cmake-args -DBUILD_ASR_PERCEPTION=ON"
 
 # Entrypoint to source workspace and run the node
 CMD ["bash", "-c", "source /opt/ros/${ROS_DISTRO}/setup.bash && source /ros2_ws/install/setup.bash"]

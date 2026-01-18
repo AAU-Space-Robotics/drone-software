@@ -30,7 +30,7 @@ check_docker_image() {
 }
 
 # Check and build perception image if necessary
-PERCEPTION_IMAGE="probe_perception:latest"
+PERCEPTION_IMAGE="asr_perception:latest"
 if ! check_docker_image "$PERCEPTION_IMAGE"; then
     echo "Building perception image $PERCEPTION_IMAGE..."
     docker build -t "$PERCEPTION_IMAGE" -f docker/dockerfile_perception .
