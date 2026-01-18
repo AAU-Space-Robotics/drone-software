@@ -2,33 +2,43 @@
   ros__parameters:
     # Controller Parameters
     controller:
-      pid_gains:
-        pitch:
-          Kp: 0.15
+      position_controller:
+        x:
+          Kp: 1.0
           Ki: 0.0
-          Kd: 0.1
+          Kd: 0.01
+        y:
+          Kp: 1.0
+          Ki: 0.0
+          Kd: 0.01
+        z:
+          Kp: 1.0
+          Ki: 0.0
+          Kd: 0.01
+          
+      pid_gains:
         roll:
           Kp: 0.15
-          Ki: 0.0
-          Kd: 0.1
+          Ki: 0.01
+          Kd: 0.001
+        pitch:
+          Kp: 0.15
+          Ki: 0.01
+          Kd: 0.001
         yaw:
-          Kp: 0.1
+          Kp: 0.15
           Ki: 0.0
           Kd: 0.05
         thrust:
-          Kp: 0.8
-          Ki: 0.0
-          Kd: 0.12
-        hover_thrust_setpoint_estimate:
+          Kp: 0.5 
+          Ki: 0.1
+          Kd: 0.01
+        hover_thrust_setpoint:
           base_value: -0.7        # Base value for hover thrust estimate
           learned_value: -0.7      # Initial learned value for hover thrust estimate
           learning_rate: 0.0001      # Learning rate for hover thrust adaptation
       ema:
         alpha: 0.15 # Exponential moving average factor for smoothing
-      constraints:
-        max_linear_velocity: 0.4 # Maximum linear velocity (m/s)
-        max_angular_velocity: 0.5 # Maximum angular velocity (rad/s)
-
     path_planner:
       default:
         linear_velocity: 0.4    # Default linear velocity (m/s)
@@ -53,8 +63,13 @@
       safety_thrustdown_rate: 0.4       # Rate of thrust decrease during safety landing
       geofence_radius: 20.0             # Geofence radius (meters)
       geofence_height: 10.0             # Geofence height (meters)
-      do_mode_change_delay: true        # Enable mode change delay
+      do_mode_change_delay: false        # Enable mode change delay #! FIX, not for going to manual
       mode_change_delay: 5.0            # Mode change delay (seconds)
+
+    # Logging Parameters
+    logging:
+      enabled: true
+      console_level: INFO # INFO, DEBUG, WARN, ERROR
 
     # Setup Parameters
     setup:

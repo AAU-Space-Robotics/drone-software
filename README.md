@@ -310,3 +310,6 @@ ros2genmsg('/home/daroe/drone-software/src', CreateShareableFile=true);
 
 source ros2 
 source /opt/ros/jazzy/setup.bash
+
+sudo apt install ros-humble-serial-driver
+sudo apt install ros-humble-asio-cmake-module

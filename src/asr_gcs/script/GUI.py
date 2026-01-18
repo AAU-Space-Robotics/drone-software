@@ -279,14 +279,14 @@ class DroneGuiNode(Node):
         super().__init__('thyra_gui_node')
         self.subscription = self.create_subscription(
             DroneState,
-            "thyra/out/drone_state",
+            "/asr/thyra/out/drone_state",
             self.state_callback,
             10
             
         )
         self.subscription = self.create_subscription(
            ProbeGlobalLocations,
-           '/probe_detector/global_probe_locations',
+           '/asr/probe_detector/global_probe_locations',
            self.probe_callback,
            qos
            
@@ -300,7 +300,7 @@ class DroneGuiNode(Node):
         # )
         self.publisher_ = self.create_publisher(
            GcsHeartbeat, 
-           "/thyra/in/gcs_heartbeat",
+           "/asr/thyra/in/gcs_heartbeat",
            qos
         )
 
@@ -310,7 +310,7 @@ class DroneGuiNode(Node):
         self.get_logger().info('GUI Publisher Started')
         self.imgui_logger = ImGuiLogger()
         self.timer = self.create_timer(0.1, self.timer_callback)
-        self.manual_control_publisher = self.create_publisher(ManualControlInput, '/thyra/in/manual_input',qos)
+        self.manual_control_publisher = self.create_publisher(ManualControlInput, '/asr/thyra/in/manual_input',qos)
         self._action_client = ActionClient(self, DroneCommand, '/asr/thyra/in/drone_command')   
         self.imgui_logger.info('DroneCommand client initialized, waiting for action server...')
         self._action_client.wait_for_server()
@@ -1912,12 +1912,12 @@ def main(args=None):
  
     try:
         font_dir = os.path.join(
-            ament_index_python.packages.get_package_share_directory("gcs"),
+            ament_index_python.packages.get_package_share_directory("asr_gcs"),
             "fonts", "source-code-pro"
         
         )
         image_dir = os.path.join(
-            ament_index_python.packages.get_package_share_directory("gcs"),
+            ament_index_python.packages.get_package_share_directory("asr_gcs"),
             "images"
         )
         script_dir = os.path.dirname(os.path.abspath(__file__))
