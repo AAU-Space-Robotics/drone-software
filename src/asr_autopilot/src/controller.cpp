@@ -114,8 +114,11 @@ Eigen::Vector3d Controller::positionControl(double sample_time,
     previous_position_error.Y.error = position_error_ned.y();
     previous_position_error.Z.error = position_error_ned.z();
 
-
-    vz =std::clamp(vz, -1.0, 1.0); // Constrain vertical velocity
+    // Saturate velocities (similar to PX4's MPC_XY_VEL_MAX and MPC_Z_VEL_MAX)
+    vx = std::clamp(vx, -max_horizontal_velocity_, max_horizontal_velocity_);
+    vy = std::clamp(vy, -max_horizontal_velocity_, max_horizontal_velocity_);
+    vz = std::clamp(vz, -max_vertical_velocity_, max_vertical_velocity_);
+    
     return Eigen::Vector3d(vx, vy, vz);
 }
 
@@ -130,6 +133,7 @@ Eigen::Vector4d Controller::velocityControl(double sample_time,
     Eigen::Vector3d velocity_error_ned = target_velocity_ned_earth.vector() - velocity_ned_earth.vector();
     Eigen::Vector3d velocity_error_frd = transformations_.errorGlobalToLocal(velocity_error_ned, attitude.quaternion());
                                              
+    // Derivative computed in FRD frame using previous FRD error (prevents discontinuity during rotation)
     Eigen::Vector3d velocity_error_frd_d = (velocity_error_frd-Eigen::Vector3d(previous_velocity_error.X.error,
                                                             previous_velocity_error.Y.error,
                                                             previous_velocity_error.Z.error)) / sample_time;
@@ -164,10 +168,10 @@ Eigen::Vector4d Controller::velocityControl(double sample_time,
     
     //thrust_cmd = EMA_filter(thrust_cmd, previous_control_signal.w());
 
-    // Update previous error
-    previous_velocity_error.X.error = velocity_error_ned.x();
-    previous_velocity_error.Y.error = velocity_error_ned.y();
-    previous_velocity_error.Z.error = velocity_error_ned.z();
+    // Update previous error in FRD frame (consistent with derivative computation)
+    previous_velocity_error.X.error = velocity_error_frd.x();
+    previous_velocity_error.Y.error = velocity_error_frd.y();
+    previous_velocity_error.Z.error = velocity_error_frd.z();
 
     // Return control outputs (roll, pitch, yaw, thrust)
     return Eigen::Vector4d(roll_cmd, -pitch_cmd, yaw_cmd, thrust_cmd);
@@ -179,13 +183,11 @@ double Controller::EMA_filter(double new_value, double previous_value) const {
 }
 
 double Controller::mapNormToAngle(double norm) const {
-    constexpr double max_angle = M_PI / 9.0; // ~19.5 degrees //! Make configurable?
-    return norm * max_angle;
+    return norm * max_tilt_angle_;
 }
 
 double Controller::constrainAngle(double angle) const {
-    constexpr double max_angle = M_PI / 9.0; // ~19.5 degrees //! Make configurable?
-    return std::clamp(angle, -max_angle, max_angle);
+    return std::clamp(angle, -max_tilt_angle_, max_tilt_angle_);
 }
 
 double Controller::constrainThrust(double thrust) const {
@@ -195,23 +197,16 @@ double Controller::constrainThrust(double thrust) const {
 }
 
 Eigen::Vector4d Controller::map_controls(const Stamped4DVector& input) const {
-    Eigen::Vector4d output;
-    if (std::abs(input.x()) < 1e-6 && std::abs(input.y()) < 1e-6) {
-        // If both roll and pitch are near zero, return zero velocities
-        return Eigen::Vector4d(0.0, 0.0, 0.0, input.w());
-    }
-    else {
-        double max_velocity = 3.0; // m/s, adjust as needed
-        output.x() = max_velocity * std::sin(input.y()); // pitch controls forward/backward
-        output.y() = max_velocity * std::sin(input.x()); // roll controls left/right
-        std::cout << "Mapped velocities: vx=" << output.x() << ", vy=" << output.y() << std::endl;
-    }
+    Eigen::Vector4d output = Eigen::Vector4d::Zero();
     
-    output.z() = input.z(); // thrust
-
-    output.w() = 0.0;
-
-
-
+    double max_velocity = 3.0; // m/s, adjust as needed
+    
+    // Generate velocity commands in body frame (FRD) for intuitive control
+    // Forward stick → forward velocity, Right stick → right velocity
+    output.x() = max_velocity * std::sin(input.y()); // pitch controls forward/backward (vx in FRD)
+    output.y() = max_velocity * std::sin(input.x()); // roll controls left/right (vy in FRD)
+    output.z() = input.z(); // yaw velocity command
+    output.w() = input.w(); // thrust (vertical velocity in manual aided mode)
+    
     return output;
 }

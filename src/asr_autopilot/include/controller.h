@@ -73,6 +73,15 @@ public:
     double hover_thrust_estimate_ = -0.5; // Initial estimated hover thrust for most drones
     double hover_learning_rate_ = 0.0001;
 
+    // Velocity saturation limits (set from motion_constraints.limits.max_linear_velocity)
+    // These limit the position controller output to prevent unbounded velocity commands
+    double max_horizontal_velocity_ = 3.0; // m/s - max XY velocity
+    double max_vertical_velocity_ = 1.0;   // m/s - max Z velocity (up and down)
+
+    // Tilt angle limit (set from motion_constraints.limits.max_tilt_angle)
+    // Maximum allowed roll/pitch angle for attitude commands
+    double max_tilt_angle_ = M_PI / 9.0;   // radians (~20 degrees default)
+
     Eigen::Vector4d map_controls(const Stamped4DVector& input) const;
 
 private:

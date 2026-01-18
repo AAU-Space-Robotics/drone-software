@@ -158,35 +158,56 @@ public:
 
         RCLCPP_INFO(get_logger(), "Controller EMA filter alpha: %.2f", controller_.ema_filter_alpha_);
 
-        this->declare_parameter("path_planner.constraints.min_linear_velocity",0.0);
-        this->declare_parameter("path_planner.constraints.min_angular_velocity",0.0);
-        this->declare_parameter("path_planner.constraints.max_linear_velocity",0.1);
-        this->declare_parameter("path_planner.constraints.max_angular_velocity",0.1);
-        this->declare_parameter("path_planner.default.linear_velocity",0.05);
-        this->declare_parameter("path_planner.default.angular_velocity",0.05);
+        // Motion constraints (used by both path planner and position controller)
+        this->declare_parameter("motion_constraints.limits.min_linear_velocity",0.0);
+        this->declare_parameter("motion_constraints.limits.min_angular_velocity",0.0);
+        this->declare_parameter("motion_constraints.limits.max_linear_velocity",0.1);
+        this->declare_parameter("motion_constraints.limits.max_angular_velocity",0.1);
+        this->declare_parameter("motion_constraints.limits.max_tilt_angle", 20.0);  // degrees
+        this->declare_parameter("motion_constraints.default.linear_velocity",0.05);
+        this->declare_parameter("motion_constraints.default.angular_velocity",0.05);
 
 
-        this->get_parameter("path_planner.constraints.min_linear_velocity", path_planner_.min_linear_velocity_);
-        this->get_parameter("path_planner.constraints.min_angular_velocity", path_planner_.min_angular_velocity_);
-        this->get_parameter("path_planner.constraints.max_linear_velocity", path_planner_.max_linear_velocity_);
-        this->get_parameter("path_planner.constraints.max_angular_velocity", path_planner_.max_angular_velocity_);
-        this->get_parameter("path_planner.default.linear_velocity", path_planner_.current_linear_velocity_);
-        this->get_parameter("path_planner.default.angular_velocity", path_planner_.current_angular_velocity_);
+        this->get_parameter("motion_constraints.limits.min_linear_velocity", path_planner_.min_linear_velocity_);
+        this->get_parameter("motion_constraints.limits.min_angular_velocity", path_planner_.min_angular_velocity_);
+        this->get_parameter("motion_constraints.limits.max_linear_velocity", path_planner_.max_linear_velocity_);
+        this->get_parameter("motion_constraints.limits.max_angular_velocity", path_planner_.max_angular_velocity_);
+        this->get_parameter("motion_constraints.default.linear_velocity", path_planner_.current_linear_velocity_);
+        this->get_parameter("motion_constraints.default.angular_velocity", path_planner_.current_angular_velocity_);
+
+        // Get max tilt angle in degrees and convert to radians
+        double max_tilt_angle_deg = 20.0;
+        this->get_parameter("motion_constraints.limits.max_tilt_angle", max_tilt_angle_deg);
+        controller_.max_tilt_angle_ = max_tilt_angle_deg * M_PI / 180.0;
+
+        // Use motion constraints for controller velocity saturation
+        controller_.max_horizontal_velocity_ = path_planner_.max_linear_velocity_;
+        controller_.max_vertical_velocity_ = path_planner_.max_linear_velocity_;
 
         RCLCPP_INFO(get_logger(),
-            "Path planner parameters:\n"
+            "Motion constraints (path planner & controller):\n"
             "  min_linear_velocity     = %.2f m/s\n"
             "  min_angular_velocity    = %.2f rad/s\n"
             "  max_linear_velocity     = %.2f m/s\n"
             "  max_angular_velocity    = %.2f rad/s\n"
+            "  max_tilt_angle          = %.1f degrees (%.3f rad)\n"
             "  default_linear_velocity = %.2f m/s\n"
             "  default_angular_velocity= %.2f rad/s",
             path_planner_.min_linear_velocity_,
             path_planner_.min_angular_velocity_,
             path_planner_.max_linear_velocity_,
             path_planner_.max_angular_velocity_,
+            max_tilt_angle_deg,
+            controller_.max_tilt_angle_,
             path_planner_.current_linear_velocity_,
             path_planner_.current_angular_velocity_);
+        
+        RCLCPP_INFO(get_logger(),
+            "Controller velocity saturation:\n"
+            "  max_horizontal_velocity = %.2f m/s\n"
+            "  max_vertical_velocity   = %.2f m/s",
+            controller_.max_horizontal_velocity_,
+            controller_.max_vertical_velocity_);
 
 
         // Set PID gains in controller
@@ -947,12 +968,12 @@ private:
         Stamped4DVector manual_input = state_manager_.getManualControlInput();
         //RCLCPP_INFO(get_logger(), "Manual input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
         //             manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w());
-         //Convert manual input to target velocity in NED frame
+         //Convert manual input to target velocity in body frame (FRD), then transform to NED
         
   
 
         Eigen::Vector4d vel_cmd = controller_.map_controls(manual_input);
-        //RCLCPP_INFO(get_logger(), "Velocity command from manual input: vy=%.2f, vx=%.2f, yaw=%.2f, vz=%.2f",
+        //RCLCPP_INFO(get_logger(), "Velocity command from manual input: vx=%.2f, vy=%.2f, yaw=%.2f, vz=%.2f",
         //             vel_cmd.x(), vel_cmd.y(), vel_cmd.z(), vel_cmd.w());
        //
         Stamped3DVector velocity = state_manager_.getGlobalVelocity();
@@ -960,7 +981,12 @@ private:
         Eigen::Quaterniond target_quat = state_manager_.getTargetAttitude().quaternion();
         double dt = (get_time() - velocity.getTime()).seconds();
 
-        Stamped3DVector target_velocity_3d(get_time(), vel_cmd.x(), vel_cmd.y(), vel_cmd.w()); //this fucker
+        // Velocity commands from map_controls are in body frame (FRD)
+        // Transform to NED frame for velocity controller
+        Eigen::Vector3d vel_cmd_body(vel_cmd.x(), vel_cmd.y(), vel_cmd.w());
+        Eigen::Vector3d vel_cmd_ned = attitude.quaternion() * vel_cmd_body;
+        
+        Stamped3DVector target_velocity_3d(get_time(), vel_cmd_ned.x(), vel_cmd_ned.y(), vel_cmd_ned.z());
         
         Eigen::Vector4d output = controller_.velocityControl(
            dt, 
@@ -970,7 +996,10 @@ private:
            target_velocity_3d, 
            state_manager_.getLatestControlSignalVelocity()
         );
-       //Eigen::Vector4d output  = {0,0,0,0};
+        
+        // Set yaw rate from manual input (vel_cmd.z contains yaw_velocity)
+        output.z() = vel_cmd.z();
+        
         return output;
        // ////Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
    

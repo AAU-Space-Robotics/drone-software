@@ -39,15 +39,18 @@
           learning_rate: 0.0001      # Learning rate for hover thrust adaptation
       ema:
         alpha: 0.15 # Exponential moving average factor for smoothing
-    path_planner:
+
+    # Motion Constraints - applies to both path planning and position control
+    motion_constraints:
       default:
         linear_velocity: 0.4    # Default linear velocity (m/s)
         angular_velocity: 0.5   # Default angular velocity (rad/s)
-      constraints:
+      limits:
         min_linear_velocity: 0.1        # Minimum linear velocity (m/s)
         min_angular_velocity: 0.1       # Minimum angular velocity (rad/s)
         max_linear_velocity: 1.5        # Maximum linear velocity (m/s)
         max_angular_velocity: 1.5       # Maximum angular velocity (rad/s)
+        max_tilt_angle: 20.0            # Maximum tilt angle in degrees (roll/pitch)
 
     # Safety Parameters
     safety:
