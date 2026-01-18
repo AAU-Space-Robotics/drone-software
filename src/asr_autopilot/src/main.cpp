@@ -652,13 +652,13 @@ private:
 
     void manualControlInputCallback(const interfaces::msg::ManualControlInput::SharedPtr msg)
     {
-        Stamped4DVector manual_input = state_manager_.getManualControlInput();
-        manual_input.setTime(get_time());
-        manual_input.setX(controller_.mapNormToAngle(msg->roll));
-        manual_input.setY(controller_.mapNormToAngle(msg->pitch));
-        manual_input.setZ(manual_input.z() + controller_.mapNormToAngle(msg->yaw_velocity * yaw_sensitivity_));
-        manual_input.setW(msg->thrust);
-        state_manager_.setManualControlInput(manual_input);
+        Stamped4DVector manual_input_sub_ = state_manager_.getManualControlInput();
+        manual_input_sub_.setTime(get_time());
+        manual_input_sub_.setX(controller_.mapNormToAngle(msg->roll));
+        manual_input_sub_.setY(controller_.mapNormToAngle(msg->pitch));
+        manual_input_sub_.setZ(manual_input_sub_.z() + controller_.mapNormToAngle(msg->yaw_velocity * yaw_sensitivity_));
+        manual_input_sub_.setW(msg->thrust);
+        state_manager_.setManualControlInput(manual_input_sub_);
     }
 
     void ActuatorOutputCallback(const ActuatorOutputs::SharedPtr msg)
@@ -823,9 +823,9 @@ private:
     // Control modes
     Eigen::Vector4d manualMode()
     {
-        Stamped4DVector manual_input = state_manager_.getManualControlInput();
+        Stamped4DVector manual_input_sub_ = state_manager_.getManualControlInput();
         
-        return {manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w()};
+        return {manual_input_sub_.x(), manual_input_sub_.y(), manual_input_sub_.z(), manual_input_sub_.w()};
     }
 
     Eigen::Vector4d positionAndVelocityControl()
@@ -944,7 +944,7 @@ private:
     Eigen::Vector4d manualAidedMode()
     {
         //RCLCPP_WARN(get_logger(), "Manual aided mode is not implemented yet, defaulting to manual mode.");
-        //Stamped4DVector manual_input = state_manager_.getManualControlInput();
+        Stamped4DVector manual_input = state_manager_.getManualControlInput();
         //RCLCPP_INFO(get_logger(), "Manual input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
         //             manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w());
          //Convert manual input to target velocity in NED frame

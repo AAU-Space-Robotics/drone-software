@@ -1167,7 +1167,7 @@ def start_joystick(node):
                     if(node.joystick.get_button(2) == 1):
                         node.send_command("arm")
                         arming_state = 1
-                        node.send_command("manual")
+                        node.send_command("manual_aided")
                     #print(f"Arming state: {arming_state}")
                     #print(f'arming state {arming_state} and button state {node.joystick.get_button(2)}')
                     #print(int(abs(node.joystick.get_axis(4))))
