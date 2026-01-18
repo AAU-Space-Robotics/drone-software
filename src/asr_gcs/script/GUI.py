@@ -2016,7 +2016,7 @@ def main(args=None):
         grid()
         Arm_Button(node)
         Kill_command(node)
-        #Goto_field(node)
+        Goto_field(node)
         speed_field(node)
         Dropdown_Menu()
         XYZ_Text_Field(msg=drone_data)
