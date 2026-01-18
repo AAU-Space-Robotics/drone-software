@@ -13,6 +13,8 @@ Establish a serial connection between the Raspberry Pi 4 (RPi4) and the PX4 Cube
 | 10                    | Pin 2               | RPi4 RX → PX4 TX       |
 | 9                     | Pin 6               | RPi4 GND → PX4 GND     |
 
+Red should go to pi RXD, and blue to pi TXD.
+
 *Note:* PX4 Telem 2 uses a 6-pin JST-GH connector; pins 1, 4, and 5 are unused. For details, see [Cube Orange Overview](https://ardupilot.org/copter/docs/common-thecubeorange-overview.html).
 
 ## Software Setup
