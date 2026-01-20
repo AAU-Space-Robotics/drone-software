@@ -277,6 +277,15 @@ struct AccelerationError {
     PIDError Z;
 };
 
+// Trajectory initialization state bundle
+struct TrajectoryInitState {
+    Eigen::Vector3d position;
+    Eigen::Quaterniond orientation;
+    Eigen::Vector3d velocity;
+    Eigen::Vector3d acceleration;
+    double yaw;
+};
+
 // StateManager class definition
 class StateManager {
 public:
@@ -343,6 +352,9 @@ public:
 
     void setGlobalProbeLocations(const GlobalProbeLocations& new_data);
     GlobalProbeLocations getGlobalProbeLocations();
+
+    // Get bundled trajectory initialization state
+    TrajectoryInitState getTrajectoryInitState();
 
 private:
     

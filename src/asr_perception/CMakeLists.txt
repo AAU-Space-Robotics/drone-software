@@ -9,9 +9,9 @@ if(NOT BUILD_ASR_PERCEPTION)
   return()
 endif()
 
-# Default to C++17 for TensorRT compatibility
+# Default to C++20 for TensorRT compatibility
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD 20)
 endif()
 
 # Compiler options

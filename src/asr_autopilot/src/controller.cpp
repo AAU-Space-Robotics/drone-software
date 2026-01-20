@@ -128,7 +128,7 @@ Eigen::Vector4d Controller::velocityControl(double sample_time,
                                                 const Stamped3DVector& velocity_ned_earth,
                                                 const StampedQuaternion& attitude,
                                                 const Stamped3DVector& target_velocity_ned_earth,
-                                                const Eigen::Vector4d& previous_control_signal) {
+                                                const Eigen::Vector4d& /*previous_control_signal*/) {
 
     Eigen::Vector3d velocity_error_ned = target_velocity_ned_earth.vector() - velocity_ned_earth.vector();
     Eigen::Vector3d velocity_error_frd = transformations_.errorGlobalToLocal(velocity_error_ned, attitude.quaternion());

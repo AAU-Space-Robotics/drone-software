@@ -978,7 +978,6 @@ private:
        //
         Stamped3DVector velocity = state_manager_.getGlobalVelocity();
         StampedQuaternion attitude = state_manager_.getAttitude();
-        Eigen::Quaterniond target_quat = state_manager_.getTargetAttitude().quaternion();
         double dt = (get_time() - velocity.getTime()).seconds();
 
         // Velocity commands from map_controls are in body frame (FRD)
@@ -1260,7 +1259,7 @@ private:
     rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID & /*uuid*/,
                                                 std::shared_ptr<const DroneCommand::Goal> goal)
     {
-        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed", "set_angular_speed", "spin"};
+        static const std::vector<std::string> allowed_commands = {"arm", "disarm", "takeoff", "goto", "land", "estop", "eland", "manual", "manual_aided", "set_origin", "set_linear_speed", "set_angular_speed", "spin", "test_multi_waypoint"};
         RCLCPP_INFO(get_logger(), "Received goal request with command_type: %s", goal->command_type.c_str());
 
         DroneState drone_state = state_manager_.getDroneState();
@@ -1359,7 +1358,11 @@ private:
                 return rclcpp_action::GoalResponse::REJECT;
             }
             }
-
+        } else if (goal->command_type == "test_multi_waypoint") {
+            if (drone_state.arming_state != ArmingState::ARMED) {
+                RCLCPP_WARN(get_logger(), "Rejected: drone not armed for test_multi_waypoint.");
+                return rclcpp_action::GoalResponse::REJECT;
+            }
         }
 
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
@@ -1379,6 +1382,217 @@ private:
             .detach();
     }
 
+    // Command execution handlers
+    void activateTrajectory(float trajectory_duration) {
+        DroneState drone_state = state_manager_.getDroneState();
+        drone_state.trajectory_start_time_ = get_time();
+        drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
+        drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
+        state_manager_.setDroneState(drone_state);
+    }
+
+    void executeEstop(std::shared_ptr<DroneCommand::Result> result) {
+        setDroneMode(FlightMode::EMERGENCY_STOP);
+        disarm(true);
+        cleanupControlLoop();
+        result->success = true;
+        result->message = "Emergency stop executed.";
+    }
+
+    void executeEland(std::shared_ptr<DroneCommand::Result> result) {
+        ensureControlLoopRunning(3);
+        result->success = true;
+        result->message = "Emergency landing executed.";
+    }
+
+    void executeArm(std::shared_ptr<DroneCommand::Result> result) {
+        Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
+        Stamped3DVector global_pos = state_manager_.getGlobalPosition();
+        target_profile.setTime(get_time());
+        target_profile.setX(global_pos.x());
+        target_profile.setY(global_pos.y());
+        target_profile.setZ(global_pos.z());
+        target_profile.setW(0.0);
+        state_manager_.setTargetPositionProfile(target_profile);
+        arm();
+        result->success = true;
+        result->message = "Drone armed.";
+    }
+
+    void executeDisarm(std::shared_ptr<DroneCommand::Result> result) {
+        disarm();
+        cleanupControlLoop();
+        result->success = true;
+        result->message = "Drone disarmed.";
+    }
+
+    void executeTakeoff(const std::shared_ptr<const DroneCommand::Goal> goal, 
+                        std::shared_ptr<DroneCommand::Result> result) {
+        setDroneMode(FlightMode::POSITION);
+        ensureControlLoopRunning(2);
+
+        TrajectoryInitState init_state = state_manager_.getTrajectoryInitState();
+        Eigen::Quaterniond target_quat = transformations_.eulerToQuaternion(0.0, 0.0, init_state.yaw).normalized();
+        Eigen::Vector3d target_position = {init_state.position.x(), init_state.position.y(), 
+                                          std::min(goal->target_pose[0], takeoff_height_ + init_state.position.z())};
+
+        path_planner_.GenerateTrajectory(init_state.position, target_position, init_state.orientation, 
+                                        target_quat, init_state.velocity, init_state.acceleration, 
+                                        trajectoryMethod::MIN_SNAP);
+        activateTrajectory(path_planner_.getTotalTime());
+
+        result->success = true;
+        result->message = "Drone taking off.";
+        std::cout << "Takeoff target: " << target_position.transpose() << std::endl;
+    }
+
+    void executeGoto(const std::shared_ptr<const DroneCommand::Goal> goal, 
+                     std::shared_ptr<DroneCommand::Result> result) {
+        setDroneMode(FlightMode::POSITION);
+        ensureControlLoopRunning(2);
+
+        TrajectoryInitState init_state = state_manager_.getTrajectoryInitState();
+        float target_yaw = transformations_.unwrapAngle(goal->yaw, 2*M_PI, 0);
+        Eigen::Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
+        Eigen::Quaterniond target_quat = transformations_.eulerToQuaternion(0.0, 0.0, target_yaw).normalized();
+
+        path_planner_.GenerateTrajectory(init_state.position, target_position, init_state.orientation, 
+                                        target_quat, init_state.velocity, init_state.acceleration, 
+                                        trajectoryMethod::MIN_SNAP);
+        activateTrajectory(path_planner_.getTotalTime());
+
+        result->success = true;
+        result->message = "Drone moving to target position.";
+    }
+
+    void executeSpin(const std::shared_ptr<const DroneCommand::Goal> goal, 
+                     std::shared_ptr<DroneCommand::Result> result) {
+        setDroneMode(FlightMode::POSITION);
+        ensureControlLoopRunning(2);
+
+        TrajectoryInitState init_state = state_manager_.getTrajectoryInitState();
+        double target_yaw = goal->target_pose[0];
+        double num_rotations = goal->target_pose[1];
+        bool use_longest_path = (goal->target_pose[2] == 1.0);
+
+        path_planner_.GenerateSpinTrajectory(init_state.position, init_state.orientation, 
+                                            target_yaw, num_rotations, use_longest_path, 
+                                            trajectoryMethod::MIN_SNAP);
+        activateTrajectory(path_planner_.getTotalTime());
+
+        result->success = true;
+        result->message = "Drone spinning to yaw " + std::to_string(target_yaw) + " with " + 
+                         std::to_string(num_rotations) + " rotations.";
+        RCLCPP_INFO(get_logger(), "Spin target: yaw=%.2f, rotations=%.1f, path=%s", 
+                   target_yaw, num_rotations, use_longest_path ? "longest" : "shortest");
+    }
+
+    void executeTestMultiWaypoint(std::shared_ptr<DroneCommand::Result> result) {
+        setDroneMode(FlightMode::POSITION);
+        ensureControlLoopRunning(2);
+
+        TrajectoryInitState init_state = state_manager_.getTrajectoryInitState();
+        std::vector<Waypoint> waypoints;
+        
+        waypoints.push_back({init_state.position, init_state.yaw, 0.0, 0.0});
+        waypoints.push_back({init_state.position + Eigen::Vector3d(1.0, 0.0, 0.0), init_state.yaw, 0.0, 0.0});
+        waypoints.push_back({init_state.position + Eigen::Vector3d(1.0, 1.0, 0.0), init_state.yaw + 1.57, 0.0, 0.0});
+        waypoints.push_back({init_state.position + Eigen::Vector3d(0.0, 1.0, 0.0), init_state.yaw + 3.14, 0.0, 0.0});
+        waypoints.push_back({init_state.position, init_state.yaw, 0.0, 0.0});
+
+        bool success = path_planner_.GenerateMultiWaypointTrajectory(
+            waypoints, init_state.velocity, init_state.acceleration, init_state.yaw, trajectoryMethod::MIN_SNAP);
+
+        if (!success) {
+            result->success = false;
+            result->message = "Failed to generate multi-waypoint trajectory.";
+            RCLCPP_ERROR(get_logger(), "Multi-waypoint trajectory generation failed!");
+            return;
+        }
+
+        float trajectory_duration = path_planner_.getTotalTime();
+        auto constraint_result = path_planner_.checkConstraints(200);
+        if (!constraint_result.satisfied) {
+            RCLCPP_WARN(get_logger(), "Trajectory violates constraints! Max velocity: %.3f m/s (limit: %.3f m/s)", 
+                       constraint_result.max_velocity, path_planner_.max_linear_velocity_);
+        }
+        
+        auto segments = path_planner_.getSegmentInfo();
+        RCLCPP_INFO(get_logger(), "Multi-waypoint trajectory: %zu segments, total time: %.2f s", 
+                   segments.size(), trajectory_duration);
+        for (size_t i = 0; i < segments.size(); ++i) {
+            RCLCPP_INFO(get_logger(), "  Segment %zu: duration=%.2f s", i, segments[i].duration);
+        }
+
+        activateTrajectory(trajectory_duration);
+
+        result->success = true;
+        result->message = "Testing multi-waypoint trajectory: " + std::to_string(waypoints.size()) + 
+                         " waypoints, " + std::to_string(segments.size()) + " segments, " + 
+                         std::to_string(trajectory_duration) + " seconds.";
+    }
+
+    void executeManual(std::shared_ptr<DroneCommand::Result> result) {
+        cleanupControlLoop();
+        setDroneMode(FlightMode::MANUAL);
+        ensureControlLoopRunning(0);
+        result->success = true;
+        result->message = "Drone in manual mode.";
+    }
+
+    void executeManualAided(std::shared_ptr<DroneCommand::Result> result) {
+        setDroneMode(FlightMode::MANUAL_AIDED);
+        ensureControlLoopRunning(1);
+        result->success = true;
+        result->message = "Drone in manual aided mode.";
+    }
+
+    void executeLand(std::shared_ptr<DroneCommand::Result> result) {
+        setDroneMode(FlightMode::BEGIN_LAND_POSITION);
+        ensureControlLoopRunning(2);
+        landPositionMode();
+        result->success = true;
+        result->message = "Drone landing.";
+    }
+
+    void executeSetOrigin(std::shared_ptr<DroneCommand::Result> result) {
+        Stamped3DVector global_position = state_manager_.getGlobalPosition();
+        Stamped3DVector Current_origin = state_manager_.getOrigin();
+        global_position.vector().x() = global_position.vector().x() + Current_origin.vector().x();
+        global_position.vector().y() = global_position.vector().y() + Current_origin.vector().y();
+        global_position.vector().z() = global_position.vector().z() + Current_origin.vector().z();
+
+        state_manager_.setOrigin(global_position);
+        RCLCPP_INFO(get_logger(), "Origin set to current position: (%.2f, %.2f, %.2f)", 
+                   global_position.x(), global_position.y(), global_position.z());
+        result->success = true;
+        result->message = "Origin set to current position.";
+    }
+
+    void executeSetLinearSpeed(const std::shared_ptr<const DroneCommand::Goal> goal, 
+                               std::shared_ptr<DroneCommand::Result> result) {
+        float linear_speed = goal->target_pose[0];
+        bool velocity_set = path_planner_.setLinearVelocity(linear_speed);
+        result->success = velocity_set;
+        if (velocity_set) {
+            result->message = "Linear speed set to " + std::to_string(linear_speed) + " m/s.";
+        } else {
+            result->message = "Failed to set linear speed.";
+        }
+    }
+
+    void executeSetAngularSpeed(const std::shared_ptr<const DroneCommand::Goal> goal, 
+                                std::shared_ptr<DroneCommand::Result> result) {
+        float angular_speed = goal->target_pose[0];
+        bool velocity_set = path_planner_.setAngularVelocity(angular_speed);
+        result->success = velocity_set;
+        if (velocity_set) {
+            result->message = "Angular speed set to " + std::to_string(angular_speed) + " rad/s.";
+        } else {
+            result->message = "Failed to set angular speed.";
+        }
+    }
+
     void execute(const std::shared_ptr<GoalHandleDroneCommand> goal_handle)
     {
         const auto goal = goal_handle->get_goal();
@@ -1386,204 +1600,46 @@ private:
 
         try
         {
-            if (goal->command_type == "estop")
-            {
-                setDroneMode(FlightMode::EMERGENCY_STOP);
-                disarm(true);
-                cleanupControlLoop();
-                result->success = true;
-                result->message = "Emergency stop executed.";
+            if (goal->command_type == "estop") {
+                executeEstop(result);
             }
-            else if (goal->command_type == "eland")
-            {
-                // Begin blind descend
-                ensureControlLoopRunning(3);
-
-                result->success = true;
-                result->message = "Emergency landing executed.";
+            else if (goal->command_type == "eland") {
+                executeEland(result);
             }
-            else if (goal->command_type == "arm")
-            {
-
-                // Set the current target_position, to the current position
-                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-                Stamped3DVector global_pos = state_manager_.getGlobalPosition();
-                target_profile.setTime(get_time());
-                target_profile.setX(global_pos.x());
-                target_profile.setY(global_pos.y());
-                target_profile.setZ(global_pos.z());
-                target_profile.setW(0.0);
-                state_manager_.setTargetPositionProfile(target_profile);
-                arm();
-                result->success = true;
-                result->message = "Drone armed.";
+            else if (goal->command_type == "arm") {
+                executeArm(result);
             }
-            else if (goal->command_type == "disarm")
-            {
-                disarm();
-                cleanupControlLoop();
-                result->success = true;
-                result->message = "Drone disarmed.";
+            else if (goal->command_type == "disarm") {
+                executeDisarm(result);
             }
-            else if (goal->command_type == "takeoff")
-            {
-                setDroneMode(FlightMode::POSITION);
-                ensureControlLoopRunning(2); // Magic number 2 is position control mode
-
-                // Set the current position and orientation
-                Eigen::Quaterniond takeoff_quat = state_manager_.getAttitude().quaternion().normalized();;
-                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-                Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
-                Eigen::Vector3d current_velocity = state_manager_.getGlobalVelocity().vector();
-                Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
-                
-                // Get current yaw and make roll and pitch be zero
-                float takeoff_yaw = transformations_.quaternionToEuler(takeoff_quat).z();
-                Eigen::Quaterniond target_quat = transformations_.eulerToQuaternion(0.0, 0.0, takeoff_yaw).normalized();
-
-                // Set the target takeoff goal, at least 1.5m above current position with current orientation
-                Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), std::min(goal->target_pose[0], takeoff_height_ + target_profile.z())};
-
-                // Generate takeoff trajectory
-                path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, trajectoryMethod::MIN_SNAP);
-                float trajectory_duration = path_planner_.getTotalTime();
-
-                // Set trajectory start time and activate trajectory mode
-                DroneState drone_state = state_manager_.getDroneState();
-                drone_state.trajectory_start_time_ = get_time();
-                drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
-                drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
-                state_manager_.setDroneState(drone_state);
-
-                result->success = true;
-                result->message = "Drone taking off.";
-                std::cout << "Takeoff target: " << target_position.transpose() << std::endl;
+            else if (goal->command_type == "takeoff") {
+                executeTakeoff(goal, result);
             }
-            else if (goal->command_type == "goto")
-            {
-                setDroneMode(FlightMode::POSITION);
-                ensureControlLoopRunning(2);
-
-                // Set the current position and orientation
-                StampedQuaternion attitude = state_manager_.getAttitude();
-                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-                Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
-                Eigen::Quaterniond takeoff_quat = attitude.quaternion().normalized();
-                float target_yaw = transformations_.unwrapAngle(goal->yaw, 2*M_PI, 0);
-                Eigen::Vector3d current_velocity = state_manager_.getGlobalVelocity().vector();
-                Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
-
-                // Set the target position and orientation with specified yaw
-                Eigen::Vector3d target_position = {goal->target_pose[0], goal->target_pose[1], goal->target_pose[2]};
-                Eigen::Quaterniond target_quat = transformations_.eulerToQuaternion(0.0, 0.0, target_yaw).normalized();
-
-                // Generate trajectory
-                path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, trajectoryMethod::MIN_SNAP);
-                float trajectory_duration = path_planner_.getTotalTime();
-                
-                // Set trajectory start time
-                DroneState drone_state = state_manager_.getDroneState();
-                drone_state.trajectory_start_time_ = get_time();
-                drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
-                drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
-                state_manager_.setDroneState(drone_state);
-
-                result->success = true;
-                result->message = "Drone moving to target position.";
-            } else if (goal->command_type == "spin")
-            {
-                setDroneMode(FlightMode::POSITION);
-                ensureControlLoopRunning(2);
-
-                // Get current position and orientation
-                StampedQuaternion attitude = state_manager_.getAttitude();
-                Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-                Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
-                Eigen::Quaterniond current_quat = attitude.quaternion().normalized();
-
-                // Extract spin parameters
-                double target_yaw = goal->target_pose[0];
-                double num_rotations = goal->target_pose[1];
-                bool use_longest_path = (goal->target_pose[2] == 1.0);
-
-                // Generate spin trajectory
-                path_planner_.GenerateSpinTrajectory(takeoff_position, current_quat, target_yaw, num_rotations, use_longest_path, trajectoryMethod::MIN_SNAP);
-                float trajectory_duration = path_planner_.getTotalTime();
-
-                // Set trajectory start time and activate trajectory mode
-                DroneState drone_state = state_manager_.getDroneState();
-                drone_state.trajectory_start_time_ = get_time();
-                drone_state.trajectory_mode = TrajectoryMode::ACTIVE;
-                drone_state.trajectory_duration = rclcpp::Duration::from_seconds(trajectory_duration);
-                state_manager_.setDroneState(drone_state);
-
-                result->success = true;
-                result->message = "Drone spinning to yaw " + std::to_string(target_yaw) + " with " + std::to_string(num_rotations) + " rotations.";
-                RCLCPP_INFO(get_logger(), "Spin target: yaw=%.2f, rotations=%.1f, path=%s", target_yaw, num_rotations, use_longest_path ? "longest" : "shortest");
+            else if (goal->command_type == "goto") {
+                executeGoto(goal, result);
+            } else if (goal->command_type == "spin") {
+                executeSpin(goal, result);
             }
-            else if (goal->command_type == "manual")
-            {
-                cleanupControlLoop();
-                setDroneMode(FlightMode::MANUAL);
-                ensureControlLoopRunning(0);
-                result->success = true; 
-                result->message = "Drone in manual mode.";
+            else if (goal->command_type == "test_multi_waypoint") {
+                executeTestMultiWaypoint(result);
             }
-            else if (goal->command_type == "manual_aided")
-            {
-                setDroneMode(FlightMode::MANUAL_AIDED);
-                ensureControlLoopRunning(1);
-                result->success = true;
-                result->message = "Drone in manual aided mode.";
+            else if (goal->command_type == "manual") {
+                executeManual(result);
             }
-            else if (goal->command_type == "land")
-            {
-                setDroneMode(FlightMode::BEGIN_LAND_POSITION);
-                ensureControlLoopRunning(2);
-                // Land drone
-                landPositionMode();
-
-                result->success = true;
-                result->message = "Drone landing.";
+            else if (goal->command_type == "manual_aided") {
+                executeManualAided(result);
             }
-            else if (goal->command_type == "set_origin")
-            {
-                // Set the origin to the current position
-                Stamped3DVector global_position = state_manager_.getGlobalPosition();
-                Stamped3DVector Current_origin = state_manager_.getOrigin();
-                global_position.vector().x() = global_position.vector().x() +  Current_origin.vector().x(); 
-                global_position.vector().y() = global_position.vector().y() + Current_origin.vector().y(); 
-                global_position.vector().z() = global_position.vector().z() + Current_origin.vector().z(); // Keep the current origin height
-
-
-                state_manager_.setOrigin(global_position);
-                RCLCPP_INFO(get_logger(), "Origin set to current position: (%.2f, %.2f, %.2f)", global_position.x(), global_position.y(), global_position.z());
-                result->success = true;
-                result->message = "Origin set to current position.";
+            else if (goal->command_type == "land") {
+                executeLand(result);
             }
-            else if (goal->command_type == "set_linear_speed")
-            {
-                // Set the linear speed for the drone
-                float linear_speed = goal->target_pose[0];
-                bool velocity_set = path_planner_.setLinearVelocity(linear_speed);
-                result->success = velocity_set;
-                if (velocity_set) {
-                    result->message = "Linear speed set to " + std::to_string(linear_speed) + " m/s.";
-                } else {
-                    result->message = "Failed to set linear speed.";
-                }
+            else if (goal->command_type == "set_origin") {
+                executeSetOrigin(result);
             }
-            else if (goal->command_type == "set_angular_speed")
-            {
-                // Set the angular speed for the drone
-                float angular_speed = goal->target_pose[0];
-                bool velocity_set = path_planner_.setAngularVelocity(angular_speed);
-                result->success = velocity_set;
-                if (velocity_set) {
-                    result->message = "Angular speed set to " + std::to_string(angular_speed) + " rad/s.";
-                } else {
-                    result->message = "Failed to set angular speed.";
-                }
+            else if (goal->command_type == "set_linear_speed") {
+                executeSetLinearSpeed(goal, result);
+            }
+            else if (goal->command_type == "set_angular_speed") {
+                executeSetAngularSpeed(goal, result);
             }
             else
             {

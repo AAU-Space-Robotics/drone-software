@@ -1,4 +1,5 @@
 #include "state_manager.h"
+#include "transformations.h"
 
 // Setters & Getters
 void StateManager::setGlobalPosition(const Stamped3DVector& new_data) {
@@ -236,6 +237,27 @@ void StateManager::setGlobalProbeLocations(const GlobalProbeLocations& new_data)
 GlobalProbeLocations StateManager::getGlobalProbeLocations() {
     std::lock_guard<std::mutex> lock(probe_global_locations_mutex_);
     return probe_global_locations_;
+}
+
+// Get bundled trajectory initialization state
+TrajectoryInitState StateManager::getTrajectoryInitState() {
+    // Lock all necessary mutexes
+    std::lock_guard<std::mutex> att_lock(attitude_data_mutex_);
+    std::lock_guard<std::mutex> vel_lock(velocity_global_mutex_);
+    std::lock_guard<std::mutex> acc_lock(acceleration_global_mutex_);
+    std::lock_guard<std::mutex> profile_lock(target_position_profile_mutex_);
+    
+    Eigen::Quaterniond quat = attitude_.data.normalized();
+    Transformations transformations;
+    Eigen::Vector3d euler = transformations.quaternionToEuler(quat);
+    
+    return {
+        .position = {target_position_profile_.x(), target_position_profile_.y(), target_position_profile_.z()},
+        .orientation = quat,
+        .velocity = velocity_global_.data,
+        .acceleration = acceleration_global_.data,
+        .yaw = euler.z()
+    };
 }
 
 // End of Setters & Getters

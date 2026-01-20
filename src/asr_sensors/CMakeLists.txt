@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.5)
 
 project(asr_sensors)
 
-# Default to C++14
+# Default to C++20
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD 20)
 endif()
 
 # Compiler options

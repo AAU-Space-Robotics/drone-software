@@ -22,6 +22,27 @@ struct trajectorySegment {
     std::vector<double> coefficient;
 };
 
+struct Waypoint {
+    Eigen::Vector3d position;
+    double yaw;
+    double linear_velocity;   // 0 = use default
+    double angular_velocity;  // 0 = use default
+};
+
+struct TrajectorySegmentInfo {
+    double start_time;
+    double duration;
+    int segment_index;  // Which waypoint segment this belongs to
+};
+
+struct ConstraintCheckResult {
+    bool satisfied;
+    double max_velocity;
+    double max_acceleration;
+    double time_at_max_velocity;
+    double time_at_max_acceleration;
+};
+
 enum trajectoryMethod {
     MIN_SNAP
 };
@@ -38,6 +59,21 @@ public:
     float max_angular_velocity_ = 0.2;       
       
     double getTotalTime() const;
+    
+    // Multi-waypoint trajectory generation
+    bool GenerateMultiWaypointTrajectory(
+        const std::vector<Waypoint>& waypoints,
+        const Eigen::Vector3d& start_velocity,
+        const Eigen::Vector3d& start_acceleration,
+        double start_yaw,
+        trajectoryMethod method
+    );
+    
+    // Get segment info for multi-waypoint trajectories
+    std::vector<TrajectorySegmentInfo> getSegmentInfo() const;
+    
+    // Check if trajectory satisfies velocity/acceleration constraints
+    ConstraintCheckResult checkConstraints(int num_samples = 100) const;
 
     bool GenerateTrajectory(
         const Eigen::Vector3d& start_pos,
@@ -76,11 +112,21 @@ private:
     double total_time;
     Eigen::Vector3d start_vel;
     Eigen::Vector3d start_acc;
-    trajectorySegment segments[3]; // x, y, z
+    trajectorySegment segments[3]; 
     Eigen::Quaterniond start_quat;
     Eigen::Quaterniond end_quat;
     trajectorySegment yaw_segment;
     bool use_yaw_polynomial = false;
+    
+    // Multi-waypoint support
+    std::vector<TrajectorySegmentInfo> segment_info_;
+    std::vector<trajectorySegment> multi_segments_x_;
+    std::vector<trajectorySegment> multi_segments_y_;
+    std::vector<trajectorySegment> multi_segments_z_;
+    std::vector<trajectorySegment> multi_segments_yaw_;
+    std::vector<Eigen::Quaterniond> segment_start_quats_;
+    std::vector<Eigen::Quaterniond> segment_end_quats_;
+    bool is_multi_waypoint_ = false;
 
     std::vector<double> generatePolynomialCoefficients(
         double start,
