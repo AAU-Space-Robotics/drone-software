@@ -499,7 +499,7 @@ class DroneGuiNode(Node):
 def Arm_Button(node):
     global button_color, drone_kill, drone_state
     global arming_state, flight_time
-    imgui.set_cursor_pos((450, 30))
+    imgui.set_cursor_pos((415, 30))
     button_color = (0.0, 0.5, 0.0) if drone_kill else (1.0, 0.0, 0.0)
     button_text = " Disarmed " if drone_kill else "  Armed   "
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
@@ -528,16 +528,16 @@ def Arm_Button(node):
     imgui.pop_style_var()
   
     draw_list = imgui.get_window_draw_list()
-    start_x, start_y = 450, 70
-    end_x, end_y = 1100, 70
+    start_x, start_y = 415, 70
+    end_x, end_y = 1065, 70
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
     draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
     with imgui.font(font_small):
-        imgui.set_cursor_pos((800, 30)); imgui.text(f"Flight time = {Decimal(flight_time).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((750, 30)); imgui.text(f"Flight time = {Decimal(flight_time).quantize(Decimal('0.000'))}")
     
 def Kill_command(node):
     global killbutton_color, drone_kill
-    imgui.set_cursor_pos((1110, 30))  # Changed x-coordinate to 1130
+    imgui.set_cursor_pos((1075, 30))  # Changed x-coordinate to 1130
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *killbutton_color)
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 1.0, 0.0, 0.0, 1.0)  # Fixed: Added alpha
@@ -623,270 +623,269 @@ def speed_field(node):
     imgui.pop_style_color(3)
     imgui.pop_style_var()
  
-def Dropdown_Menu():
-    global current_item
-
-    items = ["No Controller", "PS4", "TX16S", "Custom"]
-    imgui.set_cursor_pos((450,90))
-    imgui.set_next_item_width(300)
-
-    with imgui.font(font_small):
-        changed, current_item = imgui.combo(
-            " ", current_item, items)
-    #imgui.set_cursor_pos((10,570))
-    #imgui.text(f"{str(items[current_item])}")
 
 def XYZ_Text_Field(msg):
-    #Drawing a square kek
+    # Drawing a square kek
     global position_x, position_y, position_z
     global target_position_x, target_position_y, target_position_z
     global position_timestamp
-    #position_x, position_y, position_z = drone_data.position
-    #position_x = int(msg.position[0])
-    #print(f"Position: {position_x}, {position_y}, {position_z}")
-   
-    draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
-                                                                #flags is for rounding different corners
-    draw_list.add_rect_filled(20,90, 420,235,color,rounding =10.0, flags=10)
-    
-    with imgui.font(font_small):
-        imgui.set_cursor_pos((23,50)); imgui.text("Positon:| Current:| Target: ")
-        imgui.set_cursor_pos((60,95)); imgui.text("X = ")
-        imgui.set_cursor_pos((60,145)); imgui.text("Y = ")
-        imgui.set_cursor_pos((60,195)); imgui.text("Z = ")
-        imgui.set_cursor_pos((170,93)); imgui.text(f"{Decimal(position_x).quantize(Decimal('0.000'))}")
-        imgui.set_cursor_pos((170,143)); imgui.text(f"{Decimal(position_y).quantize(Decimal('0.000'))}")
-        imgui.set_cursor_pos((170,193)); imgui.text(f"{(Decimal(position_z).quantize(Decimal('0.000')))}")
 
-        imgui.set_cursor_pos((313,93)); imgui.text(f"{Decimal(target_position_x).quantize(Decimal('0.000'))}")
-        imgui.set_cursor_pos((313,143)); imgui.text(f"{Decimal(target_position_y).quantize(Decimal('0.000'))}")
-        imgui.set_cursor_pos((313,193)); imgui.text(f"{(Decimal(target_position_z).quantize(Decimal('0.000')))}")
-        imgui.set_cursor_pos((23, 240)); imgui.text(f"[m]")
-    #with imgui.font(font_for_meter):
-    #    imgui.set_cursor_pos((240,240)); imgui.text("*measure in meters")
-    #    imgui.set_cursor_pos((405,42)); imgui.text("*")
-
-            # Ending point of the line (x, y)
-        draw_list = imgui.get_window_draw_list()
-        start_x, start_y = 145, 90  # Starting point of the line (x, y)
-        end_x, end_y = 145, 235      # Ending point of the line (x, y)
-        color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
-        draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
-
-        draw_list = imgui.get_window_draw_list()
-        start_x, start_y = 287, 90  # Starting point of the line (x, y)
-        end_x, end_y = 287, 235      # Ending point of the line (x, y)
-        color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
-        draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
-    imgui.set_cursor_pos((103, 250)); imgui.text(f" TS: {position_timestamp}")
-
-def XYZVelocity_Text_Field():
-
-        global velocity_x, velocity_y, velocity_z, velocity_timestamp
-
-        draw_list = imgui.get_window_draw_list()
-        color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
-         
-        # Move down y axis by 25 (all y values + 25)
-        draw_list.add_rect_filled(20, 310, 250, 455, color, rounding=10.0, flags=10)
-
-        with imgui.font(font_small):
-            imgui.set_cursor_pos((23, 270)); imgui.text("Velocity:")
-            imgui.set_cursor_pos((60, 315)); imgui.text("X   = ")
-            imgui.set_cursor_pos((150, 313)); imgui.text(f"{Decimal(velocity_x).quantize(Decimal('0.000'))}")
-            imgui.set_cursor_pos((60, 365)); imgui.text("Y   = ")
-            imgui.set_cursor_pos((150, 363)); imgui.text(f"{Decimal(velocity_y).quantize(Decimal('0.000'))}")
-            imgui.set_cursor_pos((60, 415)); imgui.text("Z   = ")
-            imgui.set_cursor_pos((150, 413)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
-            imgui.set_cursor_pos((23, 460)); imgui.text(f"[m/s]")
-        imgui.set_cursor_pos((103, 470)); imgui.text(f" TS: {velocity_timestamp}")
-    
-def RPY_Text_Field():
-    
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
-    # Move down y axis by 20 (all y values + 20)
-    draw_list.add_rect_filled(20, 530, 250, 675, color, rounding=10.0, flags=10)
+
+    # 420 -> 385 (35px shorter in x direction)
+    draw_list.add_rect_filled(5, 90, 385, 235, color, rounding=10.0, flags=10)
 
     with imgui.font(font_small):
-        imgui.set_cursor_pos((23, 490)); imgui.text("Orientation:")
-        imgui.set_cursor_pos((30, 540)); imgui.text("Roll  = ")
-        imgui.set_cursor_pos((150, 538)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((30, 590)); imgui.text("Pitch = ")
-        imgui.set_cursor_pos((150, 588)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((30, 640)); imgui.text("Yaw   = ")
-        imgui.set_cursor_pos((150, 638)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
-        imgui.set_cursor_pos((23, 680)); imgui.text(f"[r]")
+        imgui.set_cursor_pos((8, 50)); imgui.text("Positon:| Current:| Target: ")
+        imgui.set_cursor_pos((45, 95)); imgui.text("X = ")
+        imgui.set_cursor_pos((45, 145)); imgui.text("Y = ")
+        imgui.set_cursor_pos((45, 195)); imgui.text("Z = ")
+
+        imgui.set_cursor_pos((140, 93)); imgui.text(f"{Decimal(position_x).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((140, 143)); imgui.text(f"{Decimal(position_y).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((140, 193)); imgui.text(f"{(Decimal(position_z).quantize(Decimal('0.000')))}")
+
+        # target column shifted 35px left: 313 -> 278
+        imgui.set_cursor_pos((263, 93)); imgui.text(f"{Decimal(target_position_x).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((263, 143)); imgui.text(f"{Decimal(target_position_y).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((263, 193)); imgui.text(f"{(Decimal(target_position_z).quantize(Decimal('0.000')))}")
+        imgui.set_cursor_pos((9, 240)); imgui.text(f"[m]")
+
+        # separator lines
+        draw_list = imgui.get_window_draw_list()
+
+        # left separator unchanged
+        start_x, start_y = 120, 90
+        end_x, end_y = 120, 235
+        color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0)
+        draw_list.add_line(start_x, start_y, end_x, end_y, color_line, 5.0)
+
+        # right separator shifted 35px left: 287 -> 252
+        draw_list = imgui.get_window_draw_list()
+        start_x, start_y = 237, 90
+        end_x, end_y = 237, 235
+        color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0)
+        draw_list.add_line(start_x, start_y, end_x, end_y, color_line, 5.0)
+
+    imgui.set_cursor_pos((88, 250)); imgui.text(f" TS: {position_timestamp}")
 
 
-def probe_Field(node,filename):
+def XYZVelocity_Text_Field():
+    global velocity_x, velocity_y, velocity_z, velocity_timestamp
+
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
+
+    # this panel ends at 250 already, so NO CHANGE needed for "35px shorter"
+    draw_list.add_rect_filled(5, 310, 250, 455, color, rounding=10.0, flags=10)
+
+    with imgui.font(font_small):
+        imgui.set_cursor_pos((8, 270)); imgui.text("Velocity:")
+        imgui.set_cursor_pos((45, 315)); imgui.text("X   = ")
+        imgui.set_cursor_pos((135, 313)); imgui.text(f"{Decimal(velocity_x).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((45, 365)); imgui.text("Y   = ")
+        imgui.set_cursor_pos((135, 363)); imgui.text(f"{Decimal(velocity_y).quantize(Decimal('0.000'))}")
+        imgui.set_cursor_pos((45, 415)); imgui.text("Z   = ")
+        imgui.set_cursor_pos((135, 413)); imgui.text(f"{-(Decimal(velocity_z).quantize(Decimal('0.000')))}")
+        imgui.set_cursor_pos((9, 460)); imgui.text(f"[m/s]")
+
+    imgui.set_cursor_pos((88, 470)); imgui.text(f" TS: {velocity_timestamp}")
+
+def RPY_Text_Field():
+    draw_list = imgui.get_window_draw_list()
+    color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
+
+    # this panel ends at 250 already, so NO CHANGE needed for "35px shorter"
+    draw_list.add_rect_filled(5, 530, 250, 675, color, rounding=10.0, flags=10)
+
+    with imgui.font(font_small):
+        imgui.set_cursor_pos((8, 490)); imgui.text("Orientation:")
+        imgui.set_cursor_pos((15, 540)); imgui.text("Roll  = ")
+        imgui.set_cursor_pos((135, 538)); imgui.text(f"{Decimal(roll).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((15, 590)); imgui.text("Pitch = ")
+        imgui.set_cursor_pos((135, 588)); imgui.text(f"{Decimal(pitch).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((15, 640)); imgui.text("Yaw   = ")
+        imgui.set_cursor_pos((135, 638)); imgui.text(f"{Decimal(yaw_velocity).quantize(Decimal('0.00'))}")
+        imgui.set_cursor_pos((8, 680)); imgui.text(f"[°]")
+
+
+def probe_Field(node, filename):
     global probes
     global probe_classification, probe_numb
     global probe_timestamp
     global transformed_erc_probes
+
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
-    # Move up 30 on y axis (was 780-925, now 750-895)
 
-    #convert probes into numpy array
+    # convert probes into numpy array
     try:
-        
-
-        # Your existing code will work as is:
         probe_array = np.array([[probe['x'], probe['y'], probe['z'], 1] for probe in probes]).T
         transformed_probes = droneGlobal_to_ERC_global[0] @ probe_array
         transformed_probes = transformed_probes[:3, :].T
     except Exception as e:
         transformed_probes = np.array([])
-    draw_list.add_rect_filled(20, 750, 420, 895, color, rounding=10.0, flags=10)
 
+    # 420 -> 385 (35px shorter in x direction)
+    draw_list.add_rect_filled(5, 750, 385, 895, color, rounding=10.0, flags=10)
 
-    start_x, start_y = 80, 750  # Line after ID
-    end_x, end_y = 80, 895      
-    color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
-    draw_list.add_line(start_x,start_y, end_x, end_y, color_line, 5.0)
+    # Column separator lines
+    start_x, start_y = 65, 750
+    end_x, end_y = 65, 895
+    color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0)
+    draw_list.add_line(start_x, start_y, end_x, end_y, color_line, 5.0)
 
-    start_x, start_y = 165, 750  # Line after X
-    end_x, end_y = 165, 895      
-    color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
-    draw_list.add_line(start_x,start_y, end_x, end_y, color_line, 5.0)
+    start_x, start_y = 150, 750
+    end_x, end_y = 150, 895
+    draw_list.add_line(start_x, start_y, end_x, end_y, color_line, 5.0)
 
-    start_x, start_y = 250, 750  # Line after Y
-    end_x, end_y = 250, 895      
-    color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
-    draw_list.add_line(start_x,start_y, end_x, end_y, color_line, 5.0)
+    start_x, start_y = 235, 750
+    end_x, end_y = 235, 895
+    draw_list.add_line(start_x, start_y, end_x, end_y, color_line, 5.0)
 
-    start_x, start_y = 335, 750  # Line after Z
-    end_x, end_y = 335, 895      
-    color_line = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
-    draw_list.add_line(start_x,start_y, end_x, end_y, color_line, 5.0)
+    # last separator shifted 35px left: 335 -> 300
+    start_x, start_y = 285, 750
+    end_x, end_y = 285, 895
+    draw_list.add_line(start_x, start_y, end_x, end_y, color_line, 5.0)
 
     with imgui.font(font_small):
-        imgui.set_cursor_pos((23, 710)); imgui.text("Probe info:")
-        imgui.set_cursor_pos((30, 755)); imgui.text("ID")
-        imgui.set_cursor_pos((115, 755)); imgui.text("X")
-        imgui.set_cursor_pos((200, 755)); imgui.text("Y")
-        imgui.set_cursor_pos((285, 755)); imgui.text("Z")
-        imgui.set_cursor_pos((370, 755)); imgui.text("C")
+        imgui.set_cursor_pos((8, 710)); imgui.text("Probe info:")
+        imgui.set_cursor_pos((15, 755)); imgui.text("ID")
+        imgui.set_cursor_pos((100, 755)); imgui.text("X")
+        imgui.set_cursor_pos((185, 755)); imgui.text("Y")
+
+        # These headers shifted slightly left because Z divider changed
+        imgui.set_cursor_pos((255, 755)); imgui.text("Z")      # was 285
+        imgui.set_cursor_pos((330, 755)); imgui.text("C")      # was 370
+
     try:
         i = 0
         draw_list = imgui.get_window_draw_list()
-        # Always use map_value for drawing probe circles, like in the first if statement
+
+        # Always use map_value for drawing probe circles
         if probe_numb == 1:
-            circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228)
+            circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228) 
             circle_y = map_value(probes[i]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(0, 1, transformed_probes, i, probes, node)
             draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
-           #print(circle_x, circle_y)
+
         if probe_numb == 2:
             circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228)
             circle_y = map_value(probes[i]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(0, 1, transformed_probes, i, probes, node)
             draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
             circle_x_one = map_value(probes[i+1]['x'], 10, -10, 467, 1228)
             circle_y_one = map_value(probes[i+1]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(20, 2, transformed_probes, i+1, probes, node)
             draw_list.add_circle_filled(circle_x_one, circle_y_one, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
         if probe_numb == 3:
             circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228)
             circle_y = map_value(probes[i]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(0, 1, transformed_probes, i, probes, node)
             draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
             circle_x_one = map_value(probes[i+1]['x'], 10, -10, 467, 1228)
             circle_y_one = map_value(probes[i+1]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(20, 2, transformed_probes, i+1, probes, node)
             draw_list.add_circle_filled(circle_x_one, circle_y_one, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
             circle_x_two = map_value(probes[i+2]['x'], 10, -10, 467, 1228)
             circle_y_two = map_value(probes[i+2]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(40, 3, transformed_probes, i+2, probes, node)
             draw_list.add_circle_filled(circle_x_two, circle_y_two, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
         if probe_numb == 4:
             circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228)
             circle_y = map_value(probes[i]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(0, 1, transformed_probes, i, probes, node)
             draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
             circle_x_one = map_value(probes[i+1]['x'], 10, -10, 467, 1228)
             circle_y_one = map_value(probes[i+1]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(20, 2, transformed_probes, i+1, probes, node)
             draw_list.add_circle_filled(circle_x_one, circle_y_one, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
             circle_x_two = map_value(probes[i+2]['x'], 10, -10, 467, 1228)
             circle_y_two = map_value(probes[i+2]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(40, 3, transformed_probes, i+2, probes, node)
             draw_list.add_circle_filled(circle_x_two, circle_y_two, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
             circle_x_three = map_value(probes[i+3]['x'], 10, -10, 467, 1228)
             circle_y_three = map_value(probes[i+3]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(60, 4, transformed_probes, i+3, probes, node)
             draw_list.add_circle_filled(circle_x_three, circle_y_three, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
         if probe_numb >= 5:
             circle_x = map_value(probes[i]['x'], 10, -10, 467, 1228)
             circle_y = map_value(probes[i]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(0, 1, transformed_probes, i, probes, node)
             draw_list.add_circle_filled(circle_x, circle_y, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
             circle_x_one = map_value(probes[i+1]['x'], 10, -10, 467, 1228)
             circle_y_one = map_value(probes[i+1]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(20, 2, transformed_probes, i+1, probes, node)
             draw_list.add_circle_filled(circle_x_one, circle_y_one, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
             circle_x_two = map_value(probes[i+2]['x'], 10, -10, 467, 1228)
             circle_y_two = map_value(probes[i+2]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(40, 3, transformed_probes, i+2, probes, node)
             draw_list.add_circle_filled(circle_x_two, circle_y_two, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
             circle_x_three = map_value(probes[i+3]['x'], 10, -10, 467, 1228)
             circle_y_three = map_value(probes[i+3]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(60, 4, transformed_probes, i+3, probes, node)
             draw_list.add_circle_filled(circle_x_three, circle_y_three, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
             circle_x_four = map_value(probes[i+4]['x'], 10, -10, 467, 1228)
             circle_y_four = map_value(probes[i+4]['y'], 10, -10, 158, 599)
             plan_card.probe_cards(80, 5, transformed_probes, i+4, probes, node)
             draw_list.add_circle_filled(circle_x_four, circle_y_four, 4, imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 1.0))
+
     except:
         pass
-    imgui.set_cursor_pos((103, 900)); imgui.text(f" TS: {velocity_timestamp}")
-    GUIButton.button_save(290, 650, font, "save",filename,probes,transformed_probes)
+
+    imgui.set_cursor_pos((53, 900)); imgui.text(f" TS: {velocity_timestamp}")
+    GUIButton.button_save(275, 650, font, "save", filename, probes, transformed_probes)
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
     #draw_list = imgui.get_window_draw_list()
     #color = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0) 
-    #draw_list.add_rect(1845,40,1885,110,color, rounding=1.0,flags=15,thickness=3)   #shifted all 320 for fullscreen
-    #draw_list.add_rect(1852,31,1877,38,color, rounding=1.0,flags=3,thickness=3)  
-    graphs.battery_graph(1845, 40, 1885, 110, 1852, 31, 1877, 38)
+    #draw_list.add_rect(1800,40,1840,110,color, rounding=1.0,flags=15,thickness=3)   #shifted all 320 for fullscreen
+    #draw_list.add_rect(1807,31,1832,38,color, rounding=1.0,flags=3,thickness=3)  
+    graphs.battery_graph(1800, 40, 1840, 110, 1807, 31, 1832, 38)
     if(battery_percentage > 0.5):
         battery_color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0)
-        
     elif(battery_percentage > 0.25):
         battery_color = imgui.get_color_u32_rgba(1.0, 1.0, 0.0, 1.0)
     else:
         battery_color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
-    imgui.set_cursor_pos((1844, 116)); imgui.text(f"{Decimal(100*battery_percentage).quantize(Decimal('0.00'))} %")
-
+    imgui.set_cursor_pos((1799, 116)); imgui.text(f"{Decimal(100*battery_percentage).quantize(Decimal('0.00'))} %")
     draw_list = imgui.get_window_draw_list()
-    draw_list.add_rect_filled(1848,106,1882,(battery_progressbar),battery_color, rounding=1.0,flags=15)
-
-    imgui.set_cursor_pos((1640, 30)); imgui.text(f"Voltage:          {Decimal(battery_voltage).quantize(Decimal('0.0'))} V")
-    imgui.set_cursor_pos((1640, 60)); imgui.text(f"Current:          {-(Decimal(battery_current).quantize(Decimal('0.0')))} A")
-    imgui.set_cursor_pos((1640, 90)); imgui.text(f"Discharge rate:   {Decimal(battery_discharge_rate).quantize(Decimal('0.0'))} mAh")
-    imgui.set_cursor_pos((1640, 120)); imgui.text(f"Average current:  {-(Decimal(battery_average_current).quantize(Decimal('0.0')))} A")
-
+    draw_list.add_rect_filled(1803,106,1837,(battery_progressbar),battery_color, rounding=1.0,flags=15)
+    imgui.set_cursor_pos((1595, 30)); imgui.text(f"Voltage:          {Decimal(battery_voltage).quantize(Decimal('0.0'))} V")
+    imgui.set_cursor_pos((1595, 60)); imgui.text(f"Current:          {-(Decimal(battery_current).quantize(Decimal('0.0')))} A")
+    imgui.set_cursor_pos((1595, 90)); imgui.text(f"Discharge rate:   {Decimal(battery_discharge_rate).quantize(Decimal('0.0'))} mAh")
+    imgui.set_cursor_pos((1595, 120)); imgui.text(f"Average current:  {-(Decimal(battery_average_current).quantize(Decimal('0.0')))} A")
     draw_list = imgui.get_window_draw_list()
-    start_x, start_y = 1830, 30  # Starting point of the line (x, y)
-    end_x, end_y = 1830, 132      # Ending point of the line (x, y)
+    start_x, start_y = 1785, 30  # Starting point of the line (x, y)
+    end_x, end_y = 1785, 132      # Ending point of the line (x, y)
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
     draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
-
     draw_list = imgui.get_window_draw_list()
-    start_x, start_y = 1759, 30  # Starting point of the line (x, y)
-    end_x, end_y = 1759, 132      # Ending point of the line (x, y)
+    start_x, start_y = 1714, 30  # Starting point of the line (x, y)
+    end_x, end_y = 1714, 132      # Ending point of the line (x, y)
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
     draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
-
     draw_list = imgui.get_window_draw_list()
-    start_x, start_y = 1630, 30  # Starting point of the line (x, y)
-    end_x, end_y = 1630, 132      # Ending point of the line (x, y)
+    start_x, start_y = 1585, 30  # Starting point of the line (x, y)
+    end_x, end_y = 1585, 132      # Ending point of the line (x, y)
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0) 
     draw_list.add_line(start_x,start_y, end_x, end_y, color, 2.0)
-
-    imgui.set_cursor_pos((1720, 175)); imgui.text(f" TS:  {battery_state_timestamp}") 
+    imgui.set_cursor_pos((1655, 175)); imgui.text(f" TS:  {battery_state_timestamp}")
 
 def map_value(value, in_min, in_max, out_min, out_max):
     return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -894,132 +893,50 @@ def map_value(value, in_min, in_max, out_min, out_max):
 def drone_visualization():
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
-                                                                #flags is for rounding different corners
-    draw_list.add_rect(450,140, 1260,620,color,rounding =10.0, flags=15,thickness=6) #earlier 450 150 1100 560 Scale diff = x1.145 y1.101 (only one)
+    #flags is for rounding different corners
+    draw_list.add_rect(415,140, 1225,620,color,rounding =10.0, flags=15,thickness=6)
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9) 
-                                                                
-    draw_list.add_rect_filled(453,143, 1256,624,color,rounding =10.0, flags=15) #e 453 153 1097 567
+    draw_list.add_rect_filled(418,143, 1221,624,color,rounding =10.0, flags=15)
 
 def grid():
     global position_x, position_y
-    dot_position_x = map_value(position_x, 10, -10, 467, 1228) #e 1107
-    dot_position_y = map_value(position_y, 10, -10, 158, 599) #e 155 561
+    dot_position_x = map_value(position_x, 10, -10, 432, 1193)
+    dot_position_y = map_value(position_y, 10, -10, 158, 599)
     drawlist = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.2, 0.6, 0.9, 0.8)  # Light blue color
-    for x in range(467, 1256, 38):
-        drawlist.add_line(x, 145, x, 620, color, 1.5) #e 145 563
-    for y in range(157, 618, 22): #e 157 560 20
-        drawlist.add_line(455, y, 1254, y, color, 1.5) #e 455 1095
-
-   
+    for x in range(432, 1221, 38):
+        drawlist.add_line(x, 145, x, 620, color, 1.5)
+    for y in range(157, 618, 22):
+        drawlist.add_line(420, y, 1219, y, color, 1.5)
+    
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
-
-    if 449 < dot_position_x < 1260 and 155 < dot_position_y < 620: 
-            
-            draw_list.add_circle_filled(dot_position_x, dot_position_y, 4, color)  # Red dot at the center Center of the grid 778, 358
-    elif 449 > dot_position_x:
+    
+    if 414 < dot_position_x < 1225 and 155 < dot_position_y < 620: 
+        draw_list.add_circle_filled(dot_position_x, dot_position_y, 4, color)  # Red dot at the center Center of the grid
+    elif 414 > dot_position_x:
         if 155 < dot_position_y < 620:
-            #draw_list.add_triangle_filled(449, dot_position_y-10, 449, dot_position_y+10, 464, dot_position_y, color)
-            draw_list.add_rect_filled(449, dot_position_y-2, 469, dot_position_y+2, color, rounding=2.0)
-    elif dot_position_x > 1260:
+            draw_list.add_rect_filled(414, dot_position_y-2, 434, dot_position_y+2, color, rounding=2.0)
+    elif dot_position_x > 1225:
         if 155 < dot_position_y < 620:
-            #draw_list.add_triangle_filled(1260, dot_position_y-10, 1260, dot_position_y+10, 1245, dot_position_y, color)
-            draw_list.add_rect_filled(1260, dot_position_y-2, 1240, dot_position_y+2, color, rounding=2.0)
+            draw_list.add_rect_filled(1225, dot_position_y-2, 1205, dot_position_y+2, color, rounding=2.0)
     elif 140 > dot_position_y:
-        if 449 < dot_position_x < 1260:
-            #draw_list.add_triangle_filled(dot_position_x -10, 155, dot_position_x+10, 155, dot_position_x, 180, color)
+        if 414 < dot_position_x < 1225:
             draw_list.add_rect_filled(dot_position_x-2, 140, dot_position_x+2, 160, color, rounding=2.0)
     elif dot_position_y > 620:
-        if 449 < dot_position_x < 1260:
-            #draw_list.add_triangle_filled(dot_position_x -10, 620, dot_position_x+10, 620, dot_position_x, 595, color)
+        if 414 < dot_position_x < 1225:
             draw_list.add_rect_filled(dot_position_x-2, 620, dot_position_x+2, 600, color, rounding=2.0)
-        #draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+855, 462.5, color)
     
-    
-     
     imgui.push_style_color(imgui.COLOR_TEXT, 0.0, 0.0, 0.0, 1.0)
-    imgui.set_cursor_pos((462, 610)); imgui.text("10   9    8     7    6     5     4    3     2    1    0    -1    -2   -3   -4   -5    -6    -7    -8    -9   -10") #e 462 570
+    imgui.set_cursor_pos((427, 610)); imgui.text("10   9    8     7    6     5     4    3     2    1    0    -1    -2   -3   -4   -5    -6    -7    -8    -9   -10")
     j = 10
-    for i in range(40, 482, 22): #e 50 470
-            imgui.set_cursor_pos((1235, 105+i)); imgui.text(f"{j}")
-            j -= 1
+    for i in range(40, 482, 22):
+        imgui.set_cursor_pos((1200, 105+i)); imgui.text(f"{j}")
+        j -= 1
     imgui.pop_style_color()
-    # max 449 1107 x
+    # max 414 1193 x
     # max 155 561 y
-              
-def Arrows():
-    slider_value = 0.0  # default
-
-    # Set size of the slider
-    imgui.set_cursor_pos((450, 600)); imgui.set_next_item_width(300)
-
-    # Slider with range from 0 to 10
-    #changed, slider_value = imgui.slider_float("Scale Me", slider_value, 0.0, 100.0)
-
-    # Show the current value
-
-    #Arrows 90 PÅ X ASKEN
-    #z-axis
-    draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 0.9)
-    #draw_list.add_triangle_filled(660, (-velocity_z * 10)+325, 685, (-velocity_z * 10)+325, 672.5, (-velocity_z * 10)+300, color)
-    if(-velocity_z) > 0:
-        draw_list.add_triangle_filled(660, (velocity_z * 10)+325, 685, (velocity_z * 10)+325, 672.5, (velocity_z * 10)+300, color)
-        draw_list.add_rect_filled(670, 325, 675, (velocity_z * 10)+305, color, rounding=2.0)
-    else:
-        draw_list.add_triangle_filled(660, (velocity_z * 10)+325, 685, (velocity_z * 10)+325, 672.5, (velocity_z * 10)+350, color)
-        draw_list.add_rect_filled(670, 325, 675, (velocity_z * 10)+345, color, rounding=2.0)
-
-    
-    draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.0, 0.0, 1.0, 0.9)
-    
-    #x-axis
-    draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 0.9)
-    #draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+855, 462.5, color)
-    #draw_list = imgui.get_window_draw_list()
-    #color = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 0.9)
-    #draw_list.add_rect_filled(805, 460, (velocity_x* 10)+830, 465, color, rounding=2.0)
-
-    if velocity_x > 0:
-        draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+855, 462.5, color)
-        draw_list.add_rect_filled(830, 460, (velocity_x* 10)+835, 465, color, rounding=2.0)
-    else:
-        draw_list.add_triangle_filled((velocity_x* 10)+830, 450, (velocity_x* 10)+830, 475, (velocity_x* 10)+805, 462.5, color)
-        draw_list.add_rect_filled(830, 460, (velocity_x* 10)+825, 465, color, rounding=2.0)
-    
-    
-    
-    #y-axis
-    # Arrow shaft (thin diagonal rectangle or just a line)
-    # Arrowhead (triangle at the end)
-    # Position the triangle to point diagonally
-    draw_list = imgui.get_window_draw_list()
-    color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 0.9)  # Green arrow
-    
-    if velocity_y > 0:
-        start_x, start_y = 813, 334
-        end_x, end_y = 830 +(velocity_y * 10), 320 - (velocity_y * 10)
-        draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
-        draw_list.add_triangle_filled(
-        end_x+3, end_y-3,          # tip
-        end_x - 23, end_y + 5,  # base left
-        end_x - 5, end_y + 23,  # base right
-        color
-        )
-    else:  
-        start_x, start_y = 813, 334
-        end_x, end_y = 810 -(-velocity_y * 10), 340 +(-velocity_y * 10)
-        draw_list.add_line(start_x, start_y, end_x, end_y, color, 5.0)
-        draw_list.add_triangle_filled(
-        end_x-3, end_y+3,          # tip
-        end_x + 23, end_y - 5,  # base left
-        end_x + 5, end_y - 23,  # base right
-        color
-        )
 
 def rotate_x_and_y(position_x, position_y, angle):
     global rotated_x, rotated_y
@@ -1028,7 +945,7 @@ def rotate_x_and_y(position_x, position_y, angle):
     rotated_y = math.sin(angle) * position_x + math.cos(angle) * position_y
 
 def return_to_home_button(node):
-    imgui.set_cursor_pos((684, 635))
+    imgui.set_cursor_pos((649, 635))
     imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 12.0)
     imgui.push_style_color(imgui.COLOR_BUTTON, *(0.0, 0.5, 0.0))
     imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *(0.0, 0.8, 0.0))
@@ -1041,7 +958,7 @@ def return_to_home_button(node):
 
 def manual(node):
     global flight_mode
-    imgui.set_cursor_pos((1562, 200))
+    imgui.set_cursor_pos((1527, 200))
     button_color = (0.5, 0.5, 0.5)
     hover_color = (0.5, 0.8, 0.5)
     active_color = (0.5, 1, 0.5)
@@ -1088,7 +1005,7 @@ def manual(node):
     elif flight_mode == 5:
         flight_mode_text = "Land position"
     
-    imgui.set_cursor_pos((800, 100))
+    imgui.set_cursor_pos((435, 100))
     with imgui.font(font_small):
         imgui.text("Flight Mode: " + str(flight_mode_text))
 
@@ -1105,6 +1022,7 @@ def start_joystick(node):
     global roll, pitch, yaw_velocity, thrust, arming_state
     global drone_kill, drone_state
     global current_item
+
     pygame.init()
     pygame.joystick.init()
 
@@ -1228,15 +1146,38 @@ def start_joystick(node):
                     pygame.event.pump()  # Process internal queue
                     #while arming_state == 7:
                     #print(f"Flight mode: {flight_mode}")
-                    
+                    left_trigger = (node.joystick.get_button(4) + 1.0)/2.0
+                    right_trigger = (node.joystick.get_button(5) + 1.0)/2.0
+                    yaw_value = right_trigger - left_trigger
                     roll_m = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
                     pitch_m = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
-                    yaw_velocity_m = node.joystick.get_axis(2) if abs(node.joystick.get_axis(2)) > DEAD_ZONE else 0.0
+                    yaw_velocity_m = yaw_value if abs(yaw_value) > DEAD_ZONE else 0.0
                     thrust = -node.joystick.get_axis(3) if abs(node.joystick.get_axis(3)) > DEAD_ZONE else 0.0
                     
+                    if(node.joystick.get_button(3) == 1):
+                        node.send_command("arm")
+                        arming_state = 1
+                        drone_state = True
+                        node.send_command("manual_aided")
+                    
+                   
+        
+                    #print(f"Arming state: {arming_state}")
+                    #print(f'arming state {arming_state} and button state {node.joystick.get_button(2)}')
+                    #print(int(abs(node.joystick.get_axis(4))))
+          
+                    if( node.joystick.get_button(2) == 1):
+                        node.send_command("estop")
+                        drone_kill = True
+                    
+                    if( node.joystick.get_button(0) == 1):
+                        node.send_command("disarm")
+                        arming_state = 0
+                        drone_state = False
+        
 
                     node.send_manual_control(roll_m, pitch_m, yaw_velocity_m, thrust)
-                   
+                    
                     clock.tick(20)  # 20 Hz update rate
             except KeyboardInterrupt:
                 pass
@@ -1247,7 +1188,7 @@ def GuiConsoleLogger(node):
     global font_small
     
     # Position the logger window in the bottom right area
-    imgui.set_cursor_pos((450, 690))
+    imgui.set_cursor_pos((415, 690))
     
     # Create a child window for the logger
     imgui.begin_child("LoggerWindow", 810, 240, border=True)
@@ -1320,10 +1261,10 @@ def motor_speed():
     actuator_speeds_slider_bar2 = map_value(actuator_speeds[1], 0, 1, 106, 54)
     actuator_speeds_slider_bar3 = map_value(actuator_speeds[2], 0, 1, 106, 54)
     actuator_speeds_slider_bar4 = map_value(actuator_speeds[3], 0, 1, 106, 54)
-    graphs.motor_speed_graph(1300, 50, 1360, 110) 
-    graphs.motor_speed_graph(1380, 50, 1440, 110)
-    graphs.motor_speed_graph(1460, 50, 1520, 110)
-    graphs.motor_speed_graph(1540, 50, 1600, 110) 
+    graphs.motor_speed_graph(1265, 50, 1325, 110) 
+    graphs.motor_speed_graph(1345, 50, 1405, 110)
+    graphs.motor_speed_graph(1425, 50, 1485, 110)
+    graphs.motor_speed_graph(1505, 50, 1565, 110)
     standardcolor = imgui.get_color_u32_rgba(0.7, 0.9, 1.0, 1.0)
     color1 = standardcolor
     color2 = standardcolor
@@ -1338,22 +1279,22 @@ def motor_speed():
     if actuator_speeds[3] > 0.9:
         color4 = imgui.get_color_u32_rgba(1.0, 0.0, 0.0, 1.0)
     draw_list = imgui.get_window_draw_list()
-    draw_list.add_rect_filled(1303,106,1357,actuator_speeds_slider_bar1,color1, rounding=1.0,flags=15)   
-    imgui.set_cursor_pos((1304, 120)); imgui.text(f"{Decimal(actuator_speeds[0]).quantize(Decimal('0.00'))}")
+    draw_list.add_rect_filled(1268,106,1322,actuator_speeds_slider_bar1,color1, rounding=1.0,flags=15)   
+    imgui.set_cursor_pos((1269, 120)); imgui.text(f"{Decimal(actuator_speeds[0]).quantize(Decimal('0.00'))}")
     draw_list = imgui.get_window_draw_list()
-    draw_list.add_rect_filled(1383,106,1437,actuator_speeds_slider_bar2,color2, rounding=1.0,flags=15)
-    imgui.set_cursor_pos((1384, 120)); imgui.text(f"{Decimal(actuator_speeds[1]).quantize(Decimal('0.00'))}")
+    draw_list.add_rect_filled(1348,106,1402,actuator_speeds_slider_bar2,color2, rounding=1.0,flags=15)
+    imgui.set_cursor_pos((1349, 120)); imgui.text(f"{Decimal(actuator_speeds[1]).quantize(Decimal('0.00'))}")
     draw_list = imgui.get_window_draw_list()
-    draw_list.add_rect_filled(1463,106,1517,actuator_speeds_slider_bar3,color3, rounding=1.0,flags=15)
-    imgui.set_cursor_pos((1464, 120)); imgui.text(f"{Decimal(actuator_speeds[2]).quantize(Decimal('0.00'))}")
+    draw_list.add_rect_filled(1428,106,1482,actuator_speeds_slider_bar3,color3, rounding=1.0,flags=15)
+    imgui.set_cursor_pos((1429, 120)); imgui.text(f"{Decimal(actuator_speeds[2]).quantize(Decimal('0.00'))}")
     draw_list = imgui.get_window_draw_list()
-    draw_list.add_rect_filled(1543,106,1597,actuator_speeds_slider_bar4,color4, rounding=1.0,flags=15)
-    imgui.set_cursor_pos((1544, 120)); imgui.text(f"{Decimal(actuator_speeds[3]).quantize(Decimal('0.00'))}")
+    draw_list.add_rect_filled(1508,106,1562,actuator_speeds_slider_bar4,color4, rounding=1.0,flags=15)
+    imgui.set_cursor_pos((1509, 120)); imgui.text(f"{Decimal(actuator_speeds[3]).quantize(Decimal('0.00'))}")
     with imgui.font(font_small):
-        imgui.set_cursor_pos((1320, 20)); imgui.text("M1")
-        imgui.set_cursor_pos((1400, 20)); imgui.text("M2")
-        imgui.set_cursor_pos((1480, 20)); imgui.text("M3")
-        imgui.set_cursor_pos((1560, 20)); imgui.text("M4")
+        imgui.set_cursor_pos((1285, 20)); imgui.text("M1")
+        imgui.set_cursor_pos((1365, 20)); imgui.text("M2")
+        imgui.set_cursor_pos((1445, 20)); imgui.text("M3")
+        imgui.set_cursor_pos((1525, 20)); imgui.text("M4")
 
 def load_image_to_texture(image_path):
     try:
@@ -1422,13 +1363,13 @@ def route_planner(node):
     text_field = ""
     text_field_spin = ""
     mouse_x, mouse_y = imgui.get_mouse_pos()
-    imgui.set_cursor_pos((1690, 260))
+    imgui.set_cursor_pos((1655, 260))
     imgui.set_window_font_scale(2.0)
     imgui.set_next_item_width(180)
     changed, text_field= imgui.input_text("##goto_input_plan", text_buffer_plan, 20)
     if changed:
         text_buffer_plan = text_field
-    imgui.set_cursor_pos((1690, 440))
+    imgui.set_cursor_pos((1655, 440))
     imgui.set_window_font_scale(2.0)
     imgui.set_next_item_width(180)
     changed, text_field_spin= imgui.input_text("##spin_input_plan", text_buffer_plan_spin, 20)
@@ -1437,28 +1378,28 @@ def route_planner(node):
     imgui.set_window_font_scale(1.0) 
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
     draw_list = imgui.get_window_draw_list()
-    draw_list.add_rect_filled(1285,140, 1556, 624,color,rounding =10.0, flags=15) #e 1505
-    draw_list.add_line(1285,180,1556, 180,imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9), 5)
+    draw_list.add_rect_filled(1250,140, 1521, 624,color,rounding =10.0, flags=15) #e 1505
+    draw_list.add_line(1250,180,1521, 180,imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 0.9), 5)
 
     with imgui.font(font_small):
-        imgui.set_cursor_pos((1338,145)); imgui.text("Flight Plan")
+        imgui.set_cursor_pos((1303,145)); imgui.text("Flight Plan")
 
 
-    if GUIButton.button_Plan(1562, 316, font_small, "Takeoff##plan1"):
+    if GUIButton.button_Plan(1527, 316, font_small, "Takeoff##plan1"):
         
         for i, val in enumerate(flight_plan):
             if val == 0:
                 flight_plan[i] = 1
                 flight_plan_numb += 1
                 break
-    if GUIButton.button_Plan(1562, 376, font_small, "Land##plan2"):
+    if GUIButton.button_Plan(1527, 376, font_small, "Land##plan2"):
         
         for i, val in enumerate(flight_plan):
             if val == 0:
                 flight_plan[i] = 2
                 flight_plan_numb += 1
                 break
-    if GUIButton.button_Plan(1562, 256, font_small, "Goto##plan3"):
+    if GUIButton.button_Plan(1527, 256, font_small, "Goto##plan3"):
         
         for i, val in enumerate(flight_plan):
             if val == 0:
@@ -1473,7 +1414,7 @@ def route_planner(node):
                      node.imgui_logger.warn("Invalid input for goto, please enter x y z yaw values")
                 
                 break
-    if GUIButton.button_Plan(1436,635,font_small, "Clear##plan4"):
+    if GUIButton.button_Plan(1401,635,font_small, "Clear##plan4"):
         for i in range(7):
             flight_plan[i] = 0
             flight_plan_numb = 0
@@ -1483,7 +1424,7 @@ def route_planner(node):
             start_y_arrow = 0
             execute_route_numb = 0
 
-    if GUIButton.button_Plan(1562,436,font_small, "Spin##plan4"):
+    if GUIButton.button_Plan(1527,436,font_small, "Spin##plan4"):
         for i, val in enumerate(flight_plan):
             if val == 0:
                 flight_plan[i] = 4
@@ -1496,7 +1437,6 @@ def route_planner(node):
                 except ValueError:
                      node.imgui_logger.warn("Invalid input for Spin, please enter yaw rotations direction values")
                 break
-   
     
     
     #if imgui.is_mouse_down(imgui.MOUSE_BUTTON_LEFT):
@@ -1545,7 +1485,7 @@ def execute_route(node):
     global position_x, position_y, position_z
     global current_step, step_start_time, command_sent, waiting_for_completion
     #print(execute_route_numb)
-    if GUIButton.button_Plan(1285, 635, font_small, "Excecute##plan4"):
+    if GUIButton.button_Plan(1250, 635, font_small, "Excecute##plan4"):
         begin_execute = True
         current_step = 0
         step_start_time = 0
@@ -1747,10 +1687,10 @@ class effect_class:
                 start_time = None
                 temp_y_arrow = start_y_arrow + 52
 
-            draw_list.add_triangle_filled(1266, 201+(temp_y_arrow ), 1266, 231+(temp_y_arrow ), 1282, 216+(temp_y_arrow ), color)
+            draw_list.add_triangle_filled(1231, 201+(temp_y_arrow ), 1231, 231+(temp_y_arrow ), 1247, 216+(temp_y_arrow ), color)
                 #draw_list.add_triangle_filled(1266, 201+(temp_y), 1266, 231+(temp_y), 1282, 216+(temp_y), color)
         else:
-            draw_list.add_triangle_filled(1266, 201+(temp_y_arrow), 1266, 231+(temp_y_arrow), 1282, 216+(temp_y_arrow), color)
+            draw_list.add_triangle_filled(1231, 201+(temp_y_arrow), 1231, 231+(temp_y_arrow), 1247, 216+(temp_y_arrow), color)
 
 class plan_card:
     def goto_card(card_pos_x, card_pos_y, node, type,text, numb):
@@ -2006,8 +1946,8 @@ def main(args=None):
             imgui.text("THYRA GCS")
         #Creating a line for seperation
         draw_list = imgui.get_window_draw_list()
-        start_x, start_y = 430, 0  # Starting point of the line (x, y)
-        end_x, end_y = 430, 2000      # Ending point of the line (x, y)
+        start_x, start_y = 405, 0  # Starting point of the line (x, y)
+        end_x, end_y = 405, 2000      # Ending point of the line (x, y)
         color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5) 
         draw_list.add_line(start_x,start_y, end_x, end_y, color, 5.0)
         #Running different widgets
@@ -2018,7 +1958,7 @@ def main(args=None):
         Kill_command(node)
         Goto_field(node)
         speed_field(node)
-        Dropdown_Menu()
+        #Dropdown_Menu()
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
         
@@ -2032,38 +1972,40 @@ def main(args=None):
         return_to_home_button(node)
         #drone_image(image_path,texture_id,img_width,img_height)
         GuiConsoleLogger(node)
-        GUIButton.button1(876, 635, font_small, "Land", "land", node)
-        GUIButton.button2( 492, 635, font_small, "Takeoff", "takeoff", node, -1.0)
-        GUIButton.button1(1068, 635, font_small, "Set Origin", "set_origin", node)
+        GUIButton.button1(841, 635, font_small, "Land", "land", node)
+        GUIButton.button2(457, 635, font_small, "Takeoff", "takeoff", node, -1.0)
+        GUIButton.button1(1033, 635, font_small, "Set Origin", "set_origin", node)
   
         manual(node) 
-        #send_map_pos(node)
+        send_map_pos(node)
         route_planner(node)
         execute_route(node)
-        plan_card.goto_card(1288, 190, node, flight_plan[0], flight_plan_coord[0], 0)
-        plan_card.goto_card(1288, 242, node, flight_plan[1], flight_plan_coord[1], 1)
-        plan_card.goto_card(1288, 294, node, flight_plan[2], flight_plan_coord[2], 2)
-        plan_card.goto_card(1288, 346, node, flight_plan[3], flight_plan_coord[3], 3)
-        plan_card.goto_card(1288, 398, node, flight_plan[4], flight_plan_coord[4], 4)
-        plan_card.goto_card(1288, 450, node, flight_plan[5], flight_plan_coord[5], 5)
-        plan_card.goto_card(1288, 502, node, flight_plan[6], flight_plan_coord[6], 6)
+        plan_card.goto_card(1253, 190, node, flight_plan[0], flight_plan_coord[0], 0)
+        plan_card.goto_card(1253, 242, node, flight_plan[1], flight_plan_coord[1], 1)
+        plan_card.goto_card(1253, 294, node, flight_plan[2], flight_plan_coord[2], 2)
+        plan_card.goto_card(1253, 346, node, flight_plan[3], flight_plan_coord[3], 3)
+        plan_card.goto_card(1253, 398, node, flight_plan[4], flight_plan_coord[4], 4)
+        plan_card.goto_card(1253, 450, node, flight_plan[5], flight_plan_coord[5], 5)
+        plan_card.goto_card(1253, 502, node, flight_plan[6], flight_plan_coord[6], 6)
         effect_class.arrow_effect(execute_route_numb)
      
 
         #Todo move to function
     
-        dot_position_x = map_value(position_x, 10, -10, 467, 1228) #e 1107
+        dot_position_x = map_value(position_x, 10, -10, 432, 1193)  # Adjusted for 35px shift
         dot_position_y = map_value(position_y, 10, -10, 158, 599)
-        if 455 < dot_position_x < 1250 and 165 < dot_position_y < 610:  
+
+        if 420 < dot_position_x < 1215 and 165 < dot_position_y < 610:  
             if texture_id:
+                img = Image.open(image_path).convert("RGBA")    
 
-                img = Image.open(image_path).convert("RGBA")
-
-                # Apply a dead zone to yaw_velocity to prevent sudden jumps between 6.28 and 0
-                if abs(yaw_velocity) < 0.05 or abs(yaw_velocity - 2 * math.pi) < 0.05:
+                # yaw_velocity is now in degrees (-180 to 180)
+                # Apply a dead zone to prevent jitter near 0
+                if abs(yaw_velocity) < 0.5:
                     angle = 0
                 else:
-                    angle = yaw_velocity * 57.4358  # Convert 0-2π to degrees
+                    angle = yaw_velocity  # Already in degrees, use directly
+
                 rotated_img = img.rotate(angle, expand=False, center=(img.width/2, img.height/2))
                 pixels = rotated_img.tobytes()
                 gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
@@ -2072,12 +2014,10 @@ def main(args=None):
                     gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, pixels
                 )
                 gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-                imgui.set_cursor_pos((dot_position_x-50, dot_position_y-50))  # Position the image
+                imgui.set_cursor_pos((dot_position_x-50, dot_position_y-50))  # Position the image (centered)
                 imgui.image(texture_id, 100, 100)
             else:
-                imgui.text("Failed to load droneimage.png")   
-
-
+                imgui.text("Failed to load droneimage.png")
         imgui.end()
 
         
