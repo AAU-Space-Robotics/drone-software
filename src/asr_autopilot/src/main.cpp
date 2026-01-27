@@ -964,22 +964,15 @@ private:
 
     Eigen::Vector4d manualAidedMode()
     {
-        //RCLCPP_WARN(get_logger(), "Manual aided mode is not implemented yet, defaulting to manual mode.");
         Stamped4DVector manual_input = state_manager_.getManualControlInput();
-        //RCLCPP_INFO(get_logger(), "Manual input: roll=%.2f, pitch=%.2f, yaw=%.2f, thrust=%.2f",
-        //             manual_input.x(), manual_input.y(), manual_input.z(), manual_input.w());
-         //Convert manual input to target velocity in body frame (FRD), then transform to NED
-        
-  
-
-        Eigen::Vector4d vel_cmd = controller_.map_controls(manual_input);
-        //RCLCPP_INFO(get_logger(), "Velocity command from manual input: vx=%.2f, vy=%.2f, yaw=%.2f, vz=%.2f",
-        //             vel_cmd.x(), vel_cmd.y(), vel_cmd.z(), vel_cmd.w());
-       //
         Stamped3DVector velocity = state_manager_.getGlobalVelocity();
         StampedQuaternion attitude = state_manager_.getAttitude();
         double dt = (get_time() - velocity.getTime()).seconds();
 
+        // Map manual controls to velocity commands using the controller's map_controls function
+        // This converts normalized stick inputs to velocity commands in body frame (FRD)
+        Eigen::Vector4d vel_cmd = controller_.map_controls(manual_input);
+        
         // Velocity commands from map_controls are in body frame (FRD)
         // Transform to NED frame for velocity controller
         Eigen::Vector3d vel_cmd_body(vel_cmd.x(), vel_cmd.y(), vel_cmd.w());
@@ -1000,9 +993,6 @@ private:
         output.z() = vel_cmd.z();
         
         return output;
-       // ////Eigen::Vector4d output = controller_.pidControl(dt, prev_position_error_, position, attitude, target_position_3d);
-   
-
     }
 
     void controlLoop()
@@ -1137,29 +1127,26 @@ private:
             // Make the drone go into safety land mode
             RCLCPP_INFO(get_logger(), "Position based land mode activated.");
 
-            // Set the takeoff position and orientation based on current state
-            Stamped4DVector target_profile = state_manager_.getTargetPositionProfile();
-            Eigen::Vector3d takeoff_position = {target_profile.x(), target_profile.y(), target_profile.z()};
-            Eigen::Quaterniond takeoff_quat = (state_manager_.getAttitude()).quaternion().normalized();
+            // Get trajectory initialization state with current position, velocity, and acceleration
+            TrajectoryInitState init_state = state_manager_.getTrajectoryInitState();
             Stamped3DVector GroundDistance = state_manager_.getGroundDistanceState();
-            
-            Eigen::Vector3d current_velocity = {0.0, 0.0, 0.0};
-            Eigen::Vector3d current_acceleration = {0.0, 0.0, 0.0};
 
             // Calculate the landing position
             double z_landing = 0.0; // Default landing height
             if ((get_time() - GroundDistance.getTime()).seconds() < 0.3)
             {
-                z_landing = takeoff_position.z() + GroundDistance.vector().x();
+                z_landing = init_state.position.z() + GroundDistance.vector().x();
                 RCLCPP_INFO(get_logger(), "Using ground distance sensor for landing: z_landing=%.2f", z_landing);
             }
             
             // Set the target landing position and orientation (maintain current orientation)
-            Eigen::Vector3d target_position = {takeoff_position.x(), takeoff_position.y(), z_landing}; // Land at z = 0.0
-            Eigen::Quaterniond target_quat = takeoff_quat; // Preserve current orientation
+            Eigen::Vector3d target_position = {init_state.position.x(), init_state.position.y(), z_landing};
+            Eigen::Quaterniond target_quat = init_state.orientation; // Preserve current orientation
 
             // Generate landing trajectory
-            path_planner_.GenerateTrajectory(takeoff_position, target_position, takeoff_quat, target_quat, current_velocity, current_acceleration, trajectoryMethod::MIN_SNAP);
+            path_planner_.GenerateTrajectory(init_state.position, target_position, init_state.orientation, 
+                                            target_quat, init_state.velocity, init_state.acceleration, 
+                                            trajectoryMethod::MIN_SNAP);
             float trajectory_duration = path_planner_.getTotalTime();
 
             // Set trajectory start time and update flight mode
