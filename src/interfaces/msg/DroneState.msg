@@ -18,10 +18,16 @@ float32[] actuator_speeds #Speed of the four actuators from 0 to 1
 uint8 arming_state  
 uint8 trajectory_mode
 int32 probes_found
+float64 latitude
+float64 longitude
+int32 satellites_used
+
+
      
 uint8 estop          
 int16 flight_mode
 int16 led_mode
 float64 flight_time
+
 
 

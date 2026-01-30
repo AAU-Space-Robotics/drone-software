@@ -15,6 +15,7 @@
 #include <px4_msgs/msg/battery_status.hpp>
 #include <px4_msgs/msg/distance_sensor.hpp>
 #include <px4_msgs/msg/actuator_outputs.hpp>
+#include "px4_msgs/msg/sensor_gps.hpp"
 
 #include <interfaces/action/drone_command.hpp>
 #include <interfaces/msg/manual_control_input.hpp>
@@ -361,8 +362,12 @@ public:
             "/probe_detector/global_probe_locations", qos,
             [this](const interfaces::msg::ProbeGlobalLocations::SharedPtr msg)
             { GlobalProbeLocationsCallback(msg); });
+        gps_sub_ = create_subscription<SensorGps>(
+            "/fmu/out/vehicle_gps_position", qos,
+            [this](const SensorGps::SharedPtr msg)
+            { gpsCallback(msg); });
 
-        // Action server
+        //Action server
         drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
             this, "in/drone_command",
             [this](const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const DroneCommand::Goal> goal)
@@ -716,6 +721,15 @@ private:
         while (yaw < -M_PI) yaw += 2.0 * M_PI;
         return yaw;
     }
+    void gpsCallback(const SensorGps::SharedPtr msg)
+    {
+        GPSState gps_state;
+        gps_state.latitude = msg->latitude_deg;
+        gps_state.longitude = msg->longitude_deg;
+        gps_state.satellites_used = msg->satellites_used;
+        state_manager_.setGPSState(gps_state);
+
+    }
 
     // Publish the origin offset
     void publish_origin_offset()
@@ -810,6 +824,10 @@ private:
         
         // Probe locations
         msg.probes_found = state_manager_.getGlobalProbeLocations().getProbeCount();
+
+        msg.latitude = state_manager_.getGPSState().latitude;
+        msg.longitude = state_manager_.getGPSState().longitude;
+        msg.satellites_used = state_manager_.getGPSState().satellites_used;
         
         // Publish
         drone_state_pub_->publish(msg);
@@ -1672,7 +1690,6 @@ private:
     rclcpp::Publisher<interfaces::msg::DroneState>::SharedPtr drone_state_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr origin_offset_pub_;
 
-    // rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr gps_sub_;
     rclcpp::Subscription<interfaces::msg::GcsHeartbeat>::SharedPtr gcs_heartbeat_sub_;
     rclcpp::Subscription<interfaces::msg::MotionCapturePose>::SharedPtr motion_capture_local_position_sub_;
     rclcpp::Subscription<VehicleLocalPosition>::SharedPtr local_position_sub_;
@@ -1683,6 +1700,7 @@ private:
     rclcpp::Subscription<DistanceSensor>::SharedPtr ground_distance_sub_;
     rclcpp::Subscription<ActuatorOutputs>::SharedPtr actuator_output_sub_;
     rclcpp::Subscription<interfaces::msg::ProbeGlobalLocations>::SharedPtr probe_global_locations_sub_;
+    rclcpp::Subscription<SensorGps>::SharedPtr gps_sub_;
 
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;

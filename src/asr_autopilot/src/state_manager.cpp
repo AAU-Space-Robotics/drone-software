@@ -176,6 +176,15 @@ PositionError StateManager::getPositionError() {
     return position_error_;   
 }
 
+void StateManager::setGPSState(const GPSState& new_data) {
+    std::lock_guard<std::mutex> lock(gps_state_mutex_);
+    gps_state_ = new_data;   
+}
+GPSState StateManager::getGPSState() {
+    std::lock_guard<std::mutex> lock(gps_state_mutex_);
+    return gps_state_;   
+}
+
 // ---
 
 void StateManager::setLatestControlSignalPositionOnly(const Eigen::Vector4d& new_data) {

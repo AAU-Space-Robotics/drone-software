@@ -264,6 +264,11 @@ struct PositionError {
     PIDError Yaw;
 };
 
+struct GPSState{
+    float latitude;
+    float longitude;
+    int32_t satellites_used;
+};
 
 struct VelocityError {
     PIDError X;
@@ -353,6 +358,9 @@ public:
     void setGlobalProbeLocations(const GlobalProbeLocations& new_data);
     GlobalProbeLocations getGlobalProbeLocations();
 
+    void setGPSState(const GPSState& new_data);
+    GPSState getGPSState();
+
     // Get bundled trajectory initialization state
     TrajectoryInitState getTrajectoryInitState();
 
@@ -382,6 +390,7 @@ private:
     std::mutex battery_state_mutex_;
     std::mutex actuator_speeds_mutex_;
     std::mutex probe_global_locations_mutex_;
+    std::mutex gps_state_mutex_;
 
     // Data structures to store state information
     GCSHeartbeat gcs_heartbeat_;
@@ -407,7 +416,7 @@ private:
     Eigen::Vector4d latest_control_signal_velocity_ = Eigen::Vector4d::Zero(); // Initialize to zero
     Stamped4DVector actuator_speeds_ = Stamped4DVector(rclcpp::Time(0, 0), 0.0, 0.0, 0.0, 0.0);
     GlobalProbeLocations probe_global_locations_;
-
+    GPSState gps_state_;
 };
 
 #endif // STATE_MANAGER_H

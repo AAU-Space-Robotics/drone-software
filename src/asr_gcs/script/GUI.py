@@ -225,6 +225,7 @@ last_trajectory_mode = None
 rotated_x, rotated_y = 0.0, 0.0
 angle = 0.0
 erc_yaw = 3.14
+longitude, latitude, satellites_used = 0.0, 0.0, 0
 
 def probeCoordinatesToGridCoordinates(x, y, z):
     GRID_SIZE = 1  # Define the grid size
@@ -291,13 +292,7 @@ class DroneGuiNode(Node):
            qos
            
         )
-        # self.subscription = self.create_subscription(
-        #     ProbeGlobalLocations,
-        #     '/thyra/out/probe_locations_global',
-        #     self.probe_callback,
-        #     10
-            
-        # )
+
         self.publisher_ = self.create_publisher(
            GcsHeartbeat, 
            "/asr/thyra/in/gcs_heartbeat",
@@ -330,14 +325,6 @@ class DroneGuiNode(Node):
         else:
             self.timer_count = 1
             
-        #if self.timer_count % 50 == 0:  # Every 5 seconds
-        #    self.imgui_logger.info(f"System heartbeat - {self.timer_count}")
-        
-        # Log ROS2 messages to ImGui as well
-        #msg = "Timer callback executed"
-        #self.get_logger().info(msg)
-        #self.imgui_logger.debug(msg)
-        
 
 
     def state_callback(self, msg):
@@ -349,6 +336,7 @@ class DroneGuiNode(Node):
         global arming_state, flight_mode, takeoff_time, flight_time, trajectory_mode
         global GUI_console_logs
         global actuator_speed
+        global longitude, latitude, satellites_used
 
 
         if hasattr(self, 'last_arming_state') and self.last_arming_state != msg.arming_state:
@@ -364,7 +352,7 @@ class DroneGuiNode(Node):
 
         position_timestamp = msg.position_timestamp
         if len(msg.position) >= 3:
-            #Barbre was here....
+ 
             position_x = msg.position[0]
             position_y = msg.position[1]
             position_z = msg.position[2]
@@ -400,12 +388,16 @@ class DroneGuiNode(Node):
 
 
         arming_state = msg.arming_state
-        #self.get_logger().info(f"Arming state: {arming_state}")
+
         trajectory_mode = msg.trajectory_mode
+
+        longitude = msg.longitude
+        latitude = msg.latitude
+        satellites_used = msg.satellites_used
+
         flight_mode = msg.flight_mode
         GUI_console_logs[0] = str(self.get_logger())
-        #takeoff_time = msg.takeoff_time
-        #self.imgui_logger.info(f"Takeoff time: {takeoff_time}")
+
         flight_time = msg.flight_time
 
     def probe_callback(self, msg):
@@ -437,7 +429,6 @@ class DroneGuiNode(Node):
         #print(f"Probe count: {probe_numb}")
         # Optionally, store the timestamp if needed
         probe_timestamp = msg.stamp
-
 
 
     def send_command(self, command_type, target_pose=None, yaw=None):
@@ -727,7 +718,6 @@ def probe_Field(node, filename):
     except Exception as e:
         transformed_probes = np.array([])
 
-    # 420 -> 385 (35px shorter in x direction)
     draw_list.add_rect_filled(5, 750, 385, 895, color, rounding=10.0, flags=10)
 
     # Column separator lines
@@ -744,7 +734,6 @@ def probe_Field(node, filename):
     end_x, end_y = 235, 895
     draw_list.add_line(start_x, start_y, end_x, end_y, color_line, 5.0)
 
-    # last separator shifted 35px left: 335 -> 300
     start_x, start_y = 285, 750
     end_x, end_y = 285, 895
     draw_list.add_line(start_x, start_y, end_x, end_y, color_line, 5.0)
@@ -756,8 +745,8 @@ def probe_Field(node, filename):
         imgui.set_cursor_pos((185, 755)); imgui.text("Y")
 
         # These headers shifted slightly left because Z divider changed
-        imgui.set_cursor_pos((255, 755)); imgui.text("Z")      # was 285
-        imgui.set_cursor_pos((330, 755)); imgui.text("C")      # was 370
+        imgui.set_cursor_pos((255, 755)); imgui.text("Z")      
+        imgui.set_cursor_pos((330, 755)); imgui.text("C")      
 
     try:
         i = 0
@@ -852,10 +841,6 @@ def probe_Field(node, filename):
 def batteryGraph():
     global battery_voltage, battery_current, battery_percentage, battery_average_current
     battery_progressbar = map_value(battery_percentage, 0, 1, 109, 44)
-    #draw_list = imgui.get_window_draw_list()
-    #color = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0) 
-    #draw_list.add_rect(1800,40,1840,110,color, rounding=1.0,flags=15,thickness=3)   #shifted all 320 for fullscreen
-    #draw_list.add_rect(1807,31,1832,38,color, rounding=1.0,flags=3,thickness=3)  
     graphs.battery_graph(1800, 40, 1840, 110, 1807, 31, 1832, 38)
     if(battery_percentage > 0.5):
         battery_color = imgui.get_color_u32_rgba(0.0, 1.0, 0.0, 1.0)
@@ -975,7 +960,7 @@ def manual(node):
                     hover_color = (0.0, 0.8, 0.0)  # Lighter green for hover
                     active_color = (0.0, 0.2, 0.0)
                     node.send_command("manual_aided")
-                    #GuiConsoleLogger("Manual mode activated.")
+
                     node.imgui_logger.info("Manual mode activated")
                 else:
                     print("Joystick not connected or not initialized.")
@@ -1027,7 +1012,7 @@ def start_joystick(node):
     pygame.joystick.init()
 
     if pygame.joystick.get_count() == 0:
-        #print("No joystick connected.")
+
         current_item = 0
         return
     
@@ -1040,12 +1025,10 @@ def start_joystick(node):
         
     elif node.joystick.get_name() == "OpenTX RM TX16S Joystick":
         current_item = 2
-        #print(f"Initialized joystick: {node.joystick.get_name()}")
-    else: #node.joystick.get_name() == "Xbox Series X|S Controller":
+    else:
         current_item = 3
         print(f"Initialized joystick: {node.joystick.get_name()}")
-    #elif not node.joystick.get_init():
-     #   print("Joystick initialization failed.")
+
 
     
     
@@ -1059,8 +1042,6 @@ def start_joystick(node):
             try:
                 while rclpy.ok():
                     pygame.event.pump()  # Process internal queue
-                    #while arming_state == 7:
-                    #print(f"Flight mode: {flight_mode}")
                     
                     left_trigger = ((node.joystick.get_axis(2) + 1.0)/2.0)
                     right_trigger = (node.joystick.get_axis(5) + 1.0)/2.0
@@ -1071,25 +1052,11 @@ def start_joystick(node):
                     thrust = -node.joystick.get_axis(4) if abs(node.joystick.get_axis(4)) > DEAD_ZONE else 0.0
                     current_axis_state = int(abs(node.joystick.get_axis(4)))
                     hello = node.joystick.get_button(3) #command to test which buttons
-                    # Debug
-                    #print(f'button 8 = {node.joystick.get_button(8)}, button 9 = {node.joystick.get_button(9)}, button 10 = {node.joystick.get_button(10)}, button 11  = {node.joystick.get_button(11)}')
-                    #if prev_axis_state is None or current_axis_state != prev_axis_state:
-                    #    if current_axis_state == 0:
-                    #        node.send_command("disarm")
-                    #        #print("Arming state changed to: Disarmed (0)")  # Debug
-                    #    elif current_axis_state == 1:
-                    #        node.send_command("arm")
-                    #        #print("Arming state changed to: Armed (1)")  # Debug
-                    #    prev_axis_state = current_axis_state
-                    #arming_state = -int(abs(node.joystick.get_button(2)))
+     
                     if(node.joystick.get_button(2) == 1):
                         node.send_command("arm")
                         arming_state = 1
                         node.send_command("manual_aided")
-                    #print(f"Arming state: {arming_state}")
-                    #print(f'arming state {arming_state} and button state {node.joystick.get_button(2)}')
-                    #print(int(abs(node.joystick.get_axis(4))))
-                
                     if( node.joystick.get_button(1) == 1):
                         node.send_command("estop")
                         drone_kill = True
@@ -1105,11 +1072,6 @@ def start_joystick(node):
             try:
                 while rclpy.ok():
                     pygame.event.pump()  # Process internal queue
-                    #while arming_state == 7:
-                    #print(f"Flight mode: {flight_mode}")
-                    #left_trigger = ((node.joystick.get_axis(2) + 1.0)/2.0)
-                    #right_trigger = (node.joystick.get_axis(5) + 1.0)/2.0
-                    #yaw_value = right_trigger - left_trigger
                     roll_m = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
                     pitch_m = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
                     yaw_velocity_m = node.joystick.get_axis(2) if abs(node.joystick.get_axis(2)) > DEAD_ZONE else 0.0
@@ -1121,14 +1083,13 @@ def start_joystick(node):
                     if prev_axis_state is None or current_axis_state != prev_axis_state:
                         if current_axis_state == 1:
                             node.send_command("disarm")
-                            #print("Arming state changed to: Disarmed (0)")  # Debug
+   
                         elif current_axis_state == 0:
                             node.send_command("arm")
-                            #print("Arming state changed to: Armed (1)")  # Debug
+  
                         prev_axis_state = current_axis_state
                     arming_state = -int(abs(node.joystick.get_axis(4)))
-                    #print(f"Arming state: {arming_state}")
-                    #print(int(abs(node.joystick.get_axis(4))))
+
                 
                     if( node.joystick.get_button(3) == 1):
                         node.send_command("estop")
@@ -1144,8 +1105,6 @@ def start_joystick(node):
             try:
                 while rclpy.ok():
                     pygame.event.pump()  # Process internal queue
-                    #while arming_state == 7:
-                    #print(f"Flight mode: {flight_mode}")
                     left_trigger = (node.joystick.get_button(4) + 1.0)/2.0
                     right_trigger = (node.joystick.get_button(5) + 1.0)/2.0
                     yaw_value = right_trigger - left_trigger
@@ -1160,11 +1119,6 @@ def start_joystick(node):
                         drone_state = True
                         node.send_command("manual_aided")
                     
-                   
-        
-                    #print(f"Arming state: {arming_state}")
-                    #print(f'arming state {arming_state} and button state {node.joystick.get_button(2)}')
-                    #print(int(abs(node.joystick.get_axis(4))))
           
                     if( node.joystick.get_button(2) == 1):
                         node.send_command("estop")
@@ -1328,7 +1282,6 @@ def mouse_placement():
         if imgui.is_mouse_clicked(imgui.MOUSE_BUTTON_LEFT):
             mouse_x_buffer = mouse_x
             mouse_y_buffer = mouse_y
-            #print(f"{mouse_x} and {mouse_y} ")
 
 def send_map_pos(node):
     global mouse_x_buffer, mouse_y_buffer, yaw, position_z, target_position_z
@@ -1438,29 +1391,8 @@ def route_planner(node):
                      node.imgui_logger.warn("Invalid input for Spin, please enter yaw rotations direction values")
                 break
     
-    
-    #if imgui.is_mouse_down(imgui.MOUSE_BUTTON_LEFT):
-    #    if 1297 < mouse_x < 1565 and 190 < mouse_y < 624:  
-    #        card_y_buffer = mouse_y -25
-    #        #change_y_1 = mouse_y -40
-    #        #change_y_2 = mouse_y + 40
-    #        
-    #        permant_y = card_y_buffer
-    #
-    #else:
-    #    permant_y = card_y_buffer
-            
-    #plan_card.goto_card(1287, 400, node)
 
 def is_T_close(target_pos_x, target_pos_y):
-    #global position_x, position_y, position_z
-    #pos_vector_length = math.sqrt(math.pow(position_x, 2)+ math.pow(position_y,2))
-    #t_vector_length = math.sqrt(math.pow(target_pos_x, 2)+ math.pow(target_pos_y,2))
-    #e = t_vector_length - pos_vector_length
-    #if e <= 0.5:
-    #    return True
-    #else:
-    #    return False
     global position_x, position_y
     dx = target_pos_x - position_x
     dy = target_pos_y - position_y
@@ -1476,7 +1408,12 @@ def is_trajectory_complete():
     last_trajectory_mode = trajectory_mode
     return result
 
-
+def gps_status():
+    global longitude, latitude, satellites_used
+    imgui.set_cursor_pos((425, 940))
+    with imgui.font(font_small):
+        imgui.text(f"GPS: Lat = {Decimal(latitude).quantize(Decimal('0.00000'))} |Lon = {Decimal(longitude).quantize(Decimal('0.00000'))} |Satellites = {satellites_used}")
+    
 
 def execute_route(node):
     global flight_plan, flight_plan_coord
@@ -1484,7 +1421,6 @@ def execute_route(node):
     global execute_route_numb, effect3
     global position_x, position_y, position_z
     global current_step, step_start_time, command_sent, waiting_for_completion
-    #print(execute_route_numb)
     if GUIButton.button_Plan(1250, 635, font_small, "Excecute##plan4"):
         begin_execute = True
         current_step = 0
@@ -1511,7 +1447,6 @@ def execute_route(node):
     elapsed = current_time - step_start_time
 
     step_finished = False  # track if this step finishes in this frame
-    #print(current_step)
     match flight_plan[current_step]:
         case 1:  # Arm & takeoff
             if not command_sent:
@@ -1563,15 +1498,9 @@ def execute_route(node):
 
                             step_finished = True
                             execute_route_numb += 1
-                        #elif elapsed > 50.0:
-                        #    effect3 = True
-                        #    
-                        #    step_finished = True
-                        #    waiting_for_completion = False
                 except (ValueError, IndexError):
                     step_finished = True
                     execute_route_numb += 1
-                    #waiting_for_completion = False
         case 4: # Spin
             if not command_sent:
                 try:
@@ -1679,16 +1608,12 @@ class effect_class:
                 elapsed = time.time() - start_time
                 t = min(elapsed / duration, 1.0)
                 temp_y_arrow = start_y_arrow + (52 * t)
-
-                #draw_list.add_triangle_filled(1266, 201+(temp_y), 1266, 231+(temp_y), 1282, 216+(temp_y), color)
-            #draw_list.add_triangle_filled(830, 450, 830, 475, 855, 462.5, color) #move y axis 52
             if t >= 1.0:
                 effect_begin3 = False
                 start_time = None
                 temp_y_arrow = start_y_arrow + 52
 
             draw_list.add_triangle_filled(1231, 201+(temp_y_arrow ), 1231, 231+(temp_y_arrow ), 1247, 216+(temp_y_arrow ), color)
-                #draw_list.add_triangle_filled(1266, 201+(temp_y), 1266, 231+(temp_y), 1282, 216+(temp_y), color)
         else:
             draw_list.add_triangle_filled(1231, 201+(temp_y_arrow), 1231, 231+(temp_y_arrow), 1247, 216+(temp_y_arrow), color)
 
@@ -1798,7 +1723,6 @@ class plan_card:
         imgui.set_cursor_pos((365, 790+y_add)); imgui.text(f"{Decimal(og_probes[i]['confidence']).quantize(Decimal('0.00'))}")
                
 def drone_image(image_path, texture_id, img_width, img_height):
-    #Todo move to function
     global position_x, position_y
     dot_position_x = map_value(position_x, 10, -10, 467, 1228) #e 1107
     dot_position_y = map_value(position_y, 10, -10, 158, 599)
@@ -1912,16 +1836,6 @@ def main(args=None):
     font_for_meter = io.fonts.add_font_from_file_ttf(font_path, 20)
     impl.refresh_font_texture()
     
-    
-
-    #texture_id = glGenTextures(1)
-    #glBindTexture(GL_TEXTURE_2D, texture_id)
-    #
-    ## Set texture parameters
-    #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-    #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-    #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
 
     if image_path and os.path.exists(image_path):
         texture_id, img_width, img_height = load_image_to_texture(image_path)
@@ -1958,19 +1872,16 @@ def main(args=None):
         Kill_command(node)
         Goto_field(node)
         speed_field(node)
-        #Dropdown_Menu()
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
-        
+        gps_status()
+
         probe_Field(node,filename)
         XYZVelocity_Text_Field()
         batteryGraph()
         motor_speed()
-        #Arrows()   
-        #takeoff_button(node)
-        #land_button(node)
         return_to_home_button(node)
-        #drone_image(image_path,texture_id,img_width,img_height)
+
         GuiConsoleLogger(node)
         GUIButton.button1(841, 635, font_small, "Land", "land", node)
         GUIButton.button2(457, 635, font_small, "Takeoff", "takeoff", node, -1.0)
