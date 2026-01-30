@@ -285,6 +285,7 @@ struct AccelerationError {
 // Trajectory initialization state bundle
 struct TrajectoryInitState {
     Eigen::Vector3d position;
+    Eigen::Vector3d position_target_prev;
     Eigen::Quaterniond orientation;
     Eigen::Vector3d velocity;
     Eigen::Vector3d acceleration;

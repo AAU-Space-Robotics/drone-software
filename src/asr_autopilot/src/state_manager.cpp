@@ -255,13 +255,15 @@ TrajectoryInitState StateManager::getTrajectoryInitState() {
     std::lock_guard<std::mutex> vel_lock(velocity_global_mutex_);
     std::lock_guard<std::mutex> acc_lock(acceleration_global_mutex_);
     std::lock_guard<std::mutex> profile_lock(target_position_profile_mutex_);
+    std::lock_guard<std::mutex> position_lock(position_global_mutex_);
     
     Eigen::Quaterniond quat = attitude_.data.normalized();
     Transformations transformations;
     Eigen::Vector3d euler = transformations.quaternionToEuler(quat);
     
     return {
-        .position = {target_position_profile_.x(), target_position_profile_.y(), target_position_profile_.z()},
+        .position = {position_global_.x(), position_global_.y(), position_global_.z()},
+        .position_target_prev = {target_position_profile_.x(), target_position_profile_.y(), target_position_profile_.z()},
         .orientation = quat,
         .velocity = velocity_global_.data,
         .acceleration = acceleration_global_.data,

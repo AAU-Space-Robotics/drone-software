@@ -1125,12 +1125,11 @@ def start_joystick(node):
                         drone_kill = True
                     
                     if( node.joystick.get_button(0) == 1):
-                        node.send_command("disarm")
-                        arming_state = 0
-                        drone_state = False
+                        node.send_command("land", [-1.0])
         
 
                     node.send_manual_control(roll_m, pitch_m, yaw_velocity_m, thrust)
+                        
                     
                     clock.tick(20)  # 20 Hz update rate
             except KeyboardInterrupt:
