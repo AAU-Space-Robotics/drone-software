@@ -15,12 +15,16 @@
   <exec_depend>asr_perception</exec_depend>
   <exec_depend>asr_sensors</exec_depend>
   <exec_depend>asr_gcs</exec_depend>
-  <exec_depend>interfaces</exec_depend>
+
   
   <!-- ROS dependencies -->
   <depend>rclpy</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>interfaces</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

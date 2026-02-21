@@ -80,3 +80,26 @@
       takeoff_height_: -1.5 # Default takeoff height (meters)
       motor_speed_min: 0.0 # Motor speed min expected value
       motor_speed_max: 1000.0 # Motor speed max expected value
+
+     # Camera Parameters
+    camera:
+      focal_length:
+        x: 910.7153
+        y: 910.8062
+      principal_point:
+        x: 641.7375
+        y: 370.1866
+      image_size:
+        width: 1280
+        height: 720
+      Radial_distortion:
+        k1: 0
+        k2: 0
+        k3: 0
+      Tangiential_distortion:
+        p1: 0
+        p2: 0
+      Skew: 0.0
+      K: [910.7153, 0.0, 641.7375,
+          0.0, 910.8062, 370.1866,
+          0.0, 0.0, 1.0]

@@ -13,8 +13,6 @@ Establish a serial connection between the Raspberry Pi 4 (RPi4) and the PX4 Cube
 | 10                    | Pin 2               | RPi4 RX → PX4 TX       |
 | 9                     | Pin 6               | RPi4 GND → PX4 GND     |
 
-Red should go to pi RXD, and blue to pi TXD.
-
 *Note:* PX4 Telem 2 uses a 6-pin JST-GH connector; pins 1, 4, and 5 are unused. For details, see [Cube Orange Overview](https://ardupilot.org/copter/docs/common-thecubeorange-overview.html).
 
 ## Software Setup
@@ -182,7 +180,7 @@ MicroXRCEAgent serial --dev /dev/serial0 -b 921600
 
 #### 1.1 (Optional) Establish Connection with a Simulation
 
-To support drone stack development, a Gazebo simulation is available from the PX4 community. Read more here: [PX4](https://docs.px4.io/main/en/ros2/user_guide.html#install-px4). If the simulation is built correctly, navigate to its root directory (likely `PX4-Autopilot`) and run:
+To support drone stack development, a Gazebo simulation is available from the PX4 community. Read more here: [PX4](https://docs.px4.io/main/en/ros2/user_guideæ.html#install-px4). If the simulation is built correctly, navigate to its root directory (likely `PX4-Autopilot`) and run:
 
 ```bash
 cd PX4-Autopilot/ && make px4_sitl gz_x500
@@ -285,10 +283,6 @@ sudo apt-get update
 sudo apt-get upgrade -y
 sudo apt install -y i2c-tools
 
-Red wire in pi in 2, and black in pin 14. 
-Blue is in 3 (SDA), and Green is in 5 (SCL)
-
-
 Simulation:
 src/modules/simulation/simulator_mavlink/sitl_targets_gazebo-classic.cmake
 
@@ -316,6 +310,3 @@ ros2genmsg('/home/daroe/drone-software/src', CreateShareableFile=true);
 
 source ros2 
 source /opt/ros/jazzy/setup.bash
-
-sudo apt install ros-humble-serial-driver
-sudo apt install ros-humble-asio-cmake-module

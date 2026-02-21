@@ -473,11 +473,11 @@ class DroneGuiNode(Node):
         else:
             self.imgui_logger.error(msg)
         self.goal_handle = None
-    def send_manual_control(self, roll, pitch, yaw_velocity, thrust):
+    def send_manual_control(self, roll, pitch, yaw_velocity_m, thrust):
         msg = ManualControlInput()
         msg.roll = float(roll)
         msg.pitch = float(pitch)
-        msg.yaw_velocity = float(yaw_velocity)
+        msg.yaw_velocity = float(yaw_velocity_m)
         msg.thrust = float(thrust)
         self.manual_control_publisher.publish(msg)
     def send_heartbeat(self):
@@ -1044,11 +1044,16 @@ def start_joystick(node):
                     pygame.event.pump()  # Process internal queue
                     
                     left_trigger = ((node.joystick.get_axis(2) + 1.0)/2.0)
-                    right_trigger = (node.joystick.get_axis(5) + 1.0)/2.0
-                    yaw_value = right_trigger - left_trigger
+                    right_trigger = ((node.joystick.get_axis(5) + 1.0)/2.0)
+                    yaw_value = (right_trigger - left_trigger) * 2.0
+                    print(f"Left Trigger: {node.joystick.get_axis(2)}, Right Trigger: {node.joystick.get_axis(5)}")
+                    #for i in range(node.joystick.get_numaxes()):
+                    #    if node.joystick.get_axis(i) > 0.5:
+                    #        print(f"Axis {i} activated")
                     roll_m = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
                     pitch_m = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
                     yaw_velocity_m = yaw_value if abs(yaw_value) > DEAD_ZONE else 0.0
+                    print(f"Yaw Value: {yaw_velocity_m}")
                     thrust = -node.joystick.get_axis(4) if abs(node.joystick.get_axis(4)) > DEAD_ZONE else 0.0
                     current_axis_state = int(abs(node.joystick.get_axis(4)))
                     hello = node.joystick.get_button(3) #command to test which buttons
@@ -1107,6 +1112,7 @@ def start_joystick(node):
                     pygame.event.pump()  # Process internal queue
                     left_trigger = (node.joystick.get_button(4) + 1.0)/2.0
                     right_trigger = (node.joystick.get_button(5) + 1.0)/2.0
+                    
                     yaw_value = right_trigger - left_trigger
                     roll_m = node.joystick.get_axis(0) if abs(node.joystick.get_axis(0)) > DEAD_ZONE else 0.0
                     pitch_m = -node.joystick.get_axis(1) if abs(node.joystick.get_axis(1)) > DEAD_ZONE else 0.0
