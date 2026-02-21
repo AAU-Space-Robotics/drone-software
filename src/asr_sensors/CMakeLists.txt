@@ -42,11 +42,21 @@ ament_target_dependencies(radio_sender rclcpp std_msgs serial_driver diagnostic_
 add_executable(radio_receiver src/radio_receiver.cpp)
 ament_target_dependencies(radio_receiver rclcpp std_msgs serial_driver diagnostic_msgs)
 
+# Base Station Configurator
+add_executable(base_station_config src/base_station_config.cpp)
+ament_target_dependencies(base_station_config rclcpp std_msgs serial_driver diagnostic_msgs)
+
+# RTK Base Station Node
+add_executable(rtk_base_station src/rtk_base_station.cpp)
+ament_target_dependencies(rtk_base_station rclcpp std_msgs serial_driver)
+
 # Install C++ executables
 install(TARGETS
   lidar
   radio_sender
   radio_receiver
+  base_station_config
+  rtk_base_station
   DESTINATION lib/${PROJECT_NAME}
 )
 
