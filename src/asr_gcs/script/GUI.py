@@ -38,6 +38,8 @@ from OpenGL.GL import *
 import re
 import math
 
+from px4_msgs.msg import VehicleLocalPosition
+
 #filename = "probe_data.txt"
 
 class DroneData:
@@ -285,6 +287,7 @@ class DroneGuiNode(Node):
             10
             
         )
+        
         self.subscription = self.create_subscription(
            ProbeGlobalLocations,
            '/asr/probe_detector/global_probe_locations',

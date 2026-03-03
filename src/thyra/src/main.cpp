@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <eigen3/Eigen/Geometry>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <rcutils/logging.h>
@@ -17,6 +18,8 @@
 #include <opencv2/aruco/charuco.hpp>
 #include <opencv2/objdetect/objdetect.hpp>
 #include <cv_bridge/cv_bridge.hpp>
+#include "geometry_msgs/msg/pose_stamped.hpp"
+
 
 #include "utils.hpp"
 
@@ -86,7 +89,7 @@ public:
 
         // Action server
         drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
-            this, "in/drone_command",
+            this, "in/mission_command",
             [this](const rclcpp_action::GoalUUID &uuid, std::shared_ptr<const DroneCommand::Goal> goal)
             {                return handleDroneCommand(uuid, goal);
             },
@@ -109,6 +112,7 @@ private:
     {
         // Process drone state message
         last_drone_state = msg;
+        RCLCPP_INFO(get_logger(), "Received drone state message: arming_state=%d, flight_mode=%d", msg->arming_state, msg->flight_mode);
     }
     void RGBCallback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr msg)
     {
@@ -128,7 +132,9 @@ private:
      //-----------------------Action Server Handlers-----------------------
     rclcpp_action::GoalResponse handleDroneCommand(const rclcpp_action::GoalUUID & /*uuid*/,
                                                 std::shared_ptr<const DroneCommand::Goal> goal)
-    {
+    {   
+        RCLCPP_INFO(get_logger(), "Received goal request: command_type=%s", goal->command_type.c_str());
+        
          return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     }
     rclcpp_action::CancelResponse handleCancel(const std::shared_ptr<GoalHandleDroneCommand> /*goal_handle*/)
