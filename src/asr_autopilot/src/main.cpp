@@ -349,7 +349,7 @@ public:
             [this](const interfaces::msg::ManualControlInput::SharedPtr msg)
             { manualControlInputCallback(msg); });
         battery_status_sub_ = create_subscription<BatteryStatus>(
-            "/fmu/out/battery_status_v1", qos,
+            "/fmu/out/battery_status", qos,
             [this](const BatteryStatus::SharedPtr msg)
             { batteryStatusCallback(msg); });
         ground_distance_sub_ = create_subscription<DistanceSensor>(
