@@ -1918,13 +1918,14 @@ def main(args=None):
             if texture_id:
                 img = Image.open(image_path).convert("RGBA")    
 
-                # yaw_velocity is now in degrees (-180 to 180)
-                # Apply a dead zone to prevent jitter near 0
-                if abs(yaw_velocity) < 0.5:
+              # yaw_velocity is now in radians (-π to π)
+
+                # Dead zone (~0.5 degrees ≈ 0.0087 radians)
+                if abs(yaw_velocity) < 0.0087:
                     angle = 0
                 else:
-                    angle = yaw_velocity  # Already in degrees, use directly
-
+                    angle = math.degrees(yaw_velocity)  # convert radians → degrees
+                
                 rotated_img = img.rotate(angle, expand=False, center=(img.width/2, img.height/2))
                 pixels = rotated_img.tobytes()
                 gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)

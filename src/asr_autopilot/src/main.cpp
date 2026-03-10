@@ -787,13 +787,13 @@ private:
         // Orientation - with explicit float casts
         const StampedQuaternion& attitude = state_manager_.getAttitude();
         const Eigen::Vector3d euler = transformations_.quaternionToEuler(attitude.quaternion());
-        
+        //std::cout << euler.z() << '\n';
      
 
 
-        msg.orientation = {static_cast<float>(wrapToPi(euler.z())), // yaw adjusted to [-pi, pi]
-                        static_cast<float>(wrapToPi(euler.y())), // pitch adjusted to [-pi, pi]
-                        static_cast<float>(wrapToPi(euler.x()))}; // roll, pitch, yaw
+        msg.orientation = {static_cast<float>(euler.z()), // yaw adjusted to [-pi, pi]
+                        static_cast<float>(euler.y()), // pitch adjusted to [-pi, pi]
+                        static_cast<float>(euler.x())}; // roll, pitch, yaw
         
         // Target position - with explicit float casts
         const Stamped4DVector& target_profile = state_manager_.getTargetPositionProfile();
