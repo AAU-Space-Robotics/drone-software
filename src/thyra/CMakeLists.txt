@@ -74,6 +74,11 @@ target_include_directories(thyra_mission_executor PUBLIC
   ${OpenCV_INCLUDE_DIRS}  
 )
 
+# 
+install(PROGRAMS
+  script/gimbal.py
+  DESTINATION lib/${PROJECT_NAME}/script
+)
 
 
 ament_target_dependencies(thyra_mission_executor
