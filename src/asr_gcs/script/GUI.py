@@ -3,6 +3,8 @@
 import glfw
 import warnings
 from glfw import GLFWError
+
+from px4_msgs.msg._distance_sensor import DistanceSensor
 warnings.filterwarnings("ignore", category=GLFWError, message=".*Wayland: The platform does not support setting the window position.*")
 import imgui
 from imgui.integrations.glfw import GlfwRenderer
@@ -228,6 +230,8 @@ rotated_x, rotated_y = 0.0, 0.0
 angle = 0.0
 erc_yaw = 3.14
 longitude, latitude, satellites_used = 0.0, 0.0, 0
+distance = 0.0
+distance_timestamp = 0.0
 
 def probeCoordinatesToGridCoordinates(x, y, z):
     GRID_SIZE = 1  # Define the grid size
@@ -296,11 +300,19 @@ class DroneGuiNode(Node):
            
         )
 
+        self.subscription = self.create_subscription(
+            DistanceSensor,
+            "/fmu/out/distance_sensor",
+            self.distance_sensor_callback,
+            qos
+        )
         self.publisher_ = self.create_publisher(
            GcsHeartbeat, 
            "/asr/thyra/in/gcs_heartbeat",
            qos
         )
+
+        
 
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
         self.heartbeat_timer = self.create_timer(0.5, self.send_heartbeat)  # 2 Hz
@@ -432,6 +444,9 @@ class DroneGuiNode(Node):
         #print(f"Probe count: {probe_numb}")
         # Optionally, store the timestamp if needed
         probe_timestamp = msg.stamp
+    def distance_sensor_callback(self, msg):
+        global distance
+        distance = msg.current_distance
 
 
     def send_command(self, command_type, target_pose=None, yaw=None):
@@ -617,12 +632,22 @@ def speed_field(node):
     imgui.pop_style_color(3)
     imgui.pop_style_var()
  
-
+def slider_field(node):
+    global test_slider
+    imgui.set_cursor_pos((10, 920))
+    with imgui.font(font):
+        imgui.text("Gimbal Slider:")
+    imgui.set_cursor_pos((10, 955))
+    imgui.set_next_item_width(300)
+    changed, test_slider = imgui.slider_float("##test_slider", test_slider, 0.0, 1.0)
+    if changed:
+       pass
 def XYZ_Text_Field(msg):
     # Drawing a square kek
     global position_x, position_y, position_z
     global target_position_x, target_position_y, target_position_z
     global position_timestamp
+    global distance
 
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
@@ -645,7 +670,8 @@ def XYZ_Text_Field(msg):
         imgui.set_cursor_pos((263, 143)); imgui.text(f"{Decimal(target_position_y).quantize(Decimal('0.000'))}")
         imgui.set_cursor_pos((263, 193)); imgui.text(f"{(Decimal(target_position_z).quantize(Decimal('0.000')))}")
         imgui.set_cursor_pos((9, 240)); imgui.text(f"[m]")
-
+        imgui.set_cursor_pos((180, 270)); imgui.text("|Height")
+        imgui.set_cursor_pos((300, 270)); imgui.text(f"{Decimal(distance).quantize(Decimal('0.000'))}")
         # separator lines
         draw_list = imgui.get_window_draw_list()
 
@@ -1883,7 +1909,7 @@ def main(args=None):
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
         gps_status()
-
+        slider_field(node)
         probe_Field(node,filename)
         XYZVelocity_Text_Field()
         batteryGraph()

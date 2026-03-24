@@ -918,7 +918,7 @@ private:
         Stamped3DVector velocity = state_manager_.getGlobalVelocity();
         StampedQuaternion attitude = state_manager_.getAttitude();
         
-        double dt = (get_time() - position.getTime()).seconds();
+        double dt = (get_time() - position.getTime()).seconds(); //
 
         if (dt > timeout_threshold_) {
             RCLCPP_WARN(get_logger(), "No position or velocity data received!");
