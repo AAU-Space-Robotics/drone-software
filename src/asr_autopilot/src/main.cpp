@@ -1261,9 +1261,11 @@ private:
 
        value = std::clamp(value, -1.0f, 1.0f);
        bool armed = (state_manager_.getDroneState().arming_state == ArmingState::ARMED);
+       const int64_t now_ns = get_time().nanoseconds();
 
        latest_servo_aux_index_ = aux_index;
        latest_servo_value_ = value;
+       latest_servo_command_ns_ = now_ns;
        has_latest_servo_command_ = true;
 
        if (armed) {
@@ -1294,6 +1296,12 @@ private:
     void publishHeldDisarmedServoCommand()
     {
         if (!has_latest_servo_command_) {
+            return;
+        }
+
+        const int64_t now_ns = get_time().nanoseconds();
+        if ((now_ns - latest_servo_command_ns_) > servo_hold_timeout_ns_) {
+            has_latest_servo_command_ = false;
             return;
         }
 
@@ -1836,7 +1844,9 @@ private:
     int latest_servo_aux_index_ = 0;
     float latest_servo_value_ = 0.0f;
     bool has_latest_servo_command_ = false;
+    int64_t latest_servo_command_ns_ = 0;
     static constexpr uint32_t servo_test_timeout_ms_ = 500;
+    static constexpr int64_t servo_hold_timeout_ns_ = 5000000000LL;
 
     // Setup variables
     float takeoff_height_;
