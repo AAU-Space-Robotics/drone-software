@@ -19,6 +19,8 @@ imgui.ini
 src/realsense-ros
 src/matlab_msg_gen
 venv
+src/asr_sensors/script/neopixel-env/
+src/asr_sensors/script/.lgd-nfy0/
 
 **/rosbag*/
 probe_data/
