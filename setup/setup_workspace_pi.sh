@@ -9,13 +9,22 @@ SRC_DIR="$ROS_WORKSPACE_PATH/src"
 PARENT_DIR=$(dirname "$ROS_WORKSPACE_PATH")  # Directory containing drone-software
 ROS_DISTRO="jazzy"
 
-# Check if ROS_DISTRO is set
-if [ -z "$ROS_DISTRO" ]; then
-    echo "Error: ROS distribution not found. Ensure ROS 2 is installed."
-    exit 1
+# 1. Check if ROS 2 is installed
+if ! command -v ros2 &> /dev/null; then
+    echo "WARNING: ROS 2 does not appear to be installed (ros2 command not found)."
+    echo "This script requires ROS 2 $ROS_DISTRO to be installed and sourced before running."
+    echo ""
+    read -p "Are you sure you want to continue anyway? [y/N] " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo "Aborting. Please install ROS 2 $ROS_DISTRO first."
+        exit 1
+    fi
+    echo "Continuing at your own risk..."
+else
+    echo "ROS 2 found. Continuing..."
 fi
 
-# 1. Install Intel RealSense SDK
+# 2. Install Intel RealSense SDK
 echo "Installing Intel RealSense SDK..."
 if ! command -v rs-enumerate-devices &> /dev/null; then
     # Install dependencies
@@ -55,9 +64,7 @@ else
     echo "Intel RealSense SDK is already installed."
 fi
 
-# libuvc_installation.sh
-
-# 2. Install ROS RealSense wrapper
+# 3. Install ROS RealSense wrapper
 echo "Installing ROS $ROS_DISTRO RealSense wrapper..."
 if ! dpkg -l | grep -q "ros-$ROS_DISTRO-realsense2-camera"; then
     # Create keyrings directory
@@ -105,16 +112,16 @@ else
     echo "ROS $ROS_DISTRO RealSense wrapper is already installed."
 fi
 
-# 3. Check if the src directory exists, create it if it doesn't
+# 4. Check if the src directory exists, create it if it doesn't
 if [ ! -d "$SRC_DIR" ]; then
   echo "Creating src directory at $SRC_DIR..."
   mkdir -p "$SRC_DIR"
 fi
 
-# 4. Navigate to the src directory
+# 5. Navigate to the src directory
 cd "$SRC_DIR" || exit
 
-# 5. Function to clone a repository if it doesn't already exist
+# 6. Function to clone a repository if it doesn't already exist
 clone_repo_if_not_exists() {
     local repo_url="$1"
     local target_dir="$2"
@@ -131,34 +138,16 @@ clone_repo_if_not_exists() {
     fi
 }
 
-# 6. Clone the Intel realsense wrapper repository
+# 7. Clone the Intel RealSense ROS wrapper repository
 clone_repo_if_not_exists "git@github.com:IntelRealSense/realsense-ros.git" "realsense-ros" "ros2-master"
 
-# 6.5. Initialize rosdep and install dependencies
-# if ! command -v rosdep &> /dev/null; then
-#   echo "Installing python3-rosdep..."
-#   sudo apt-get update
-#   sudo apt-get install python3-rosdep -y
-# fi
-
-# if [ ! -f "/etc/ros/rosdep/sources.list.d/20-default.list" ]; then
-#   echo "Initializing rosdep..."
-#   sudo rosdep init
-# fi
-
-# echo "Updating rosdep..."
-# rosdep update
-
-# echo "Installing ROS 2 dependencies for workspace (skipping librealsense2)..."
-# rosdep install -i --from-path . --rosdistro "$ROS_DISTRO" --skip-keys=librealsense2 -y
-
-# 7. Clone the px4_msgs repository
+# 8. Clone the px4_msgs repository
 clone_repo_if_not_exists "git@github.com:AAU-Space-Robotics/px4_msgs_thyra.git" "px4_msgs_thyra"
 
-# 8. Navigate to the parent directory to check/install Micro-XRCE-DDS-Agent and PX4-Autopilot
+# 9. Navigate to the parent directory to check/install Micro-XRCE-DDS-Agent
 cd "$PARENT_DIR" || exit
 
-# 9. Check and install Micro-XRCE-DDS-Agent
+# 10. Check and install Micro-XRCE-DDS-Agent
 if [ -d "Micro-XRCE-DDS-Agent" ]; then
   echo "Micro-XRCE-DDS-Agent is already installed, skipping installation."
 else
@@ -171,18 +160,6 @@ else
   make
   sudo make install
   sudo ldconfig /usr/local/lib/
-  cd "$PARENT_DIR" || exit
-fi
-
-# 10. Check and install PX4-Autopilot
-if [ -d "PX4-Autopilot_thyra" ]; then
-  echo "PX4-Autopilot_thyra is already installed, skipping installation."
-else
-  echo "Installing PX4-Autopilot..."
-  git clone git@github.com:AAU-Space-Robotics/PX4-Autopilot_thyra.git --recursive
-  cd PX4-Autopilot_thyra
-  bash ./Tools/setup/ubuntu.sh
-  make px4_sitl
   cd "$PARENT_DIR" || exit
 fi
 
