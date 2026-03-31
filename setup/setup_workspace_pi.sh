@@ -112,16 +112,36 @@ else
     echo "ROS $ROS_DISTRO RealSense wrapper is already installed."
 fi
 
-# 4. Check if the src directory exists, create it if it doesn't
+# 4. Install additional ROS dependencies
+echo "Installing additional ROS $ROS_DISTRO dependencies..."
+if ! dpkg -l | grep -q "ros-$ROS_DISTRO-serial-driver"; then
+    if ! sudo apt-get install -y "ros-$ROS_DISTRO-serial-driver"; then
+        echo "Error: Failed to install ros-$ROS_DISTRO-serial-driver"
+        exit 1
+    fi
+else
+    echo "ros-$ROS_DISTRO-serial-driver is already installed."
+fi
+
+if ! dpkg -l | grep -q "ros-$ROS_DISTRO-asio-cmake-module"; then
+    if ! sudo apt-get install -y "ros-$ROS_DISTRO-asio-cmake-module"; then
+        echo "Error: Failed to install ros-$ROS_DISTRO-asio-cmake-module"
+        exit 1
+    fi
+else
+    echo "ros-$ROS_DISTRO-asio-cmake-module is already installed."
+fi
+
+# 5. Check if the src directory exists, create it if it doesn't
 if [ ! -d "$SRC_DIR" ]; then
   echo "Creating src directory at $SRC_DIR..."
   mkdir -p "$SRC_DIR"
 fi
 
-# 5. Navigate to the src directory
+# 6. Navigate to the src directory
 cd "$SRC_DIR" || exit
 
-# 6. Function to clone a repository if it doesn't already exist
+# 7. Function to clone a repository if it doesn't already exist
 clone_repo_if_not_exists() {
     local repo_url="$1"
     local target_dir="$2"
@@ -138,16 +158,16 @@ clone_repo_if_not_exists() {
     fi
 }
 
-# 7. Clone the Intel RealSense ROS wrapper repository
+# 8. Clone the Intel RealSense ROS wrapper repository
 clone_repo_if_not_exists "git@github.com:IntelRealSense/realsense-ros.git" "realsense-ros" "ros2-master"
 
-# 8. Clone the px4_msgs repository
+# 9. Clone the px4_msgs repository
 clone_repo_if_not_exists "git@github.com:AAU-Space-Robotics/px4_msgs_thyra.git" "px4_msgs_thyra"
 
-# 9. Navigate to the parent directory to check/install Micro-XRCE-DDS-Agent
+# 10. Navigate to the parent directory to check/install Micro-XRCE-DDS-Agent
 cd "$PARENT_DIR" || exit
 
-# 10. Check and install Micro-XRCE-DDS-Agent
+# 11. Check and install Micro-XRCE-DDS-Agent
 if [ -d "Micro-XRCE-DDS-Agent" ]; then
   echo "Micro-XRCE-DDS-Agent is already installed, skipping installation."
 else
