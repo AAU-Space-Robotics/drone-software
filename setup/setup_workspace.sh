@@ -7,17 +7,38 @@ SCRIPT_DIR=$(dirname "$(realpath "$0")")
 ROS_WORKSPACE_PATH=$(dirname "$SCRIPT_DIR")  # Base workspace is drone-software (parent of setup/)
 SRC_DIR="$ROS_WORKSPACE_PATH/src"
 PARENT_DIR=$(dirname "$ROS_WORKSPACE_PATH")  # Directory containing drone-software
+ROS_DISTRO="jazzy"
 
-# 3. Check if the src directory exists, create it if it doesn't
+# 1. Install additional ROS dependencies
+echo "Installing additional ROS $ROS_DISTRO dependencies..."
+if ! dpkg -l | grep -q "ros-$ROS_DISTRO-serial-driver"; then
+    if ! sudo apt-get install -y "ros-$ROS_DISTRO-serial-driver"; then
+        echo "Error: Failed to install ros-$ROS_DISTRO-serial-driver"
+        exit 1
+    fi
+else
+    echo "ros-$ROS_DISTRO-serial-driver is already installed."
+fi
+
+if ! dpkg -l | grep -q "ros-$ROS_DISTRO-asio-cmake-module"; then
+    if ! sudo apt-get install -y "ros-$ROS_DISTRO-asio-cmake-module"; then
+        echo "Error: Failed to install ros-$ROS_DISTRO-asio-cmake-module"
+        exit 1
+    fi
+else
+    echo "ros-$ROS_DISTRO-asio-cmake-module is already installed."
+fi
+
+# 2. Check if the src directory exists, create it if it doesn't
 if [ ! -d "$SRC_DIR" ]; then
   echo "Creating src directory at $SRC_DIR..."
   mkdir -p "$SRC_DIR"
 fi
 
-# 4. Navigate to the src directory
+# 3. Navigate to the src directory
 cd "$SRC_DIR" || exit
 
-# 5. Function to clone a repository if it doesn't already exist
+# 4. Function to clone a repository if it doesn't already exist
 clone_repo_if_not_exists() {
     local repo_url="$1"
     local target_dir="$2"
@@ -34,13 +55,13 @@ clone_repo_if_not_exists() {
     fi
 }
 
-# 7. Clone the px4_msgs repository
+# 5. Clone the px4_msgs repository
 clone_repo_if_not_exists "git@github.com:AAU-Space-Robotics/px4_msgs_thyra.git" "px4_msgs_thyra"
 
-# 8. Navigate to the parent directory to check/install Micro-XRCE-DDS-Agent and PX4-Autopilot
+# 6. Navigate to the parent directory to check/install Micro-XRCE-DDS-Agent and PX4-Autopilot
 cd "$PARENT_DIR" || exit
 
-# 9. Check and install Micro-XRCE-DDS-Agent
+# 7. Check and install Micro-XRCE-DDS-Agent
 if [ -d "Micro-XRCE-DDS-Agent" ]; then
   echo "Micro-XRCE-DDS-Agent is already installed, skipping installation."
 else
@@ -56,7 +77,7 @@ else
   cd "$PARENT_DIR" || exit
 fi
 
-# 10. Check and install PX4-Autopilot
+# 8. Check and install PX4-Autopilot
 if [ -d "PX4-Autopilot_thyra" ]; then
   echo "PX4-Autopilot_thyra is already installed, skipping installation."
 else
