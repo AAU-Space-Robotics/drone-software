@@ -1,0 +1,8 @@
+# Goal definition
+string command_type    # go
+
+# Result definition
+bool success
+
+# Feedback definition
+string status_message

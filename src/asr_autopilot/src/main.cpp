@@ -16,6 +16,8 @@
 #include <px4_msgs/msg/distance_sensor.hpp>
 #include <px4_msgs/msg/actuator_outputs.hpp>
 #include "px4_msgs/msg/sensor_gps.hpp"
+#include <px4_msgs/msg/actuator_servos.hpp>
+#include <px4_msgs/msg/actuator_test.hpp>
 
 #include <interfaces/action/drone_command.hpp>
 #include <interfaces/msg/manual_control_input.hpp>
@@ -25,6 +27,7 @@
 #include <interfaces/msg/gcs_heartbeat.hpp>
 #include <interfaces/msg/probe_global_locations.hpp>
 #include <interfaces/msg/attitude_setpoint_rpy.hpp>
+#include <interfaces/msg/servo_command.hpp>
 
 #include "controller.h"
 #include "state_manager.h"
@@ -50,9 +53,15 @@ public:
       timeout_threshold_(0.2)
     {
         // ROS 2 QoS settings
+        // PX4 telemetry/out topics
         rclcpp::QoS qos(10);
         qos.reliability(rclcpp::ReliabilityPolicy::BestEffort);
         qos.durability(rclcpp::DurabilityPolicy::TransientLocal);
+
+        // Servo command path (in/servo_command -> /fmu/in/actuator_*)
+        rclcpp::QoS servo_qos(10);
+        servo_qos.reliability(rclcpp::ReliabilityPolicy::BestEffort);
+        servo_qos.durability(rclcpp::DurabilityPolicy::Volatile);
         
          std::cout << "\n"
           << "=============================\n"
@@ -317,6 +326,10 @@ public:
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
         drone_state_pub_ = create_publisher<interfaces::msg::DroneState>("out/drone_state", 10);
         origin_offset_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>("out/origin_offset", 10);
+        actuator_servos_pub_ = create_publisher<px4_msgs::msg::ActuatorServos>("/fmu/in/actuator_servos", servo_qos);
+        actuator_test_pub_ = create_publisher<px4_msgs::msg::ActuatorTest>("/fmu/in/actuator_test", servo_qos);
+        
+        
 
         // Subscribers
         if (position_source == "px4"){
@@ -349,7 +362,7 @@ public:
             [this](const interfaces::msg::ManualControlInput::SharedPtr msg)
             { manualControlInputCallback(msg); });
         battery_status_sub_ = create_subscription<BatteryStatus>(
-            "/fmu/out/battery_status_v1", qos,
+            "/fmu/out/battery_status", qos,
             [this](const BatteryStatus::SharedPtr msg)
             { batteryStatusCallback(msg); });
         ground_distance_sub_ = create_subscription<DistanceSensor>(
@@ -368,6 +381,9 @@ public:
             "/fmu/out/vehicle_gps_position", qos,
             [this](const SensorGps::SharedPtr msg)
             { gpsCallback(msg); });
+        servo_command_sub_ = create_subscription<interfaces::msg::ServoCommand>("in/servo_command", servo_qos,
+            [this](const interfaces::msg::ServoCommand::SharedPtr msg) 
+            {setServo(msg->aux_index, msg->value);});
 
         //Action server
         drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
@@ -390,6 +406,7 @@ public:
         drone_state_timer = create_wall_timer(20ms, [this](){ publish_drone_state(); });
         safety_timer_ = create_wall_timer(200ms, [this]() { safetyCheckCallback(); });
         offset_timer = create_wall_timer(1000ms, [this]() { publish_origin_offset(); });
+        servo_hold_timer_ = create_wall_timer(100ms, [this]() { publishHeldDisarmedServoCommand(); });
 
         std::cout << "\n"
           << "=============================\n"
@@ -787,13 +804,13 @@ private:
         // Orientation - with explicit float casts
         const StampedQuaternion& attitude = state_manager_.getAttitude();
         const Eigen::Vector3d euler = transformations_.quaternionToEuler(attitude.quaternion());
-        
+        //std::cout << euler.z() << '\n';
      
 
 
-        msg.orientation = {static_cast<float>(wrapToPi(euler.z())), // yaw adjusted to [-pi, pi]
-                        static_cast<float>(wrapToPi(euler.y())), // pitch adjusted to [-pi, pi]
-                        static_cast<float>(wrapToPi(euler.x()))}; // roll, pitch, yaw
+        msg.orientation = {static_cast<float>(euler.z()), // yaw adjusted to [-pi, pi]
+                        static_cast<float>(euler.y()), // pitch adjusted to [-pi, pi]
+                        static_cast<float>(euler.x())}; // roll, pitch, yaw
         
         // Target position - with explicit float casts
         const Stamped4DVector& target_profile = state_manager_.getTargetPositionProfile();
@@ -918,7 +935,7 @@ private:
         Stamped3DVector velocity = state_manager_.getGlobalVelocity();
         StampedQuaternion attitude = state_manager_.getAttitude();
         
-        double dt = (get_time() - position.getTime()).seconds();
+        double dt = (get_time() - position.getTime()).seconds(); //
 
         if (dt > timeout_threshold_) {
             RCLCPP_WARN(get_logger(), "No position or velocity data received!");
@@ -1231,6 +1248,62 @@ private:
         msg.q_d = {static_cast<float>(q.w()), static_cast<float>(q.x()), static_cast<float>(q.y()), static_cast<float>(q.z())};
         msg.thrust_body = {0.0f, 0.0f, static_cast<float>(input.w())};
         attitude_setpoint_pub_->publish(msg);
+    }
+
+    void setServo(int aux_index, float value)
+    {
+       // aux_index: 0 = AUX1, 1 = AUX2, etc.
+       // value: -1.0 to 1.0
+       if (aux_index < 0 || aux_index >= 8) {
+           RCLCPP_WARN(this->get_logger(), "Ignoring servo command with invalid aux_index=%d", aux_index);
+           return;
+       }
+
+       value = std::clamp(value, -1.0f, 1.0f);
+       bool armed = (state_manager_.getDroneState().arming_state == ArmingState::ARMED);
+
+       latest_servo_aux_index_ = aux_index;
+       latest_servo_value_ = value;
+       has_latest_servo_command_ = true;
+
+       if (armed) {
+           // Armed: use actuator_servos — goes through proper mixer pipeline
+           px4_msgs::msg::ActuatorServos msg{};
+           msg.timestamp        = get_time().nanoseconds() / 1000;
+           msg.timestamp_sample = get_time().nanoseconds() / 1000;
+           msg.control.fill(0.0f);  // zero-initialize
+           msg.control[aux_index] = value;
+           actuator_servos_pub_->publish(msg);
+       } else {
+           // Disarmed: use actuator_test — bypasses arming gate
+           publishActuatorTestServo(aux_index, value);
+       }
+    }
+
+    void publishActuatorTestServo(int aux_index, float value)
+    {
+        px4_msgs::msg::ActuatorTest msg{};
+        msg.timestamp  = get_time().nanoseconds() / 1000;
+        msg.function   = 201 + aux_index;  // 201=Servo1(AUX1), 202=Servo2(AUX2), etc.
+        msg.value      = value;
+        msg.timeout_ms = servo_test_timeout_ms_;
+        msg.action     = 1;    // 1 = set value
+        actuator_test_pub_->publish(msg);
+    }
+
+    void publishHeldDisarmedServoCommand()
+    {
+        if (!has_latest_servo_command_) {
+            return;
+        }
+
+        bool armed = (state_manager_.getDroneState().arming_state == ArmingState::ARMED);
+        if (armed) {
+            return;
+        }
+
+        // Refresh ActuatorTest before timeout so disarmed servo command remains stable.
+        publishActuatorTestServo(latest_servo_aux_index_, latest_servo_value_);
     }
 
     void publishAttitudeSetpointRollPitchYawThrust(const Eigen::Vector4d &input)
@@ -1678,6 +1751,8 @@ private:
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_pub_;
     rclcpp::Publisher<interfaces::msg::DroneState>::SharedPtr drone_state_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr origin_offset_pub_;
+    rclcpp::Publisher<px4_msgs::msg::ActuatorServos>::SharedPtr actuator_servos_pub_;
+    rclcpp::Publisher<px4_msgs::msg::ActuatorTest>::SharedPtr actuator_test_pub_;
 
     rclcpp::Subscription<interfaces::msg::GcsHeartbeat>::SharedPtr gcs_heartbeat_sub_;
     rclcpp::Subscription<interfaces::msg::MotionCapturePose>::SharedPtr motion_capture_local_position_sub_;
@@ -1690,12 +1765,14 @@ private:
     rclcpp::Subscription<ActuatorOutputs>::SharedPtr actuator_output_sub_;
     rclcpp::Subscription<interfaces::msg::ProbeGlobalLocations>::SharedPtr probe_global_locations_sub_;
     rclcpp::Subscription<SensorGps>::SharedPtr gps_sub_;
+    rclcpp::Subscription<interfaces::msg::ServoCommand>::SharedPtr servo_command_sub_;
 
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;
     rclcpp::TimerBase::SharedPtr drone_state_timer;
     rclcpp::TimerBase::SharedPtr safety_timer_;
     rclcpp::TimerBase::SharedPtr offset_timer;
+    rclcpp::TimerBase::SharedPtr servo_hold_timer_;
     rclcpp_action::Server<DroneCommand>::SharedPtr drone_command_server_;
 
 
@@ -1755,6 +1832,11 @@ private:
     double timeout_threshold_;
     int current_control_mode_;
     std::mutex current_control_mode_mutex_;
+
+    int latest_servo_aux_index_ = 0;
+    float latest_servo_value_ = 0.0f;
+    bool has_latest_servo_command_ = false;
+    static constexpr uint32_t servo_test_timeout_ms_ = 500;
 
     // Setup variables
     float takeoff_height_;

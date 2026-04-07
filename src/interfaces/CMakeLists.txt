@@ -34,6 +34,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/ProbeSegmentation.msg"
 "msg/ProbeGlobalLocations.msg"
 "msg/AttitudeSetpointRPY.msg"
+"msg/ServoCommand.msg"
 DEPENDENCIES builtin_interfaces geometry_msgs std_msgs sensor_msgs action_msgs)
 
 
