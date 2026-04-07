@@ -1,14 +1,17 @@
-import rclpy
-from rclpy.node import Node
 import cv2 as cv
 import matplotlib.pyplot as plt
 import numpy as np
 
-#For let løsninger laves det første bare som opencv, image-information skal ændres til at bruge real-sense Node
-#Men det er letter at løse pt ved brug af normal kamera.
+# Fake camera matrix and distortion coefficients for testing with webcam
+# These are typical values for a standard webcam with ~640x480 resolution
+camera_matrix = np.array([
+    [650, 0, 320],
+    [0, 650, 240],
+    [0, 0, 1]
+], dtype=np.float32)
 
- 
-
+# Distortion coefficients (k1, k2, p1, p2, k3)
+dist_coeffs = np.array([0.1, -0.2, 0.001, 0.001, 0.0], dtype=np.float32)
 
 #just to generate a aruco marker, we will use a video caputed of aruco marker
 ARUCO_DICT = {
@@ -21,67 +24,63 @@ ARUCO_DICT = {
     "DICT_APRILTAG_25h9": cv.aruco.DICT_APRILTAG_25h9,
     "DICT_APRILTAG_36h10": cv.aruco.DICT_APRILTAG_36h10,
     "DICT_APRILTAG_36h11": cv.aruco.DICT_APRILTAG_36h11
-    }
-
-def deteced_aruco_marker(frame):
-    aruco_type_list = []
-
-    for aruco_type, dict_id in ARUCO_DICT.items():
-        arucoDict = cv.aruco.getPredefinedDictionary(dict_id)
-        arucoParams = cv.aruco.DetectorParameters()
+}
 
 
-        corners, ids, _ = cv. aruco.detectMarkers(frame, arucoDict, parameters = arucoParams)
+def arucoDetect(frame):
+    gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
 
-        if len (corners) > 0:
-            aruco_type_list.append(aruco_type)
+    aruco_dict = cv.aruco.Dictionary_get(ARUCO_DICT["DICT_5X5_1000"])
 
-            print(f"Markers deceted using {aruco_type} dictionary")
+    parameters = cv.aruco.DetectorParameters_create()
 
-            for markerCorner, markerId in zip(corners, ids.flatten()):
-                corners_aruco = markerCorner.reshape((4, 2))
-                (topLeft, topRight, bottomRight, bottomLeft) = corners_aruco
+    corners, ids, _ = cv. aruco.detectMarkers(gray, aruco_dict, parameters = parameters)
 
-                cv.polylines(frame, [markerCorner.astype(int)], True, (0, 255, 0), 2)
-
-                cX = int((topLeft[0] + bottomRight[0]) / 2)
-                cY = int((topLeft[1] + bottomRight[1]) / 2)
-
-                cv.circle(frame, (cX, cY), 5, (255, 0, 0), -1)
-                cv.putText(frame, str(aruco_type) + " " + str(int(markerId)),
-                            (int(topLeft[0] - 5), int(topLeft[1])), cv.FONT_HERSHEY_COMPLEX, 0.5, (255, 0, 255))
-                
-    return aruco_type_list
-
-
-def pose_estimation(frame, aruco_dict_type,):
-
-    aruco_dict = cv.aruco.getPredefinedDictionary(aruco_dict_type)
-    parameters = cv.aruco.DetectorParameters()
-
-    corners, ids = cv.aruco.detectMarkers(frame, aruco_dict, parameters=parameters)
-
-    if len(corners) > 0:
-        for i in range(0, len(ids)):
-        
-            rvec, tvec, markerPoints = cv.aruco.estimatePoseSingleMarkers(corners[i], 0.025)
-            
-            cv.aruco.drawDetectedMarkers(frame, corners) 
-
-            cv.drawFrameAxes(frame, rvec, tvec, 0.01) 
-            
+    if ids is not None:
+        cv.putText(frame, str(ids), (int(corners[0][0][0][0]), int(corners[0][0][0][1])), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv.LINE_AA)
+    
     return frame
 
 
+def pose_estimation(frame):
+    gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
 
+    aruco_dict = cv.aruco.Dictionary_get(ARUCO_DICT["DICT_5X5_1000"])
+
+    parameters = cv.aruco.DetectorParameters_create()
+
+    corners, ids, _ = cv.aruco.detectMarkers(gray, aruco_dict, parameters = parameters)
+
+    if ids is not None and len(ids) > 0 and len(corners) > 0:
+        try:
+            # Tegn marker IDs
+            cv.putText(frame, str(ids[0]), (int(corners[0][0][0][0]), int(corners[0][0][0][1])), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv.LINE_AA)
+            
+            # Estimér pose
+            rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(corners, 0.05, camera_matrix, dist_coeffs)
+            
+            # Tegn akserne for hver markør
+            for i in range(len(ids)):
+                cv.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvecs[i], tvecs[i], 0.1)
+        except Exception as e:
+            print(f"Error in pose_estimation: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    return frame
 
 cam = cv.VideoCapture(0)
 
-while cam.isOpened:
+while cam.isOpened():
     ret, frame = cam.read()
 
-    for aruco_type in deteced_aruco_marker(frame):
-        frame = pose_estimation(frame, ARUCO_DICT[aruco_type])
+    try:
+        frame = pose_estimation(frame)
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+        break
 
     cv.imshow('frame', frame )
 
