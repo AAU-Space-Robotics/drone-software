@@ -64,8 +64,9 @@ class GimbalPitchSweep(Node):
         msg = ServoCommand()
         msg.timestamp = self._now_us()
         msg.aux_index = self.SERVO_AUX_INDEX
+        msg.id = 0
         msg.value = value
-
+     
         self._pub.publish(msg)
 
         self.get_logger().info(

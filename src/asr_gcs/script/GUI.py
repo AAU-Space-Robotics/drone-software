@@ -3,6 +3,8 @@
 import glfw
 import warnings
 from glfw import GLFWError
+
+from px4_msgs.msg._distance_sensor import DistanceSensor
 warnings.filterwarnings("ignore", category=GLFWError, message=".*Wayland: The platform does not support setting the window position.*")
 import imgui
 from imgui.integrations.glfw import GlfwRenderer
@@ -17,6 +19,7 @@ import threading
 from threading import Thread
 from interfaces.msg import DroneState
 from interfaces.msg import GcsHeartbeat
+from interfaces.msg import ServoCommand
 from interfaces.msg import ProbeGlobalLocations
 from interfaces.action import DroneCommand
 from dataclasses import dataclass
@@ -188,7 +191,7 @@ roll, pitch, yaw_velocity = 0, 0, 0
 velocity_x, velocity_y, velocity_z = 0, 0, 0
 thrust = 0
 drone_kill = True
-test_slider = 0
+gimbal_slider = 0
 battery_state_timestamp = 0
 position_timestamp = 0
 velocity_timestamp = 0
@@ -228,6 +231,9 @@ rotated_x, rotated_y = 0.0, 0.0
 angle = 0.0
 erc_yaw = 3.14
 longitude, latitude, satellites_used = 0.0, 0.0, 0
+distance = 0.0
+distance_timestamp = 0.0
+gimbal_manual = True
 
 def probeCoordinatesToGridCoordinates(x, y, z):
     GRID_SIZE = 1  # Define the grid size
@@ -296,18 +302,32 @@ class DroneGuiNode(Node):
            
         )
 
+        self.subscription = self.create_subscription(
+            DistanceSensor,
+            "/fmu/out/distance_sensor",
+            self.distance_sensor_callback,
+            qos
+        )
         self.publisher_ = self.create_publisher(
            GcsHeartbeat, 
            "/asr/thyra/in/gcs_heartbeat",
            qos
         )
+        self.gimbal_publisher = self.create_publisher(
+            ServoCommand,
+             "/asr/thyra/in/servo_command",
+                qos
+        )
+
+
+        
 
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
         self.heartbeat_timer = self.create_timer(0.5, self.send_heartbeat)  # 2 Hz
+        #self.gimbal_timer = self.create_timer(0.1, self.send_gimbal_command)
         self.counter = 0.0
         self.get_logger().info('GUI Publisher Started')
         self.imgui_logger = ImGuiLogger()
-        self.timer = self.create_timer(0.1, self.timer_callback)
         self.manual_control_publisher = self.create_publisher(ManualControlInput, '/asr/thyra/in/manual_input',qos)
         self._action_client = ActionClient(self, DroneCommand, '/asr/thyra/in/drone_command')   
         self.imgui_logger.info('DroneCommand client initialized, waiting for action server...')
@@ -432,6 +452,9 @@ class DroneGuiNode(Node):
         #print(f"Probe count: {probe_numb}")
         # Optionally, store the timestamp if needed
         probe_timestamp = msg.stamp
+    def distance_sensor_callback(self, msg):
+        global distance
+        distance = msg.current_distance
 
 
     def send_command(self, command_type, target_pose=None, yaw=None):
@@ -489,6 +512,14 @@ class DroneGuiNode(Node):
         msg.gcs_nominal = 1
         self.publisher_.publish(msg)
         
+    def send_gimbal_command(self, gimbal_slider, gimbal_id):
+        # This function can be expanded to send gimbal commands if needed
+        msg = ServoCommand()
+        msg.id = gimbal_id
+        msg.value = float(gimbal_slider)
+        self.gimbal_publisher.publish(msg)
+
+       
 
 def Arm_Button(node):
     global button_color, drone_kill, drone_state
@@ -617,12 +648,43 @@ def speed_field(node):
     imgui.pop_style_color(3)
     imgui.pop_style_var()
  
+def slider_field(node):
+    global gimbal_slider, gimbal_manual
 
+
+    imgui.set_cursor_pos((10, 900))
+    with imgui.font(font_small):
+
+        if gimbal_manual:
+            imgui.push_style_color(imgui.COLOR_BUTTON, 0.8, 0.2, 0.2, 1.0)  # Red = active
+            label = "ACTIVE (click to stop)"
+        else:
+            imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.6, 0.2, 1.0)  # Green = inactive
+            label = "Activate"
+
+        if imgui.button(label, width=160, height=50):
+            gimbal_manual = not gimbal_manual  # Toggle on each press
+
+        imgui.pop_style_color()
+
+ 
+    imgui.set_cursor_pos((10, 955))
+    with imgui.font(font):
+        imgui.text("Gimbal Slider:")
+
+    imgui.set_cursor_pos((10, 975))
+    imgui.set_next_item_width(300)
+    changed, gimbal_slider = imgui.slider_float("##gimbal_slider", gimbal_slider, -1.0, 1.0)
+
+    if gimbal_manual:
+        node.send_gimbal_command(gimbal_slider, 1)
+    
 def XYZ_Text_Field(msg):
     # Drawing a square kek
     global position_x, position_y, position_z
     global target_position_x, target_position_y, target_position_z
     global position_timestamp
+    global distance
 
     draw_list = imgui.get_window_draw_list()
     color = imgui.get_color_u32_rgba(0.0, 0.8, 1.0, 0.5)
@@ -645,7 +707,8 @@ def XYZ_Text_Field(msg):
         imgui.set_cursor_pos((263, 143)); imgui.text(f"{Decimal(target_position_y).quantize(Decimal('0.000'))}")
         imgui.set_cursor_pos((263, 193)); imgui.text(f"{(Decimal(target_position_z).quantize(Decimal('0.000')))}")
         imgui.set_cursor_pos((9, 240)); imgui.text(f"[m]")
-
+        imgui.set_cursor_pos((180, 270)); imgui.text("|Height")
+        imgui.set_cursor_pos((300, 270)); imgui.text(f"{Decimal(distance).quantize(Decimal('0.000'))}")
         # separator lines
         draw_list = imgui.get_window_draw_list()
 
@@ -1883,7 +1946,7 @@ def main(args=None):
         XYZ_Text_Field(msg=drone_data)
         RPY_Text_Field()
         gps_status()
-
+        slider_field(node)
         probe_Field(node,filename)
         XYZVelocity_Text_Field()
         batteryGraph()

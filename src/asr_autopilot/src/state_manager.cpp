@@ -248,6 +248,16 @@ GlobalProbeLocations StateManager::getGlobalProbeLocations() {
     return probe_global_locations_;
 }
 
+void StateManager::setGimbalPriority(const bool priority) {
+    std::lock_guard<std::mutex> lock(gimbal_priority_mutex_);
+    gimbal_priority_ = priority;
+}
+
+bool StateManager::getGimbalPriority() {
+    std::lock_guard<std::mutex> lock(gimbal_priority_mutex_);
+    return gimbal_priority_;
+}
+
 // Get bundled trajectory initialization state
 TrajectoryInitState StateManager::getTrajectoryInitState() {
     // Lock all necessary mutexes

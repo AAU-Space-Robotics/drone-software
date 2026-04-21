@@ -318,6 +318,7 @@ public:
         state_manager_.setGroundDistanceState(Stamped3DVector(get_time(), 0.0, 0.0, 0.0));
         timestamp_last_position_control_ = get_time();
 
+
         
         // Publishers
         offboard_control_mode_pub_ = create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
@@ -383,7 +384,7 @@ public:
             { gpsCallback(msg); });
         servo_command_sub_ = create_subscription<interfaces::msg::ServoCommand>("in/servo_command", servo_qos,
             [this](const interfaces::msg::ServoCommand::SharedPtr msg) 
-            {setServo(msg->aux_index, msg->value);});
+            {setServo(msg->aux_index, msg->id, msg->value);});
 
         //Action server
         drone_command_server_ = rclcpp_action::create_server<DroneCommand>(
@@ -407,6 +408,11 @@ public:
         safety_timer_ = create_wall_timer(200ms, [this]() { safetyCheckCallback(); });
         offset_timer = create_wall_timer(1000ms, [this]() { publish_origin_offset(); });
         servo_hold_timer_ = create_wall_timer(100ms, [this]() { publishHeldDisarmedServoCommand(); });
+        gimbal_timeout_timer_ = this->create_wall_timer(1000ms, [this]() {RCLCPP_WARN(get_logger(),
+             "Gimbal manual control timeout - switching to auto");
+                gimbal_is_manual_ = false;
+                gimbal_timeout_timer_->cancel(); });
+        gimbal_timeout_timer_->cancel(); 
 
         std::cout << "\n"
           << "=============================\n"
@@ -935,7 +941,7 @@ private:
         Stamped3DVector velocity = state_manager_.getGlobalVelocity();
         StampedQuaternion attitude = state_manager_.getAttitude();
         
-        double dt = (get_time() - position.getTime()).seconds();
+        double dt = (get_time() - position.getTime()).seconds(); //
 
         if (dt > timeout_threshold_) {
             RCLCPP_WARN(get_logger(), "No position or velocity data received!");
@@ -1250,16 +1256,34 @@ private:
         attitude_setpoint_pub_->publish(msg);
     }
 
-    void setServo(int aux_index, float value)
+    void setServo(int aux_index, int id, float value)
     {
        // aux_index: 0 = AUX1, 1 = AUX2, etc.
        // value: -1.0 to 1.0
+
+      
+        GimbalState gimbal_id = static_cast<GimbalState>(id);
        if (aux_index < 0 || aux_index >= 8) {
            RCLCPP_WARN(this->get_logger(), "Ignoring servo command with invalid aux_index=%d", aux_index);
            return;
        }
+       if (gimbal_id != GimbalState::Manual && gimbal_id != GimbalState::Auto) {
+           RCLCPP_WARN(this->get_logger(), "Ignoring servo command with invalid gimbal_id=%d", id);
+           return;
+       }
 
-       value = std::clamp(value, -1.0f, 1.0f);
+        
+       if(gimbal_id == GimbalState::Manual){
+            gimbal_is_manual_ = true;
+            gimbal_timeout_timer_->reset();
+            value = std::clamp(value, -1.0f, 1.0f);
+       }
+       else if(gimbal_id == GimbalState::Auto && !gimbal_is_manual_){
+            gimbal_is_manual_ = false;
+            gimbal_timeout_timer_->cancel();
+            value = std::clamp(value, -1.0f, 1.0f);
+       }
+         
        bool armed = (state_manager_.getDroneState().arming_state == ArmingState::ARMED);
        const int64_t now_ns = get_time().nanoseconds();
 
@@ -1782,6 +1806,7 @@ private:
     rclcpp::TimerBase::SharedPtr offset_timer;
     rclcpp::TimerBase::SharedPtr servo_hold_timer_;
     rclcpp_action::Server<DroneCommand>::SharedPtr drone_command_server_;
+    rclcpp::TimerBase::SharedPtr gimbal_timeout_timer_;
 
 
     Transformations transformations_;
@@ -1847,6 +1872,7 @@ private:
     int64_t latest_servo_command_ns_ = 0;
     static constexpr uint32_t servo_test_timeout_ms_ = 500;
     static constexpr int64_t servo_hold_timeout_ns_ = 5000000000LL;
+    bool gimbal_is_manual_ = false;
 
     // Setup variables
     float takeoff_height_;
@@ -1860,4 +1886,4 @@ int main(int argc, char *argv[])
     rclcpp::spin(std::make_shared<AAUAutopilot>());
     rclcpp::shutdown();
     return 0;
-}
+}   
