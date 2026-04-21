@@ -33,6 +33,11 @@ enum class ArmingState {
     DISARMING = 3
 };
 
+enum class GimbalState {
+    Auto = 0,
+    Manual = 1
+};
+
 enum class FlightMode {
     EMERGENCY_STOP = -3,
     LANDED = -2,
@@ -238,6 +243,8 @@ struct DroneState {
     rclcpp::Duration flight_time = rclcpp::Duration(0, 0); // Total flight time since takeoff, resets on landing/disarming
 };
 
+
+
 // Battery state
 struct BatteryState {
     rclcpp::Time timestamp = rclcpp::Time(0, 0);
@@ -365,6 +372,9 @@ public:
     // Get bundled trajectory initialization state
     TrajectoryInitState getTrajectoryInitState();
 
+    void setGimbalPriority(const bool priority);
+    bool getGimbalPriority();
+
 private:
     
     // Mutexes for thread safety
@@ -393,6 +403,8 @@ private:
     std::mutex probe_global_locations_mutex_;
     std::mutex gps_state_mutex_;
 
+    std::mutex gimbal_priority_mutex_;
+    bool gimbal_priority_;
     // Data structures to store state information
     GCSHeartbeat gcs_heartbeat_;
 
