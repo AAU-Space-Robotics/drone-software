@@ -19,6 +19,7 @@ import threading
 from threading import Thread
 from interfaces.msg import DroneState
 from interfaces.msg import GcsHeartbeat
+from interfaces.msg import ServoCommand
 from interfaces.msg import ProbeGlobalLocations
 from interfaces.action import DroneCommand
 from dataclasses import dataclass
@@ -190,7 +191,7 @@ roll, pitch, yaw_velocity = 0, 0, 0
 velocity_x, velocity_y, velocity_z = 0, 0, 0
 thrust = 0
 drone_kill = True
-test_slider = 0
+gimbal_slider = 0
 battery_state_timestamp = 0
 position_timestamp = 0
 velocity_timestamp = 0
@@ -232,6 +233,8 @@ erc_yaw = 3.14
 longitude, latitude, satellites_used = 0.0, 0.0, 0
 distance = 0.0
 distance_timestamp = 0.0
+gimbal_manual = True
+last_gimbal_send_time = 0.0
 
 def probeCoordinatesToGridCoordinates(x, y, z):
     GRID_SIZE = 1  # Define the grid size
@@ -311,15 +314,21 @@ class DroneGuiNode(Node):
            "/asr/thyra/in/gcs_heartbeat",
            qos
         )
+        self.gimbal_publisher = self.create_publisher(
+            ServoCommand,
+             "/asr/thyra/in/servo_command",
+                qos
+        )
+
 
         
 
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
         self.heartbeat_timer = self.create_timer(0.5, self.send_heartbeat)  # 2 Hz
+        #self.gimbal_timer = self.create_timer(0.1, self.send_gimbal_command)
         self.counter = 0.0
         self.get_logger().info('GUI Publisher Started')
         self.imgui_logger = ImGuiLogger()
-        self.timer = self.create_timer(0.1, self.timer_callback)
         self.manual_control_publisher = self.create_publisher(ManualControlInput, '/asr/thyra/in/manual_input',qos)
         self._action_client = ActionClient(self, DroneCommand, '/asr/thyra/in/drone_command')   
         self.imgui_logger.info('DroneCommand client initialized, waiting for action server...')
@@ -504,6 +513,15 @@ class DroneGuiNode(Node):
         msg.gcs_nominal = 1
         self.publisher_.publish(msg)
         
+    def send_gimbal_command(self, gimbal_slider, gimbal_id):
+        # This function can be expanded to send gimbal commands if needed
+        msg = ServoCommand()
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000) 
+        msg.id = gimbal_id
+        msg.value = float(gimbal_slider)
+        self.gimbal_publisher.publish(msg)
+
+       
 
 def Arm_Button(node):
     global button_color, drone_kill, drone_state
@@ -633,15 +651,39 @@ def speed_field(node):
     imgui.pop_style_var()
  
 def slider_field(node):
-    global test_slider
-    imgui.set_cursor_pos((10, 920))
-    with imgui.font(font):
+    global gimbal_slider, gimbal_manual, last_gimbal_send_time
+    imgui.set_window_font_scale(1.0)
+
+    imgui.set_cursor_pos((10, 935))
+    with imgui.font(font_for_meter):
+
+        if gimbal_manual:
+            imgui.push_style_color(imgui.COLOR_BUTTON, 0.8, 0.2, 0.2, 1.0)  # Red = active
+            label = "Stop"
+        else:
+            imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.6, 0.2, 1.0)  # Green = inactive
+            label = "Activate"
+
+        if imgui.button(label, width=100, height=30):
+            gimbal_manual = not gimbal_manual  # Toggle on each press
+
+        imgui.pop_style_color()
+
+ 
+    imgui.set_cursor_pos((10, 995))
+    with imgui.font(font_for_meter):
         imgui.text("Gimbal Slider:")
-    imgui.set_cursor_pos((10, 955))
+
+    imgui.set_cursor_pos((10, 975))
     imgui.set_next_item_width(300)
-    changed, test_slider = imgui.slider_float("##test_slider", test_slider, 0.0, 1.0)
-    if changed:
-       pass
+    changed, gimbal_slider = imgui.slider_float("##gimbal_slider", gimbal_slider, -1.0, 1.0)
+
+    if gimbal_manual:
+        now = time.time()
+        if now - last_gimbal_send_time >= 0.1:
+            node.send_gimbal_command(gimbal_slider, 1)
+            last_gimbal_send_time = now
+    
 def XYZ_Text_Field(msg):
     # Drawing a square kek
     global position_x, position_y, position_z
