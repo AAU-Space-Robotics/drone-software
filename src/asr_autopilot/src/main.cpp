@@ -408,7 +408,7 @@ public:
         safety_timer_ = create_wall_timer(200ms, [this]() { safetyCheckCallback(); });
         offset_timer = create_wall_timer(1000ms, [this]() { publish_origin_offset(); });
         servo_hold_timer_ = create_wall_timer(100ms, [this]() { publishHeldDisarmedServoCommand(); });
-        gimbal_timeout_timer_ = this->create_wall_timer(1000ms, [this]() {RCLCPP_WARN(get_logger(),
+        gimbal_timeout_timer_ = this->create_wall_timer(2000ms, [this]() {RCLCPP_WARN(get_logger(),
              "Gimbal manual control timeout - switching to auto");
                 gimbal_is_manual_ = false;
                 gimbal_timeout_timer_->cancel(); });
@@ -1272,17 +1272,17 @@ private:
            return;
        }
 
-        
-       if(gimbal_id == GimbalState::Manual){
+       if (gimbal_id == GimbalState::Manual) {
             gimbal_is_manual_ = true;
             gimbal_timeout_timer_->reset();
             value = std::clamp(value, -1.0f, 1.0f);
-       }
-       else if(gimbal_id == GimbalState::Auto && !gimbal_is_manual_){
-            gimbal_is_manual_ = false;
-            gimbal_timeout_timer_->cancel();
+        }
+        else if (gimbal_id == GimbalState::Auto) {
+            if (gimbal_is_manual_) {
+                return;  
+            }
             value = std::clamp(value, -1.0f, 1.0f);
-       }
+        }
          
        bool armed = (state_manager_.getDroneState().arming_state == ArmingState::ARMED);
        const int64_t now_ns = get_time().nanoseconds();
