@@ -183,4 +183,51 @@ else
   cd "$PARENT_DIR" || exit
 fi
 
+# 12. Install the thyra systemd service and restricted sudo rules
+SERVICE_USER="${SUDO_USER:-$USER}"
+SYSTEMCTL_PATH="$(command -v systemctl)"
+REBOOT_PATH="$(command -v reboot)"
+ROS_SETUP_FILE="/opt/ros/${ROS_DISTRO}/setup.bash"
+WORKSPACE_SETUP_FILE="${ROS_WORKSPACE_PATH}/install/setup.bash"
+SERVICE_FILE="/etc/systemd/system/thyra.service"
+SUDOERS_FILE="/etc/sudoers.d/thyra-system-manager"
+
+if [ -z "$SYSTEMCTL_PATH" ] || [ -z "$REBOOT_PATH" ]; then
+        echo "Error: systemctl or reboot command not found."
+        exit 1
+fi
+
+if [ ! -f "$WORKSPACE_SETUP_FILE" ]; then
+        echo "Warning: $WORKSPACE_SETUP_FILE does not exist yet. Build the workspace before starting the service."
+fi
+
+echo "Installing thyra systemd service..."
+cat <<EOF | sudo tee "$SERVICE_FILE" > /dev/null
+[Unit]
+Description=Thyra ROS 2 stack
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${SERVICE_USER}
+Group=${SERVICE_USER}
+WorkingDirectory=${ROS_WORKSPACE_PATH}
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash -lc 'source ${ROS_SETUP_FILE} && source ${WORKSPACE_SETUP_FILE} && exec ros2 launch thyra thyra_pi.launch.py'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "Installing restricted sudoers rules for system_manager..."
+cat <<EOF | sudo tee "$SUDOERS_FILE" > /dev/null
+${SERVICE_USER} ALL=(root) NOPASSWD: ${SYSTEMCTL_PATH} restart thyra, ${REBOOT_PATH}
+EOF
+sudo chmod 440 "$SUDOERS_FILE"
+sudo systemctl daemon-reload
+sudo systemctl enable thyra.service
+
 echo "Workspace setup completed! Ready for build. Please build it now to use it :)"

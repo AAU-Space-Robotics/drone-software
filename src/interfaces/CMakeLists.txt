@@ -27,6 +27,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/DroneCommand.msg"
 "msg/MotionCapturePose.msg"
 "action/DroneCommand.action"
+"action/SystemControl.action"
 "msg/DroneState.msg"
 "msg/DroneScope.msg"
 "msg/GcsHeartbeat.msg"

@@ -1,0 +1,6 @@
+string command_type
+---
+bool success
+string message
+---
+string status

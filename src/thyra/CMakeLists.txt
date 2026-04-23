@@ -42,6 +42,11 @@ install(DIRECTORY missions/
   FILES_MATCHING PATTERN "*.py"
 )
 
+install(PROGRAMS
+  script/system_manager.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 add_library(thyra_lib
   src/utils.cpp
 )
