@@ -1,9 +1,9 @@
 # Use the updated base image
-FROM erc-mars-rover_base:latest
+FROM drone_software:latest
 
 ARG ROS_DISTRO=humble
 ARG BASE_FOLDER=/root/orin
-ARG ROS_WORKSPACE_NAME=ERC-Mars-Rover
+ARG ROS_WORKSPACE_NAME=drone-software
 
 WORKDIR ${BASE_FOLDER}/${ROS_WORKSPACE_NAME}
 
@@ -46,9 +46,10 @@ RUN git clone --recurse-submodules -b humble-v4.1.4 \
 
 # Insert common.yaml
 RUN cd src/zed-ros2-wrapper && \
-    cp -r ${BASE_FOLDER}/${ROS_WORKSPACE_NAME}/src/slam/config/common.yaml zed_wrapper/config/common.yaml
+    cp -r ${BASE_FOLDER}/${ROS_WORKSPACE_NAME}/src/common.yaml zed_wrapper/config/common.yaml
 
 RUN apt-get update && \
+    apt-get clean && \
     rosdep update && \
     rosdep install --from-paths src --ignore-src -r -y && \
     rm -rf /var/lib/apt/lists/*
