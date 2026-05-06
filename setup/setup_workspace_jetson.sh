@@ -7,7 +7,7 @@ SCRIPT_DIR=$(dirname "$(realpath "$0")")
 ROS_WORKSPACE_PATH=$(dirname "$SCRIPT_DIR")  # Base workspace is drone-software (parent of setup/)
 SRC_DIR="$ROS_WORKSPACE_PATH/src"
 PARENT_DIR=$(dirname "$ROS_WORKSPACE_PATH")  # Directory containing drone-software
-ROS_DISTRO="jazzy"
+ROS_DISTRO="humble"
 
 # 1. Check if ROS 2 is installed
 if ! command -v ros2 &> /dev/null; then
@@ -39,21 +39,32 @@ if ! command -v rs-enumerate-devices &> /dev/null; then
         libssl-dev \
         pkg-config \
         python3 \
-        python3-dev \
-        linux-headers-$(uname -r)
+        python3-dev
+
+    # Install kernel headers — Jetson ships a custom -tegra kernel whose headers
+    # are not available as linux-headers-$(uname -r) in the standard Ubuntu repos.
+    # Use nvidia-l4t-kernel-headers on Jetson, and the standard package elsewhere.
+    if uname -r | grep -q "tegra"; then
+        echo "Jetson kernel detected. Installing nvidia-l4t-kernel-headers..."
+        sudo apt-get install -y nvidia-l4t-kernel-headers
+    else
+        sudo apt-get install -y "linux-headers-$(uname -r)"
+    fi
 
     # Clone and build librealsense
     cd /tmp
     git clone https://github.com/IntelRealSense/librealsense.git
     cd librealsense
     mkdir build && cd build
+    # Note: CUDA support is available on Jetson — enable if needed with -DBUILD_WITH_CUDA=true
     cmake .. -DBUILD_EXAMPLES=true -DCMAKE_BUILD_TYPE=Release
     make -j$(nproc)
     sudo make install
 
-    # Apply kernel patches
-    cd ..
-    sudo scripts/patch-realsense-ubuntu-lts.sh
+    # Kernel patching is intentionally skipped on Jetson.
+    # JetPack ships a pre-patched kernel that already includes the UVC and USB
+    # support librealsense needs. The upstream patch script does not support
+    # Ubuntu 22.04 (jammy) with the -tegra kernel and will fail if run.
 
     # Verify installation
     if ! command -v rs-enumerate-devices &> /dev/null; then
@@ -183,13 +194,18 @@ else
   cd "$PARENT_DIR" || exit
 fi
 
-# 12. Grant UART access to the current user
+# 12. Disable nvgetty to free UART for PX4 link
+echo "Disabling nvgetty serial console to free UART..."
+sudo systemctl stop nvgetty 2>/dev/null || true
+sudo systemctl disable nvgetty 2>/dev/null || true
+
+# 13. Grant UART access to the current user
 echo "Granting dialout group access for UART..."
 sudo usermod -a -G dialout "${SUDO_USER:-$USER}"
 
-# 13. Pin the flight stack to the Pi launch file
+# 14. Pin the flight stack to the Jetson launch file
 PARAMS_SRC="${ROS_WORKSPACE_PATH}/src/thyra/config/thyra_params.yaml"
-sed -i "s/flight_stack_launch: .*/flight_stack_launch: thyra_pi/" "$PARAMS_SRC"
+sed -i "s/flight_stack_launch: .*/flight_stack_launch: thyra_jetson/" "$PARAMS_SRC"
 
 # Install the thyra systemd service and restricted sudo rules
 SERVICE_USER="${SUDO_USER:-$USER}"
@@ -239,7 +255,7 @@ sudo chmod 440 "$SUDOERS_FILE"
 sudo systemctl daemon-reload
 sudo systemctl enable thyra.service
 
-# Build the workspace
+# 15. Build the workspace
 echo "Building workspace..."
 cd "$ROS_WORKSPACE_PATH" || exit
 

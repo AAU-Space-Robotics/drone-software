@@ -15,9 +15,7 @@
 #include <interfaces/msg/probe_global_locations.hpp>
 #include <interfaces/msg/attitude_setpoint_rpy.hpp>
 #include <opencv2/opencv.hpp>
-#include <opencv2/aruco/charuco.hpp>
 #include <opencv2/objdetect/objdetect.hpp>
-#include <cv_bridge/cv_bridge.hpp>
 #include "geometry_msgs/msg/pose_stamped.hpp"
 
 

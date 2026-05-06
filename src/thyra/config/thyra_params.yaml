@@ -81,6 +81,11 @@
       motor_speed_min: 1000.0 # Motor speed min expected value
       motor_speed_max: 1900.0 # Motor speed max expected value
 
+    # System Parameters
+    system:
+      autostart_flight_stack: false   # Set false to skip auto-start; use START_FLIGHT_STACK action to start manually
+      flight_stack_launch: thyra_jetson
+
     # Camera Parameters
     camera:
       focal_length:

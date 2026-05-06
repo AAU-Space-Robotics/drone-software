@@ -26,7 +26,7 @@ def generate_launch_description():
             description='Position source: px4 or mocap',
         ),
         ExecuteProcess(
-            cmd=['MicroXRCEAgent', 'serial', '--dev', '/dev/ttyAMA0', '-b', '921600'],
+            cmd=['MicroXRCEAgent', 'serial', '--dev', '/dev/ttyTHS1', '-b', '921600'],
             output='log',
         ),
         Node(
