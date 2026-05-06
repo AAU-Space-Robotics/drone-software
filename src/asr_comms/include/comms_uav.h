@@ -1,14 +1,17 @@
 #pragma once
 
+#include <array>
 #include <atomic>
+#include <cstring>
 #include <thread>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/bool.hpp>
-#include <std_msgs/msg/u_int8_multi_array.hpp>
 #include <px4_msgs/msg/vehicle_global_position.hpp>
 #include <px4_msgs/msg/vehicle_attitude.hpp>
 #include <px4_msgs/msg/battery_status.hpp>
+#include <px4_msgs/msg/gps_inject_data.hpp>
 
 #include "common/mavlink.h"
 #include "udp_socket.h"
@@ -25,6 +28,8 @@ private:
     // Receive path
     void recv_loop();
     void handle_message(const mavlink_message_t& msg);
+    void handle_rtcm(const mavlink_gps_rtcm_data_t& rtcm);
+    void publish_gps_inject(const uint8_t* data, size_t len);
 
     // Send path
     void send_mavlink(mavlink_message_t& msg);
@@ -39,11 +44,28 @@ private:
     uint8_t component_id_{1};
 
     // Receive side — background thread + publishers
-    std::thread          recv_thread_;
-    std::atomic<bool>    running_{true};
+    std::thread       recv_thread_;
+    std::atomic<bool> running_{true};
 
-    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr            heartbeat_pub_;
-    rclcpp::Publisher<std_msgs::msg::UInt8MultiArray>::SharedPtr rtcm_pub_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr              heartbeat_pub_;
+    rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr     gps_inject_pub_;
+
+    // Fragment reassembly buffer — 32 sequence slots, 4 fragments each.
+    // MAVLink GPS_RTCM_DATA flags: bit0=fragmented, bits1-2=frag_idx, bits3-7=seq.
+    struct FragBuf {
+        std::array<std::vector<uint8_t>, 4> frags;
+        uint8_t received_mask{0};
+        uint8_t last_frag_idx{0};
+        bool    last_known{false};
+
+        void reset() {
+            for (auto& f : frags) f.clear();
+            received_mask = 0;
+            last_frag_idx = 0;
+            last_known    = false;
+        }
+    };
+    std::array<FragBuf, 32> rtcm_frags_{};
 
     // Send side — timer + subscribers
     rclcpp::TimerBase::SharedPtr heartbeat_timer_;

@@ -67,6 +67,7 @@ install(PROGRAMS
   script/static_rgbd_test_node.py
   script/probe_republisher.py
   script/LED.py
+  script/rtcm_reader.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

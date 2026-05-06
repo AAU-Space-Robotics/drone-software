@@ -1,0 +1,18 @@
+# GCS-side node parameters.
+# Loaded by the GCS launch file and passed to comms_gcs and rtcm_reader.
+
+/asr/gcs/comms_gcs:
+  ros__parameters:
+    bind_port: 14550
+    target_ip: "192.168.1.100"   # UAV IP — update to match your network
+    target_port: 14551
+    system_id: 255
+    component_id: 0
+
+/asr/gcs/rtcm_reader:
+  ros__parameters:
+    port: "/dev/ttyACM0"         # Serial device for u-blox receiver
+    baudrate: 115200
+    configure_receiver: true     # Run u-blox config + survey-in on startup
+    survey_min_duration: 120     # Survey-in minimum duration (seconds)
+    survey_accuracy_mm: 500000   # Survey-in accuracy limit (0.1 mm units, 500000 = 50 m)

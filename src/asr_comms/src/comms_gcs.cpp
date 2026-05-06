@@ -39,6 +39,10 @@ CommsGcs::CommsGcs()
     // Send side
     heartbeat_timer_ = create_wall_timer(1s, std::bind(&CommsGcs::send_heartbeat, this));
 
+    rtcm_sub_ = create_subscription<std_msgs::msg::UInt8MultiArray>(
+        "/rtcm", 10,
+        std::bind(&CommsGcs::send_rtcm, this, std::placeholders::_1));
+
     recv_thread_ = std::thread(&CommsGcs::recv_loop, this);
 }
 
@@ -148,6 +152,53 @@ void CommsGcs::send_heartbeat()
         MAV_TYPE_GCS, MAV_AUTOPILOT_INVALID,
         0, 0, MAV_STATE_ACTIVE);
     send_mavlink(msg);
+}
+
+void CommsGcs::send_rtcm(const std_msgs::msg::UInt8MultiArray::SharedPtr msg)
+{
+    const auto& data  = msg->data;
+    const size_t total = data.size();
+    if (total == 0) return;
+
+    if (total <= 180) {
+        // Fits in a single unfragmented packet (flags = 0)
+        uint8_t payload[180]{};
+        std::memcpy(payload, data.data(), total);
+        mavlink_message_t mav{};
+        mavlink_msg_gps_rtcm_data_pack(system_id_, component_id_, &mav,
+            0, static_cast<uint8_t>(total), payload);
+        send_mavlink(mav);
+        return;
+    }
+
+    // Fragmented: up to 4 × 180-byte chunks per MAVLink GPS_RTCM_DATA.
+    // flags byte: bit 0 = 1 (fragmented), bits 1-2 = fragment index, bits 3-7 = sequence.
+    const uint8_t seq = rtcm_seq_++ & 0x1F;
+    size_t  offset   = 0;
+    uint8_t frag_idx = 0;
+
+    while (offset < total) {
+        if (frag_idx >= 4) {
+            RCLCPP_WARN(get_logger(),
+                "RTCM message too large (>720 B) — %zu bytes dropped", total - offset);
+            break;
+        }
+        const size_t chunk = std::min<size_t>(total - offset, 180);
+        uint8_t payload[180]{};
+        std::memcpy(payload, data.data() + offset, chunk);
+
+        const uint8_t flags = 0x01u
+            | static_cast<uint8_t>(frag_idx << 1)
+            | static_cast<uint8_t>(seq      << 3);
+
+        mavlink_message_t mav{};
+        mavlink_msg_gps_rtcm_data_pack(system_id_, component_id_, &mav,
+            flags, static_cast<uint8_t>(chunk), payload);
+        send_mavlink(mav);
+
+        offset += chunk;
+        ++frag_idx;
+    }
 }
 
 int main(int argc, char* argv[])

@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <rclcpp/rclcpp.hpp>
 
 using namespace std::chrono_literals;
@@ -31,8 +32,8 @@ CommsUav::CommsUav()
                 bind_port, target_ip.c_str(), target_port);
 
     // Publishers (incoming from GCS)
-    heartbeat_pub_ = create_publisher<std_msgs::msg::Bool>("/comms/gcs_heartbeat", 10);
-    rtcm_pub_      = create_publisher<std_msgs::msg::UInt8MultiArray>("/comms/rtcm_data", 10);
+    heartbeat_pub_   = create_publisher<std_msgs::msg::Bool>("/comms/gcs_heartbeat", 10);
+    gps_inject_pub_  = create_publisher<px4_msgs::msg::GpsInjectData>("/fmu/in/gps_inject_data", 10);
 
     // Subscribers (outgoing to GCS)
     heartbeat_timer_ = create_wall_timer(1s, std::bind(&CommsUav::send_heartbeat, this));
@@ -94,9 +95,7 @@ void CommsUav::handle_message(const mavlink_message_t& msg)
     case MAVLINK_MSG_ID_GPS_RTCM_DATA: {
         mavlink_gps_rtcm_data_t rtcm{};
         mavlink_msg_gps_rtcm_data_decode(&msg, &rtcm);
-        std_msgs::msg::UInt8MultiArray out{};
-        out.data.assign(rtcm.data, rtcm.data + rtcm.len);
-        rtcm_pub_->publish(out);
+        handle_rtcm(rtcm);
         break;
     }
 
@@ -110,6 +109,65 @@ void CommsUav::handle_message(const mavlink_message_t& msg)
 
     default:
         break;
+    }
+}
+
+void CommsUav::handle_rtcm(const mavlink_gps_rtcm_data_t& rtcm)
+{
+    if (!(rtcm.flags & 0x01u)) {
+        // Not fragmented — publish directly
+        publish_gps_inject(rtcm.data, rtcm.len);
+        return;
+    }
+
+    // Fragmented: buffer by sequence number until all fragments arrive.
+    // flags: bit0=1 (fragmented), bits1-2=fragment index, bits3-7=sequence (0-31)
+    const uint8_t seq      = (rtcm.flags >> 3) & 0x1Fu;
+    const uint8_t frag_idx = (rtcm.flags >> 1) & 0x03u;
+
+    auto& buf = rtcm_frags_[seq];
+    buf.frags[frag_idx].assign(rtcm.data, rtcm.data + rtcm.len);
+    buf.received_mask |= static_cast<uint8_t>(1u << frag_idx);
+
+    // The last fragment is identified by having len < 180 (not a full chunk)
+    if (rtcm.len < 180) {
+        buf.last_frag_idx = frag_idx;
+        buf.last_known    = true;
+    }
+
+    if (!buf.last_known) return;
+
+    // Check all fragments 0..last_frag_idx are present
+    const uint8_t expected = static_cast<uint8_t>((1u << (buf.last_frag_idx + 1)) - 1u);
+    if ((buf.received_mask & expected) != expected) return;
+
+    // Reassemble into a contiguous buffer
+    std::vector<uint8_t> assembled;
+    assembled.reserve(static_cast<size_t>(buf.last_frag_idx + 1) * 180);
+    for (uint8_t i = 0; i <= buf.last_frag_idx; ++i)
+        assembled.insert(assembled.end(), buf.frags[i].begin(), buf.frags[i].end());
+
+    buf.reset();
+
+    publish_gps_inject(assembled.data(), assembled.size());
+}
+
+void CommsUav::publish_gps_inject(const uint8_t* data, size_t len)
+{
+    // GpsInjectData carries max 300 bytes; split into chunks if needed.
+    // PX4 queues up to ORB_QUEUE_LENGTH=8 messages so back-to-back sends are safe.
+    size_t offset = 0;
+    while (offset < len) {
+        const size_t chunk = std::min<size_t>(len - offset, 300u);
+
+        px4_msgs::msg::GpsInjectData out{};
+        out.timestamp = static_cast<uint64_t>(get_clock()->now().nanoseconds() / 1000);
+        out.len       = static_cast<uint16_t>(chunk);
+        out.flags     = (len > 300u) ? 1u : 0u;  // flag as fragmented when split
+        std::memcpy(out.data.data(), data + offset, chunk);
+
+        gps_inject_pub_->publish(out);
+        offset += chunk;
     }
 }
 
