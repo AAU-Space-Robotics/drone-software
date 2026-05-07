@@ -6,16 +6,14 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/u_int8_multi_array.hpp>
-#include <px4_msgs/msg/vehicle_global_position.hpp>
-#include <px4_msgs/msg/vehicle_attitude.hpp>
-#include <px4_msgs/msg/battery_status.hpp>
+#include <interfaces/msg/drone_state.hpp>
 
 #include "common/mavlink.h"
 #include "transport.h"
 
 // Runs on the GCS machine. Transport is either UDP or a serial SiK radio.
-// Sends to drone:       heartbeat, commands, RTK corrections.
-// Receives from drone:  heartbeat, position, attitude, battery.
+// Sends to drone:      heartbeat, RTK corrections.
+// Receives from drone: DroneState (position, attitude, battery, flight mode).
 class CommsGcs : public rclcpp::Node {
 public:
     CommsGcs();
@@ -40,13 +38,12 @@ private:
     std::thread       recv_thread_;
     std::atomic<bool> running_{true};
 
+    interfaces::msg::DroneState                                        latest_drone_state_{};
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr                  uav_heartbeat_pub_;
-    rclcpp::Publisher<px4_msgs::msg::VehicleGlobalPosition>::SharedPtr position_pub_;
-    rclcpp::Publisher<px4_msgs::msg::VehicleAttitude>::SharedPtr       attitude_pub_;
-    rclcpp::Publisher<px4_msgs::msg::BatteryStatus>::SharedPtr         battery_pub_;
+    rclcpp::Publisher<interfaces::msg::DroneState>::SharedPtr          drone_state_pub_;
 
     // Send side
     rclcpp::TimerBase::SharedPtr heartbeat_timer_;
     rclcpp::Subscription<std_msgs::msg::UInt8MultiArray>::SharedPtr rtcm_sub_;
-    uint8_t rtcm_seq_{0};  // rolling sequence number (0-31) per RTCM message
+    uint8_t rtcm_seq_{0};
 };

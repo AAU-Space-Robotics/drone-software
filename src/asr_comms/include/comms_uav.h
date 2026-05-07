@@ -3,22 +3,21 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <mutex>
 #include <thread>
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/bool.hpp>
-#include <px4_msgs/msg/vehicle_global_position.hpp>
-#include <px4_msgs/msg/vehicle_attitude.hpp>
-#include <px4_msgs/msg/battery_status.hpp>
 #include <px4_msgs/msg/gps_inject_data.hpp>
+#include <interfaces/msg/drone_state.hpp>
 
 #include "common/mavlink.h"
 #include "transport.h"
 
 // Runs on the drone. Transport is either UDP or a serial SiK radio.
-// Receives from GCS: heartbeat, commands, RTK corrections.
-// Sends to GCS:      heartbeat, position, attitude, battery.
+// Receives from GCS: heartbeat, RTK corrections.
+// Sends to GCS:      heartbeat, DroneState (position, attitude, battery).
 class CommsUav : public rclcpp::Node {
 public:
     CommsUav();
@@ -34,9 +33,8 @@ private:
     // Send path
     void send_mavlink(mavlink_message_t& msg);
     void send_heartbeat();
-    void on_global_position(const px4_msgs::msg::VehicleGlobalPosition::SharedPtr msg);
-    void on_attitude(const px4_msgs::msg::VehicleAttitude::SharedPtr msg);
-    void on_battery(const px4_msgs::msg::BatteryStatus::SharedPtr msg);
+    void send_drone_state();
+    void on_drone_state(const interfaces::msg::DroneState::SharedPtr msg);
 
     std::unique_ptr<ITransport> transport_;
 
@@ -47,8 +45,8 @@ private:
     std::thread       recv_thread_;
     std::atomic<bool> running_{true};
 
-    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr              heartbeat_pub_;
-    rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr     gps_inject_pub_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr          heartbeat_pub_;
+    rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr gps_inject_pub_;
 
     // Fragment reassembly buffer — 32 sequence slots, 4 fragments each.
     // MAVLink GPS_RTCM_DATA flags: bit0=fragmented, bits1-2=frag_idx, bits3-7=seq.
@@ -67,10 +65,12 @@ private:
     };
     std::array<FragBuf, 32> rtcm_frags_{};
 
-    // Send side — timer + subscribers
-    rclcpp::TimerBase::SharedPtr heartbeat_timer_;
+    // Send side
+    interfaces::msg::DroneState latest_state_{};
+    std::mutex                  state_mutex_;
 
-    rclcpp::Subscription<px4_msgs::msg::VehicleGlobalPosition>::SharedPtr pos_sub_;
-    rclcpp::Subscription<px4_msgs::msg::VehicleAttitude>::SharedPtr       att_sub_;
-    rclcpp::Subscription<px4_msgs::msg::BatteryStatus>::SharedPtr         bat_sub_;
+    rclcpp::TimerBase::SharedPtr heartbeat_timer_;
+    rclcpp::TimerBase::SharedPtr telemetry_timer_;
+
+    rclcpp::Subscription<interfaces::msg::DroneState>::SharedPtr drone_state_sub_;
 };

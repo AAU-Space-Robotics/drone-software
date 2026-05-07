@@ -2,6 +2,7 @@
 #include "serial_port.h"
 #include "udp_socket.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -59,24 +60,17 @@ CommsUav::CommsUav()
                     bind_port, target_ip.c_str(), target_port);
     }
 
-    // Publishers (incoming from GCS)
-    heartbeat_pub_   = create_publisher<std_msgs::msg::Bool>("/comms/gcs_heartbeat", 10);
-    gps_inject_pub_  = create_publisher<px4_msgs::msg::GpsInjectData>("/fmu/in/gps_inject_data", 10);
+    // Incoming from GCS
+    heartbeat_pub_  = create_publisher<std_msgs::msg::Bool>("/comms/gcs_heartbeat", 10);
+    gps_inject_pub_ = create_publisher<px4_msgs::msg::GpsInjectData>("/fmu/in/gps_inject_data", 10);
 
-    // Subscribers (outgoing to GCS)
-    heartbeat_timer_ = create_wall_timer(1s, std::bind(&CommsUav::send_heartbeat, this));
+    // Outgoing to GCS
+    heartbeat_timer_  = create_wall_timer(1s,   std::bind(&CommsUav::send_heartbeat,   this));
+    telemetry_timer_  = create_wall_timer(200ms, std::bind(&CommsUav::send_drone_state, this));
 
-    pos_sub_ = create_subscription<px4_msgs::msg::VehicleGlobalPosition>(
-        "/fmu/out/vehicle_global_position", 10,
-        std::bind(&CommsUav::on_global_position, this, std::placeholders::_1));
-
-    att_sub_ = create_subscription<px4_msgs::msg::VehicleAttitude>(
-        "/fmu/out/vehicle_attitude", 10,
-        std::bind(&CommsUav::on_attitude, this, std::placeholders::_1));
-
-    bat_sub_ = create_subscription<px4_msgs::msg::BatteryStatus>(
-        "/fmu/out/battery_status", 10,
-        std::bind(&CommsUav::on_battery, this, std::placeholders::_1));
+    drone_state_sub_ = create_subscription<interfaces::msg::DroneState>(
+        "out/drone_state", 10,
+        std::bind(&CommsUav::on_drone_state, this, std::placeholders::_1));
 
     recv_thread_ = std::thread(&CommsUav::recv_loop, this);
 }
@@ -91,7 +85,7 @@ CommsUav::~CommsUav()
 
 void CommsUav::recv_loop()
 {
-    uint8_t          buf[UDP_BUF_SIZE];
+    uint8_t           buf[UDP_BUF_SIZE];
     mavlink_message_t msg{};
     mavlink_status_t  status{};
 
@@ -131,7 +125,6 @@ void CommsUav::handle_message(const mavlink_message_t& msg)
         mavlink_command_long_t cmd{};
         mavlink_msg_command_long_decode(&msg, &cmd);
         RCLCPP_INFO(get_logger(), "COMMAND_LONG: cmd=%u param1=%.2f", cmd.command, cmd.param1);
-        // TODO: publish to /comms/gcs_command via interfaces msg
         break;
     }
 
@@ -143,13 +136,10 @@ void CommsUav::handle_message(const mavlink_message_t& msg)
 void CommsUav::handle_rtcm(const mavlink_gps_rtcm_data_t& rtcm)
 {
     if (!(rtcm.flags & 0x01u)) {
-        // Not fragmented — publish directly
         publish_gps_inject(rtcm.data, rtcm.len);
         return;
     }
 
-    // Fragmented: buffer by sequence number until all fragments arrive.
-    // flags: bit0=1 (fragmented), bits1-2=fragment index, bits3-7=sequence (0-31)
     const uint8_t seq      = (rtcm.flags >> 3) & 0x1Fu;
     const uint8_t frag_idx = (rtcm.flags >> 1) & 0x03u;
 
@@ -157,7 +147,6 @@ void CommsUav::handle_rtcm(const mavlink_gps_rtcm_data_t& rtcm)
     buf.frags[frag_idx].assign(rtcm.data, rtcm.data + rtcm.len);
     buf.received_mask |= static_cast<uint8_t>(1u << frag_idx);
 
-    // The last fragment is identified by having len < 180 (not a full chunk)
     if (rtcm.len < 180) {
         buf.last_frag_idx = frag_idx;
         buf.last_known    = true;
@@ -165,25 +154,20 @@ void CommsUav::handle_rtcm(const mavlink_gps_rtcm_data_t& rtcm)
 
     if (!buf.last_known) return;
 
-    // Check all fragments 0..last_frag_idx are present
     const uint8_t expected = static_cast<uint8_t>((1u << (buf.last_frag_idx + 1)) - 1u);
     if ((buf.received_mask & expected) != expected) return;
 
-    // Reassemble into a contiguous buffer
     std::vector<uint8_t> assembled;
     assembled.reserve(static_cast<size_t>(buf.last_frag_idx + 1) * 180);
     for (uint8_t i = 0; i <= buf.last_frag_idx; ++i)
         assembled.insert(assembled.end(), buf.frags[i].begin(), buf.frags[i].end());
 
     buf.reset();
-
     publish_gps_inject(assembled.data(), assembled.size());
 }
 
 void CommsUav::publish_gps_inject(const uint8_t* data, size_t len)
 {
-    // GpsInjectData carries max 300 bytes; split into chunks if needed.
-    // PX4 queues up to ORB_QUEUE_LENGTH=8 messages so back-to-back sends are safe.
     size_t offset = 0;
     while (offset < len) {
         const size_t chunk = std::min<size_t>(len - offset, 300u);
@@ -191,7 +175,7 @@ void CommsUav::publish_gps_inject(const uint8_t* data, size_t len)
         px4_msgs::msg::GpsInjectData out{};
         out.timestamp = static_cast<uint64_t>(get_clock()->now().nanoseconds() / 1000);
         out.len       = static_cast<uint16_t>(chunk);
-        out.flags     = (len > 300u) ? 1u : 0u;  // flag as fragmented when split
+        out.flags     = (len > 300u) ? 1u : 0u;
         std::memcpy(out.data.data(), data + offset, chunk);
 
         gps_inject_pub_->publish(out);
@@ -217,50 +201,74 @@ void CommsUav::send_heartbeat()
     send_mavlink(msg);
 }
 
-void CommsUav::on_global_position(const px4_msgs::msg::VehicleGlobalPosition::SharedPtr p)
+void CommsUav::on_drone_state(const interfaces::msg::DroneState::SharedPtr msg)
 {
-    mavlink_message_t msg{};
-    mavlink_msg_global_position_int_pack(system_id_, component_id_, &msg,
-        0,
-        static_cast<int32_t>(p->lat * 1e7),
-        static_cast<int32_t>(p->lon * 1e7),
-        static_cast<int32_t>(p->alt * 1e3),
-        static_cast<int32_t>(p->alt * 1e3),  // TODO: use AGL altitude
-        0, 0, 0,                              // TODO: velocity from VehicleLocalPosition
-        UINT16_MAX);
-    send_mavlink(msg);
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    latest_state_ = *msg;
 }
 
-void CommsUav::on_attitude(const px4_msgs::msg::VehicleAttitude::SharedPtr a)
+void CommsUav::send_drone_state()
 {
-    const float w = a->q[0], x = a->q[1], y = a->q[2], z = a->q[3];
-    const float roll  = std::atan2(2.0f*(w*x + y*z), 1.0f - 2.0f*(x*x + y*y));
-    const float pitch = std::asin( 2.0f*(w*y - z*x));
-    const float yaw   = std::atan2(2.0f*(w*z + x*y), 1.0f - 2.0f*(y*y + z*z));
+    interfaces::msg::DroneState state;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state = latest_state_;
+    }
 
-    mavlink_message_t msg{};
-    mavlink_msg_attitude_pack(system_id_, component_id_, &msg,
-        0, roll, pitch, yaw, 0.0f, 0.0f, 0.0f);
-    send_mavlink(msg);
-}
+    // GLOBAL_POSITION_INT
+    {
+        const float alt = (state.position.size() >= 3) ? state.position[2] : 0.0f;
+        const float vx  = (state.velocity.size()  >= 1) ? state.velocity[0]  : 0.0f;
+        const float vy  = (state.velocity.size()  >= 2) ? state.velocity[1]  : 0.0f;
+        const float vz  = (state.velocity.size()  >= 3) ? state.velocity[2]  : 0.0f;
+        const float yaw = (state.orientation.size() >= 1) ? state.orientation[0] : 0.0f;
 
-void CommsUav::on_battery(const px4_msgs::msg::BatteryStatus::SharedPtr b)
-{
-    uint16_t cell_voltages[10];
-    std::fill(std::begin(cell_voltages), std::end(cell_voltages), UINT16_MAX);
-    cell_voltages[0] = static_cast<uint16_t>(b->voltage_v * 1000.0f);
+        mavlink_message_t msg{};
+        mavlink_msg_global_position_int_pack(system_id_, component_id_, &msg,
+            0,
+            static_cast<int32_t>(state.latitude  * 1e7),
+            static_cast<int32_t>(state.longitude * 1e7),
+            static_cast<int32_t>(alt * 1e3f),
+            static_cast<int32_t>(alt * 1e3f),
+            static_cast<int16_t>(vx * 100.0f),
+            static_cast<int16_t>(vy * 100.0f),
+            static_cast<int16_t>(vz * 100.0f),
+            static_cast<uint16_t>(std::fmod(yaw * 18000.0f / M_PIf + 36000.0f, 36000.0f)));
+        send_mavlink(msg);
+    }
 
-    mavlink_message_t msg{};
-    mavlink_msg_battery_status_pack(system_id_, component_id_, &msg,
-        0, MAV_BATTERY_FUNCTION_ALL, MAV_BATTERY_TYPE_LIPO,
-        INT16_MAX,
-        cell_voltages,
-        static_cast<int16_t>(b->current_a * 100.0f),
-        static_cast<int32_t>(b->discharged_mah),
-        -1,
-        static_cast<int8_t>(b->remaining * 100.0f),
-        0, MAV_BATTERY_CHARGE_STATE_OK, nullptr, 0, 0);
-    send_mavlink(msg);
+    // ATTITUDE  (orientation: [0]=yaw, [1]=pitch, [2]=roll)
+    {
+        const float roll  = (state.orientation.size() >= 3) ? state.orientation[2] : 0.0f;
+        const float pitch = (state.orientation.size() >= 2) ? state.orientation[1] : 0.0f;
+        const float yaw   = (state.orientation.size() >= 1) ? state.orientation[0] : 0.0f;
+
+        mavlink_message_t msg{};
+        mavlink_msg_attitude_pack(system_id_, component_id_, &msg,
+            0, roll, pitch, yaw, 0.0f, 0.0f, 0.0f);
+        send_mavlink(msg);
+    }
+
+    // BATTERY_STATUS
+    {
+        uint16_t cell_voltages[10];
+        std::fill(std::begin(cell_voltages), std::end(cell_voltages), UINT16_MAX);
+        cell_voltages[0] = static_cast<uint16_t>(state.battery_voltage * 1000.0f);
+
+        const int8_t pct = static_cast<int8_t>(
+            std::clamp(state.battery_percentage, 0.0f, 100.0f));
+
+        mavlink_message_t msg{};
+        mavlink_msg_battery_status_pack(system_id_, component_id_, &msg,
+            0, MAV_BATTERY_FUNCTION_ALL, MAV_BATTERY_TYPE_LIPO,
+            INT16_MAX,
+            cell_voltages,
+            static_cast<int16_t>(state.battery_current * 100.0f),
+            static_cast<int32_t>(state.battery_discharged_mah),
+            -1, pct,
+            0, MAV_BATTERY_CHARGE_STATE_OK, nullptr, 0, 0);
+        send_mavlink(msg);
+    }
 }
 
 int main(int argc, char* argv[])

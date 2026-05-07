@@ -60,9 +60,12 @@ CommsGcs::CommsGcs()
 
     // Publishers (incoming from UAV)
     uav_heartbeat_pub_ = create_publisher<std_msgs::msg::Bool>("/comms/uav_heartbeat", 10);
-    position_pub_      = create_publisher<px4_msgs::msg::VehicleGlobalPosition>("/comms/uav_position", 10);
-    attitude_pub_      = create_publisher<px4_msgs::msg::VehicleAttitude>("/comms/uav_attitude", 10);
-    battery_pub_       = create_publisher<px4_msgs::msg::BatteryStatus>("/comms/uav_battery", 10);
+    drone_state_pub_   = create_publisher<interfaces::msg::DroneState>("/comms/drone_state", 10);
+
+    // Pre-allocate sequence fields so the message is always fully populated
+    latest_drone_state_.position.resize(3, 0.0f);
+    latest_drone_state_.velocity.resize(3, 0.0f);
+    latest_drone_state_.orientation.resize(3, 0.0f);
 
     // Send side
     heartbeat_timer_ = create_wall_timer(1s, std::bind(&CommsGcs::send_heartbeat, this));
@@ -117,11 +120,14 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
         mavlink_global_position_int_t p{};
         mavlink_msg_global_position_int_decode(&msg, &p);
 
-        px4_msgs::msg::VehicleGlobalPosition out{};
-        out.lat = p.lat / 1e7;
-        out.lon = p.lon / 1e7;
-        out.alt = p.alt / 1e3f;
-        position_pub_->publish(out);
+        latest_drone_state_.timestamp   = get_clock()->now().seconds();
+        latest_drone_state_.latitude    = p.lat / 1e7;
+        latest_drone_state_.longitude   = p.lon / 1e7;
+        latest_drone_state_.position[2] = p.alt  / 1e3f;
+        latest_drone_state_.velocity[0] = p.vx   / 100.0f;
+        latest_drone_state_.velocity[1] = p.vy   / 100.0f;
+        latest_drone_state_.velocity[2] = p.vz   / 100.0f;
+        drone_state_pub_->publish(latest_drone_state_);
         break;
     }
 
@@ -129,20 +135,11 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
         mavlink_attitude_t a{};
         mavlink_msg_attitude_decode(&msg, &a);
 
-        // Convert Euler back to quaternion for px4_msgs
-        const float cr = std::cos(a.roll  * 0.5f);
-        const float sr = std::sin(a.roll  * 0.5f);
-        const float cp = std::cos(a.pitch * 0.5f);
-        const float sp = std::sin(a.pitch * 0.5f);
-        const float cy = std::cos(a.yaw   * 0.5f);
-        const float sy = std::sin(a.yaw   * 0.5f);
-
-        px4_msgs::msg::VehicleAttitude out{};
-        out.q[0] = cr*cp*cy + sr*sp*sy;
-        out.q[1] = sr*cp*cy - cr*sp*sy;
-        out.q[2] = cr*sp*cy + sr*cp*sy;
-        out.q[3] = cr*cp*sy - sr*sp*cy;
-        attitude_pub_->publish(out);
+        latest_drone_state_.timestamp      = get_clock()->now().seconds();
+        latest_drone_state_.orientation[0] = a.yaw;
+        latest_drone_state_.orientation[1] = a.pitch;
+        latest_drone_state_.orientation[2] = a.roll;
+        drone_state_pub_->publish(latest_drone_state_);
         break;
     }
 
@@ -150,12 +147,12 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
         mavlink_battery_status_t b{};
         mavlink_msg_battery_status_decode(&msg, &b);
 
-        px4_msgs::msg::BatteryStatus out{};
-        out.voltage_v     = b.voltages[0] / 1000.0f;
-        out.current_a     = b.current_battery / 100.0f;
-        out.discharged_mah = static_cast<float>(b.current_consumed);
-        out.remaining     = b.battery_remaining / 100.0f;
-        battery_pub_->publish(out);
+        latest_drone_state_.timestamp              = get_clock()->now().seconds();
+        latest_drone_state_.battery_voltage        = b.voltages[0] / 1000.0f;
+        latest_drone_state_.battery_current        = b.current_battery / 100.0f;
+        latest_drone_state_.battery_discharged_mah = static_cast<float>(b.current_consumed);
+        latest_drone_state_.battery_percentage     = static_cast<float>(b.battery_remaining);
+        drone_state_pub_->publish(latest_drone_state_);
         break;
     }
 
