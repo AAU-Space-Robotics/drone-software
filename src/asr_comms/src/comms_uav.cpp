@@ -205,6 +205,7 @@ void CommsUav::on_drone_state(const interfaces::msg::DroneState::SharedPtr msg)
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     latest_state_ = *msg;
+    has_state_    = true;
 }
 
 void CommsUav::send_drone_state()
@@ -212,6 +213,7 @@ void CommsUav::send_drone_state()
     interfaces::msg::DroneState state;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
+        if (!has_state_) return;
         state = latest_state_;
     }
 

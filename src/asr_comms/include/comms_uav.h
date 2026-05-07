@@ -68,6 +68,7 @@ private:
     // Send side
     interfaces::msg::DroneState latest_state_{};
     std::mutex                  state_mutex_;
+    bool                        has_state_{false};
 
     rclcpp::TimerBase::SharedPtr heartbeat_timer_;
     rclcpp::TimerBase::SharedPtr telemetry_timer_;
