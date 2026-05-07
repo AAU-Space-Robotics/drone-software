@@ -1,7 +1,11 @@
 #include "comms_gcs.h"
+#include "serial_port.h"
+#include "udp_socket.h"
 
 #include <chrono>
 #include <cmath>
+#include <glob.h>
+#include <stdexcept>
 #include <rclcpp/rclcpp.hpp>
 
 using namespace std::chrono_literals;
@@ -11,24 +15,48 @@ static constexpr char     DEFAULT_TARGET_IP[] = "127.0.0.1";
 static constexpr uint16_t DEFAULT_TARGET_PORT = 14551;
 static constexpr size_t   UDP_BUF_SIZE        = 2048;
 
+static std::string auto_detect_serial()
+{
+    for (const char* pattern : {"/dev/ttyUSB*", "/dev/ttyACM*"}) {
+        glob_t g{};
+        if (glob(pattern, 0, nullptr, &g) == 0 && g.gl_pathc > 0) {
+            std::string path = g.gl_pathv[0];
+            globfree(&g);
+            return path;
+        }
+        globfree(&g);
+    }
+    throw std::runtime_error("No serial radio found — is the USB radio module plugged in?");
+}
+
 CommsGcs::CommsGcs()
 : Node("comms_gcs")
 {
     declare_parameter("bind_port",    static_cast<int>(DEFAULT_BIND_PORT));
     declare_parameter("target_ip",    DEFAULT_TARGET_IP);
     declare_parameter("target_port",  static_cast<int>(DEFAULT_TARGET_PORT));
+    declare_parameter("serial_port",  std::string{});   // e.g. "/dev/ttyUSB0" or "auto"
+    declare_parameter("baud_rate",    57600);
     declare_parameter("system_id",    static_cast<int>(system_id_));
     declare_parameter("component_id", static_cast<int>(component_id_));
 
-    const auto bind_port   = static_cast<uint16_t>(get_parameter("bind_port").as_int());
-    const auto target_ip   = get_parameter("target_ip").as_string();
-    const auto target_port = static_cast<uint16_t>(get_parameter("target_port").as_int());
     system_id_    = static_cast<uint8_t>(get_parameter("system_id").as_int());
     component_id_ = static_cast<uint8_t>(get_parameter("component_id").as_int());
 
-    socket_ = std::make_unique<UdpSocket>(bind_port, target_ip, target_port);
-    RCLCPP_INFO(get_logger(), "GCS comms — listening on :%u, sending to %s:%u",
-                bind_port, target_ip.c_str(), target_port);
+    const auto serial_port = get_parameter("serial_port").as_string();
+    if (!serial_port.empty()) {
+        const auto dev  = (serial_port == "auto") ? auto_detect_serial() : serial_port;
+        const int  baud = static_cast<int>(get_parameter("baud_rate").as_int());
+        transport_ = std::make_unique<SerialPort>(dev, baud);
+        RCLCPP_INFO(get_logger(), "GCS comms — serial %s @ %d baud", dev.c_str(), baud);
+    } else {
+        const auto bind_port   = static_cast<uint16_t>(get_parameter("bind_port").as_int());
+        const auto target_ip   = get_parameter("target_ip").as_string();
+        const auto target_port = static_cast<uint16_t>(get_parameter("target_port").as_int());
+        transport_ = std::make_unique<UdpSocket>(bind_port, target_ip, target_port);
+        RCLCPP_INFO(get_logger(), "GCS comms — UDP listening on :%u, sending to %s:%u",
+                    bind_port, target_ip.c_str(), target_port);
+    }
 
     // Publishers (incoming from UAV)
     uav_heartbeat_pub_ = create_publisher<std_msgs::msg::Bool>("/comms/uav_heartbeat", 10);
@@ -61,7 +89,7 @@ void CommsGcs::recv_loop()
     mavlink_status_t  status{};
 
     while (running_) {
-        const ssize_t n = socket_->recv(buf, sizeof(buf));
+        const ssize_t n = transport_->recv(buf, sizeof(buf));
         if (n <= 0) continue;
 
         for (ssize_t i = 0; i < n; ++i) {
@@ -142,7 +170,7 @@ void CommsGcs::send_mavlink(mavlink_message_t& msg)
 {
     uint8_t buf[MAVLINK_MAX_PACKET_LEN];
     const uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    socket_->send(buf, len);
+    transport_->send(buf, len);
 }
 
 void CommsGcs::send_heartbeat()

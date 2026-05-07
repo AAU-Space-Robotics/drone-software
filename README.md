@@ -83,3 +83,12 @@ All commands are sent via the `/asr/thyra/in/drone_command` action. The drone mu
   ros2 action send_goal /asr/thyra/in/drone_command interfaces/action/DroneCommand "{command_type: 'set_origin', target_pose: [], yaw: 0.0}"
 ```
   - Resets the local coordinate origin. Can only be used while the drone is **disarmed**. Useful before starting a new mission or after relocation.
+
+
+
+# Restart the drone:
+
+ros2 action send_goal /system_control interfaces/action/SystemControl "{command_type: 'RESTART_NODES'}"
+
+## Full system reboot
+ros2 action send_goal /system_control interfaces/action/SystemControl "{command_type: 'REBOOT_PI'}"

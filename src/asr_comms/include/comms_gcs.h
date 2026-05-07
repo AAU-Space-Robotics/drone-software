@@ -11,9 +11,9 @@
 #include <px4_msgs/msg/battery_status.hpp>
 
 #include "common/mavlink.h"
-#include "udp_socket.h"
+#include "transport.h"
 
-// Runs on the GCS machine. One bidirectional UDP socket (later: serial/SiK).
+// Runs on the GCS machine. Transport is either UDP or a serial SiK radio.
 // Sends to drone:       heartbeat, commands, RTK corrections.
 // Receives from drone:  heartbeat, position, attitude, battery.
 class CommsGcs : public rclcpp::Node {
@@ -31,7 +31,7 @@ private:
     void send_heartbeat();
     void send_rtcm(const std_msgs::msg::UInt8MultiArray::SharedPtr msg);
 
-    std::unique_ptr<UdpSocket> socket_;
+    std::unique_ptr<ITransport> transport_;
 
     uint8_t system_id_   {255};  // GCS conventionally uses system ID 255
     uint8_t component_id_{  0};

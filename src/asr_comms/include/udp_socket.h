@@ -1,5 +1,7 @@
 #pragma once
 
+#include "transport.h"
+
 #include <string>
 #include <stdexcept>
 #include <cstring>
@@ -10,7 +12,7 @@
 
 // Bidirectional UDP socket: binds a local port for receiving
 // and targets a fixed remote address for sending.
-class UdpSocket {
+class UdpSocket : public ITransport {
 public:
     UdpSocket(uint16_t bind_port, const std::string& target_ip, uint16_t target_port)
     {
@@ -40,12 +42,12 @@ public:
     UdpSocket(const UdpSocket&)            = delete;
     UdpSocket& operator=(const UdpSocket&) = delete;
 
-    ssize_t recv(void* buf, size_t len)
+    ssize_t recv(void* buf, size_t len) override
     {
         return ::recv(fd_, buf, len, 0);
     }
 
-    ssize_t send(const void* buf, size_t len)
+    ssize_t send(const void* buf, size_t len) override
     {
         return sendto(fd_, buf, len, 0,
                       reinterpret_cast<const sockaddr*>(&target_), sizeof(target_));
