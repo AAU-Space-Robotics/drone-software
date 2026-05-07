@@ -14,9 +14,9 @@
 #include <px4_msgs/msg/gps_inject_data.hpp>
 
 #include "common/mavlink.h"
-#include "udp_socket.h"
+#include "transport.h"
 
-// Runs on the drone. One bidirectional UDP socket (later: serial/SiK).
+// Runs on the drone. Transport is either UDP or a serial SiK radio.
 // Receives from GCS: heartbeat, commands, RTK corrections.
 // Sends to GCS:      heartbeat, position, attitude, battery.
 class CommsUav : public rclcpp::Node {
@@ -38,7 +38,7 @@ private:
     void on_attitude(const px4_msgs::msg::VehicleAttitude::SharedPtr msg);
     void on_battery(const px4_msgs::msg::BatteryStatus::SharedPtr msg);
 
-    std::unique_ptr<UdpSocket> socket_;
+    std::unique_ptr<ITransport> transport_;
 
     uint8_t system_id_   {1};
     uint8_t component_id_{1};
