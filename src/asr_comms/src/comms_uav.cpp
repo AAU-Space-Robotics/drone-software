@@ -61,7 +61,7 @@ CommsUav::CommsUav()
     }
 
     // Incoming from GCS
-    heartbeat_pub_  = create_publisher<std_msgs::msg::Bool>("/comms/gcs_heartbeat", 10);
+    heartbeat_pub_  = create_publisher<std_msgs::msg::Bool>("in/gcs_heartbeat", 10);
     gps_inject_pub_ = create_publisher<px4_msgs::msg::GpsInjectData>("/fmu/in/gps_inject_data", 10);
 
     // Outgoing to GCS

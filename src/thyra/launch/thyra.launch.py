@@ -57,6 +57,19 @@ def generate_launch_description():
             ),
         ),
 
+        # Start comms_uav (serial SiK radio bridge)
+        Node(
+            package='asr_comms',
+            executable='comms_uav',
+            name='comms_uav',
+            namespace='asr/thyra',
+            output='screen',
+            parameters=[{
+                'serial_port': '/dev/ttyUSB0',
+                'baud_rate':   115200,
+            }]
+        ),
+
         # Delay and launch FlightControllerInterface node
         TimerAction(
             period=15.0,  # Delay in seconds
