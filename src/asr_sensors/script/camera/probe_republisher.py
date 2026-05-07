@@ -3,7 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy, QoSHistoryPolicy
-from interfaces.msg import ProbeGlobalLocations  # Adjust based on your message package
+from asr_comms.msg import ProbeGlobalLocations  # Adjust based on your message package
 
 class ProbeRepublisher(Node):
     def __init__(self):

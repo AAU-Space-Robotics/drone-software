@@ -19,15 +19,19 @@
 #include <px4_msgs/msg/actuator_servos.hpp>
 #include <px4_msgs/msg/actuator_test.hpp>
 
-#include <interfaces/action/drone_command.hpp>
-#include <interfaces/msg/manual_control_input.hpp>
-#include <interfaces/msg/motion_capture_pose.hpp>
-#include <interfaces/msg/drone_state.hpp>
-#include <interfaces/msg/drone_scope.hpp>
-#include <interfaces/msg/gcs_heartbeat.hpp>
-#include <interfaces/msg/probe_global_locations.hpp>
-#include <interfaces/msg/attitude_setpoint_rpy.hpp>
-#include <interfaces/msg/servo_command.hpp>
+#include <asr_comms/action/drone_command.hpp>
+#include <asr_comms/msg/manual_control_input.hpp>
+#include <asr_comms/msg/motion_capture_pose.hpp>
+#include <asr_comms/msg/telemetry_position.hpp>
+#include <asr_comms/msg/telemetry_attitude.hpp>
+#include <asr_comms/msg/telemetry_battery.hpp>
+#include <asr_comms/msg/telemetry_gps.hpp>
+#include <asr_comms/msg/telemetry_status.hpp>
+#include <asr_comms/msg/drone_scope.hpp>
+#include <asr_comms/msg/gcs_heartbeat.hpp>
+#include <asr_comms/msg/probe_global_locations.hpp>
+#include <asr_comms/msg/attitude_setpoint_rpy.hpp>
+#include <asr_comms/msg/servo_command.hpp>
 
 #include "controller.h"
 #include "state_manager.h"
@@ -42,7 +46,7 @@ using namespace px4_msgs::msg;
 class AAUAutopilot : public rclcpp::Node
 {
 public:
-    using DroneCommand = interfaces::action::DroneCommand;
+    using DroneCommand = asr_comms::action::DroneCommand;
     using GoalHandleDroneCommand = rclcpp_action::ServerGoalHandle<DroneCommand>;
 
     AAUAutopilot()
@@ -323,9 +327,13 @@ public:
         // Publishers
         offboard_control_mode_pub_ = create_publisher<OffboardControlMode>("/fmu/in/offboard_control_mode", 10);
         attitude_setpoint_pub_ = create_publisher<VehicleAttitudeSetpoint>("/fmu/in/vehicle_attitude_setpoint", 10);
-        attitude_setpoint_rpy_thrust_pub_ = create_publisher<interfaces::msg::AttitudeSetpointRPY>("/fmu/in/attitude_setpoint_rpy_thrust", 10);
+        attitude_setpoint_rpy_thrust_pub_ = create_publisher<asr_comms::msg::AttitudeSetpointRPY>("/fmu/in/attitude_setpoint_rpy_thrust", 10);
         vehicle_command_pub_ = create_publisher<VehicleCommand>("/fmu/in/vehicle_command", 10);
-        drone_state_pub_ = create_publisher<interfaces::msg::DroneState>("out/drone_state", 10);
+        telemetry_position_pub_ = create_publisher<asr_comms::msg::TelemetryPosition>("out/telemetry/position", 10);
+        telemetry_attitude_pub_ = create_publisher<asr_comms::msg::TelemetryAttitude>("out/telemetry/attitude", 10);
+        telemetry_battery_pub_  = create_publisher<asr_comms::msg::TelemetryBattery>( "out/telemetry/battery",  10);
+        telemetry_gps_pub_      = create_publisher<asr_comms::msg::TelemetryGPS>(     "out/telemetry/gps",      10);
+        telemetry_status_pub_   = create_publisher<asr_comms::msg::TelemetryStatus>(  "out/telemetry/status",   10);
         origin_offset_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>("out/origin_offset", 10);
         actuator_servos_pub_ = create_publisher<px4_msgs::msg::ActuatorServos>("/fmu/in/actuator_servos", servo_qos);
         actuator_test_pub_ = create_publisher<px4_msgs::msg::ActuatorTest>("/fmu/in/actuator_test", servo_qos);
@@ -339,15 +347,15 @@ public:
                 [this](const VehicleLocalPosition::SharedPtr msg) { localPositionCallback(msg); });
         }
         else if (position_source == "mocap"){
-            motion_capture_local_position_sub_ = create_subscription<interfaces::msg::MotionCapturePose>(
+            motion_capture_local_position_sub_ = create_subscription<asr_comms::msg::MotionCapturePose>(
                 "in/motion_capture_pose", qos,
-                [this](const interfaces::msg::MotionCapturePose::SharedPtr msg)
+                [this](const asr_comms::msg::MotionCapturePose::SharedPtr msg)
                 { motionCaptureLocalPositionCallback(msg); });
         }
 
-        gcs_heartbeat_sub_ = create_subscription<interfaces::msg::GcsHeartbeat>(
+        gcs_heartbeat_sub_ = create_subscription<asr_comms::msg::GcsHeartbeat>(
             "in/gcs_heartbeat", qos,
-            [this](const interfaces::msg::GcsHeartbeat::SharedPtr msg)
+            [this](const asr_comms::msg::GcsHeartbeat::SharedPtr msg)
             { gcsHeartbeatCallback(msg); });
 
         attitude_sub_ = create_subscription<VehicleAttitude>(
@@ -358,9 +366,9 @@ public:
             "/fmu/out/vehicle_status", qos,
             [this](const VehicleStatus::SharedPtr msg)
             { vehicleStatusCallback(msg); });
-        manual_input_sub_ = create_subscription<interfaces::msg::ManualControlInput>(
+        manual_input_sub_ = create_subscription<asr_comms::msg::ManualControlInput>(
             "in/manual_input", qos,
-            [this](const interfaces::msg::ManualControlInput::SharedPtr msg)
+            [this](const asr_comms::msg::ManualControlInput::SharedPtr msg)
             { manualControlInputCallback(msg); });
         battery_status_sub_ = create_subscription<BatteryStatus>(
             "/fmu/out/battery_status", qos,
@@ -374,16 +382,16 @@ public:
             "/fmu/out/actuator_outputs", qos,
             [this](const ActuatorOutputs::SharedPtr msg)
             { ActuatorOutputCallback(msg);});
-        probe_global_locations_sub_ = create_subscription<interfaces::msg::ProbeGlobalLocations>(
+        probe_global_locations_sub_ = create_subscription<asr_comms::msg::ProbeGlobalLocations>(
             "/probe_detector/global_probe_locations", qos,
-            [this](const interfaces::msg::ProbeGlobalLocations::SharedPtr msg)
+            [this](const asr_comms::msg::ProbeGlobalLocations::SharedPtr msg)
             { GlobalProbeLocationsCallback(msg); });
         gps_sub_ = create_subscription<SensorGps>(
             "/fmu/out/vehicle_gps_position", qos,
             [this](const SensorGps::SharedPtr msg)
             { gpsCallback(msg); });
-        servo_command_sub_ = create_subscription<interfaces::msg::ServoCommand>("in/servo_command", servo_qos,
-            [this](const interfaces::msg::ServoCommand::SharedPtr msg) 
+        servo_command_sub_ = create_subscription<asr_comms::msg::ServoCommand>("in/servo_command", servo_qos,
+            [this](const asr_comms::msg::ServoCommand::SharedPtr msg) 
             {setServo(msg->aux_index, msg->id, msg->value);});
 
         //Action server
@@ -523,7 +531,7 @@ private:
         state_manager_.setGroundDistanceState(ground_distance_state);
     }
 
-    void gcsHeartbeatCallback(const interfaces::msg::GcsHeartbeat::SharedPtr msg)
+    void gcsHeartbeatCallback(const asr_comms::msg::GcsHeartbeat::SharedPtr msg)
     {
         // Use the arrival time of the GCS heartbeat message as the heartbeat time
         state_manager_.setHeartbeat(GCSHeartbeat(get_time(), msg->gcs_nominal));
@@ -646,7 +654,7 @@ private:
         state_manager_.setGlobalAcceleration(local_acceleration);
     }
 
-    void motionCaptureLocalPositionCallback(const interfaces::msg::MotionCapturePose::SharedPtr msg)
+    void motionCaptureLocalPositionCallback(const asr_comms::msg::MotionCapturePose::SharedPtr msg)
     {
         Stamped3DVector origin = state_manager_.getOrigin();
         Stamped3DVector local_position(get_time(), msg->x - origin.x(), msg->y - origin.y(), msg->z- origin.z());
@@ -701,7 +709,7 @@ private:
         state_manager_.setDroneState(drone_state);
     }
 
-    void manualControlInputCallback(const interfaces::msg::ManualControlInput::SharedPtr msg)
+    void manualControlInputCallback(const asr_comms::msg::ManualControlInput::SharedPtr msg)
     {
         Stamped4DVector manual_input_sub_ = state_manager_.getManualControlInput();
         manual_input_sub_.setTime(get_time());
@@ -727,7 +735,7 @@ private:
         state_manager_.setActuatorSpeeds(actuator_speeds);
     }
 
-    void GlobalProbeLocationsCallback(const interfaces::msg::ProbeGlobalLocations::SharedPtr msg)
+    void GlobalProbeLocationsCallback(const asr_comms::msg::ProbeGlobalLocations::SharedPtr msg)
     {
         // Set the probe locations in the state manager
         GlobalProbeLocations probe_locations;
@@ -781,81 +789,75 @@ private:
     // Drone state publisher
     void publish_drone_state()
     {
-        interfaces::msg::DroneState msg{};
-        
-        // Pre-allocate all vectors once
-        msg.position.reserve(3);
-        msg.velocity.reserve(3);
-        msg.orientation.reserve(3);
-        msg.target_position.reserve(3);
-        msg.actuator_speeds.reserve(4);
-        
-        // Get drone state once (avoid multiple calls)
-        const DroneState& drone_state = state_manager_.getDroneState();
-        
-        // Position - with explicit float casts
-        const Stamped3DVector& position = state_manager_.getGlobalPosition();
-        msg.position_timestamp = position.timestamp.seconds();
-        msg.position = {static_cast<float>(position.x()), 
-                        static_cast<float>(position.y()), 
-                        static_cast<float>(position.z())};
-        
-        // Velocity - with explicit float casts
-        const Stamped3DVector& velocity = state_manager_.getGlobalVelocity();
-        msg.velocity_timestamp = velocity.timestamp.seconds();
-        msg.velocity = {static_cast<float>(velocity.x()), 
-                        static_cast<float>(velocity.y()), 
-                        static_cast<float>(velocity.z())};
-        
-        // Orientation - with explicit float casts
-        const StampedQuaternion& attitude = state_manager_.getAttitude();
-        const Eigen::Vector3d euler = transformations_.quaternionToEuler(attitude.quaternion());
-        //std::cout << euler.z() << '\n';
-     
+        const DroneState&        drone_state    = state_manager_.getDroneState();
+        const Stamped3DVector&   position       = state_manager_.getGlobalPosition();
+        const Stamped3DVector&   velocity       = state_manager_.getGlobalVelocity();
+        const StampedQuaternion& attitude       = state_manager_.getAttitude();
+        const Stamped4DVector&   target_profile = state_manager_.getTargetPositionProfile();
+        const auto&              battery        = state_manager_.getBatteryState();
+        const Stamped4DVector&   actuators      = state_manager_.getActuatorSpeeds();
+        const auto&              gps            = state_manager_.getGPSState();
+        const Eigen::Vector3d    euler          = transformations_.quaternionToEuler(attitude.quaternion());
 
+        {
+            asr_comms::msg::TelemetryPosition msg{};
+            msg.timestamp        = position.timestamp.seconds();
+            msg.position         = {static_cast<float>(position.x()),
+                                    static_cast<float>(position.y()),
+                                    static_cast<float>(position.z())};
+            msg.velocity         = {static_cast<float>(velocity.x()),
+                                    static_cast<float>(velocity.y()),
+                                    static_cast<float>(velocity.z())};
+            msg.target_position  = {static_cast<float>(target_profile.x()),
+                                    static_cast<float>(target_profile.y()),
+                                    static_cast<float>(target_profile.z())};
+            telemetry_position_pub_->publish(msg);
+        }
 
-        msg.orientation = {static_cast<float>(euler.z()), // yaw adjusted to [-pi, pi]
-                        static_cast<float>(euler.y()), // pitch adjusted to [-pi, pi]
-                        static_cast<float>(euler.x())}; // roll, pitch, yaw
-        
-        // Target position - with explicit float casts
-        const Stamped4DVector& target_profile = state_manager_.getTargetPositionProfile();
-        msg.target_position = {static_cast<float>(target_profile.x()), 
-                            static_cast<float>(target_profile.y()), 
-                            static_cast<float>(target_profile.z())};
-        
-        // Battery
-        const auto& battery_state = state_manager_.getBatteryState();
-        msg.battery_state_timestamp = battery_state.timestamp.seconds();
-        msg.battery_voltage = battery_state.voltage;
-        msg.battery_current = battery_state.average_current;
-        msg.battery_percentage = battery_state.charge_remaining;
-        msg.battery_discharged_mah = battery_state.discharged_mah;
-        msg.battery_average_current = battery_state.average_current;
-        
-        // Drone state fields
-        msg.arming_state = static_cast<uint8_t>(drone_state.arming_state);
-        msg.trajectory_mode = static_cast<uint8_t>(drone_state.trajectory_mode);
-        msg.led_mode = static_cast<int16_t>(drone_state.flight_mode_trait);
-        msg.flight_mode = static_cast<int16_t>(drone_state.flight_mode);
-        msg.flight_time = drone_state.flight_time.seconds();
-        
-        // Actuator speeds - with explicit float casts
-        const Stamped4DVector& actuator_speeds = state_manager_.getActuatorSpeeds();
-        msg.actuator_speeds = {static_cast<float>(actuator_speeds.x()), 
-                            static_cast<float>(actuator_speeds.y()),
-                            static_cast<float>(actuator_speeds.z()), 
-                            static_cast<float>(actuator_speeds.w())};
-        
-        // Probe locations
-        msg.probes_found = state_manager_.getGlobalProbeLocations().getProbeCount();
+        {
+            asr_comms::msg::TelemetryAttitude msg{};
+            msg.timestamp   = attitude.timestamp.seconds();
+            msg.orientation = {static_cast<float>(euler.x()),   // roll
+                               static_cast<float>(euler.y()),   // pitch
+                               static_cast<float>(euler.z())};  // yaw
+            telemetry_attitude_pub_->publish(msg);
+        }
 
-        msg.latitude = state_manager_.getGPSState().latitude;
-        msg.longitude = state_manager_.getGPSState().longitude;
-        msg.satellites_used = state_manager_.getGPSState().satellites_used;
-        
-        // Publish
-        drone_state_pub_->publish(msg);
+        {
+            asr_comms::msg::TelemetryBattery msg{};
+            msg.timestamp       = battery.timestamp.seconds();
+            msg.voltage         = battery.voltage;
+            msg.current         = battery.average_current;
+            msg.percentage      = battery.charge_remaining;
+            msg.discharged_mah  = battery.discharged_mah;
+            msg.average_current = battery.average_current;
+            telemetry_battery_pub_->publish(msg);
+        }
+
+        {
+            asr_comms::msg::TelemetryGPS msg{};
+            msg.timestamp       = get_clock()->now().seconds();
+            msg.latitude        = gps.latitude;
+            msg.longitude       = gps.longitude;
+            msg.satellites_used = gps.satellites_used;
+            telemetry_gps_pub_->publish(msg);
+        }
+
+        {
+            asr_comms::msg::TelemetryStatus msg{};
+            msg.timestamp       = get_clock()->now().seconds();
+            msg.arming_state    = static_cast<uint8_t>(drone_state.arming_state);
+            msg.trajectory_mode = static_cast<uint8_t>(drone_state.trajectory_mode);
+            msg.flight_mode     = static_cast<int16_t>(drone_state.flight_mode);
+            msg.led_mode        = static_cast<int16_t>(drone_state.flight_mode_trait);
+            msg.flight_time     = drone_state.flight_time.seconds();
+            msg.probes_found    = state_manager_.getGlobalProbeLocations().getProbeCount();
+            msg.actuator_speeds = {static_cast<float>(actuators.x()),
+                                   static_cast<float>(actuators.y()),
+                                   static_cast<float>(actuators.z()),
+                                   static_cast<float>(actuators.w())};
+            telemetry_status_pub_->publish(msg);
+        }
     }
     // Offboard mode handling
     void setOffboardMode()
@@ -1340,7 +1342,7 @@ private:
 
     void publishAttitudeSetpointRollPitchYawThrust(const Eigen::Vector4d &input)
     {
-        interfaces::msg::AttitudeSetpointRPY msg{};
+        asr_comms::msg::AttitudeSetpointRPY msg{};
         msg.timestamp = get_time().nanoseconds() / 1000;
         // Some message definitions do not include a 'mode' field, so we skip assigning it
         msg.orientation = {
@@ -1778,26 +1780,30 @@ private:
 
     rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_pub_;
     rclcpp::Publisher<VehicleAttitudeSetpoint>::SharedPtr attitude_setpoint_pub_;
-    rclcpp::Publisher<interfaces::msg::AttitudeSetpointRPY>::SharedPtr attitude_setpoint_rpy_thrust_pub_;
+    rclcpp::Publisher<asr_comms::msg::AttitudeSetpointRPY>::SharedPtr attitude_setpoint_rpy_thrust_pub_;
 
     rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_pub_;
-    rclcpp::Publisher<interfaces::msg::DroneState>::SharedPtr drone_state_pub_;
+    rclcpp::Publisher<asr_comms::msg::TelemetryPosition>::SharedPtr telemetry_position_pub_;
+    rclcpp::Publisher<asr_comms::msg::TelemetryAttitude>::SharedPtr telemetry_attitude_pub_;
+    rclcpp::Publisher<asr_comms::msg::TelemetryBattery>::SharedPtr  telemetry_battery_pub_;
+    rclcpp::Publisher<asr_comms::msg::TelemetryGPS>::SharedPtr      telemetry_gps_pub_;
+    rclcpp::Publisher<asr_comms::msg::TelemetryStatus>::SharedPtr   telemetry_status_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr origin_offset_pub_;
     rclcpp::Publisher<px4_msgs::msg::ActuatorServos>::SharedPtr actuator_servos_pub_;
     rclcpp::Publisher<px4_msgs::msg::ActuatorTest>::SharedPtr actuator_test_pub_;
 
-    rclcpp::Subscription<interfaces::msg::GcsHeartbeat>::SharedPtr gcs_heartbeat_sub_;
-    rclcpp::Subscription<interfaces::msg::MotionCapturePose>::SharedPtr motion_capture_local_position_sub_;
+    rclcpp::Subscription<asr_comms::msg::GcsHeartbeat>::SharedPtr gcs_heartbeat_sub_;
+    rclcpp::Subscription<asr_comms::msg::MotionCapturePose>::SharedPtr motion_capture_local_position_sub_;
     rclcpp::Subscription<VehicleLocalPosition>::SharedPtr local_position_sub_;
     rclcpp::Subscription<VehicleAttitude>::SharedPtr attitude_sub_;
     rclcpp::Subscription<VehicleStatus>::SharedPtr status_sub_;
-    rclcpp::Subscription<interfaces::msg::ManualControlInput>::SharedPtr manual_input_sub_;
+    rclcpp::Subscription<asr_comms::msg::ManualControlInput>::SharedPtr manual_input_sub_;
     rclcpp::Subscription<BatteryStatus>::SharedPtr battery_status_sub_;
     rclcpp::Subscription<DistanceSensor>::SharedPtr ground_distance_sub_;
     rclcpp::Subscription<ActuatorOutputs>::SharedPtr actuator_output_sub_;
-    rclcpp::Subscription<interfaces::msg::ProbeGlobalLocations>::SharedPtr probe_global_locations_sub_;
+    rclcpp::Subscription<asr_comms::msg::ProbeGlobalLocations>::SharedPtr probe_global_locations_sub_;
     rclcpp::Subscription<SensorGps>::SharedPtr gps_sub_;
-    rclcpp::Subscription<interfaces::msg::ServoCommand>::SharedPtr servo_command_sub_;
+    rclcpp::Subscription<asr_comms::msg::ServoCommand>::SharedPtr servo_command_sub_;
 
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;

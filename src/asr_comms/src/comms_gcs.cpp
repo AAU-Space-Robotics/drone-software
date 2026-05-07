@@ -3,7 +3,7 @@
 #include "udp_socket.h"
 
 #include <chrono>
-#include <cmath>
+#include <cstring>
 #include <glob.h>
 #include <stdexcept>
 #include <rclcpp/rclcpp.hpp>
@@ -29,13 +29,12 @@ static std::string auto_detect_serial()
     throw std::runtime_error("No serial radio found — is the USB radio module plugged in?");
 }
 
-CommsGcs::CommsGcs()
-: Node("comms_gcs")
+CommsGcs::CommsGcs() : Node("comms_gcs")
 {
     declare_parameter("bind_port",    static_cast<int>(DEFAULT_BIND_PORT));
     declare_parameter("target_ip",    DEFAULT_TARGET_IP);
     declare_parameter("target_port",  static_cast<int>(DEFAULT_TARGET_PORT));
-    declare_parameter("serial_port",  std::string{});   // e.g. "/dev/ttyUSB0" or "auto"
+    declare_parameter("serial_port",  std::string{});
     declare_parameter("baud_rate",    57600);
     declare_parameter("system_id",    static_cast<int>(system_id_));
     declare_parameter("component_id", static_cast<int>(component_id_));
@@ -58,14 +57,13 @@ CommsGcs::CommsGcs()
                     bind_port, target_ip.c_str(), target_port);
     }
 
-    // Publishers (incoming from UAV)
+    // Publishers — incoming telemetry from UAV
     uav_heartbeat_pub_ = create_publisher<std_msgs::msg::Bool>("/comms/uav_heartbeat", 10);
-    drone_state_pub_   = create_publisher<interfaces::msg::DroneState>("/comms/drone_state", 10);
-
-    // Pre-allocate sequence fields so the message is always fully populated
-    latest_drone_state_.position.resize(3, 0.0f);
-    latest_drone_state_.velocity.resize(3, 0.0f);
-    latest_drone_state_.orientation.resize(3, 0.0f);
+    position_pub_ = create_publisher<asr_comms::msg::TelemetryPosition>("/comms/telemetry/position", 10);
+    attitude_pub_ = create_publisher<asr_comms::msg::TelemetryAttitude>("/comms/telemetry/attitude", 10);
+    battery_pub_  = create_publisher<asr_comms::msg::TelemetryBattery>( "/comms/telemetry/battery",  10);
+    gps_pub_      = create_publisher<asr_comms::msg::TelemetryGPS>(     "/comms/telemetry/gps",      10);
+    status_pub_   = create_publisher<asr_comms::msg::TelemetryStatus>(  "/comms/telemetry/status",   10);
 
     // Send side
     heartbeat_timer_ = create_wall_timer(1s, std::bind(&CommsGcs::send_heartbeat, this));
@@ -116,18 +114,16 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
         break;
     }
 
-    case MAVLINK_MSG_ID_GLOBAL_POSITION_INT: {
-        mavlink_global_position_int_t p{};
-        mavlink_msg_global_position_int_decode(&msg, &p);
+    case MAVLINK_MSG_ID_LOCAL_POSITION_NED: {
+        mavlink_local_position_ned_t p{};
+        mavlink_msg_local_position_ned_decode(&msg, &p);
 
-        latest_drone_state_.timestamp   = get_clock()->now().seconds();
-        latest_drone_state_.latitude    = p.lat / 1e7;
-        latest_drone_state_.longitude   = p.lon / 1e7;
-        latest_drone_state_.position[2] = p.alt  / 1e3f;
-        latest_drone_state_.velocity[0] = p.vx   / 100.0f;
-        latest_drone_state_.velocity[1] = p.vy   / 100.0f;
-        latest_drone_state_.velocity[2] = p.vz   / 100.0f;
-        drone_state_pub_->publish(latest_drone_state_);
+        asr_comms::msg::TelemetryPosition out{};
+        out.timestamp    = p.time_boot_ms / 1e3;
+        out.position     = {p.x, p.y, p.z};
+        out.velocity     = {p.vx, p.vy, p.vz};
+        // target_position not carried in LOCAL_POSITION_NED — left at default zero
+        position_pub_->publish(out);
         break;
     }
 
@@ -135,11 +131,10 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
         mavlink_attitude_t a{};
         mavlink_msg_attitude_decode(&msg, &a);
 
-        latest_drone_state_.timestamp      = get_clock()->now().seconds();
-        latest_drone_state_.orientation[0] = a.yaw;
-        latest_drone_state_.orientation[1] = a.pitch;
-        latest_drone_state_.orientation[2] = a.roll;
-        drone_state_pub_->publish(latest_drone_state_);
+        asr_comms::msg::TelemetryAttitude out{};
+        out.timestamp   = a.time_boot_ms / 1e3;
+        out.orientation = {a.roll, a.pitch, a.yaw};
+        attitude_pub_->publish(out);
         break;
     }
 
@@ -147,12 +142,63 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
         mavlink_battery_status_t b{};
         mavlink_msg_battery_status_decode(&msg, &b);
 
-        latest_drone_state_.timestamp              = get_clock()->now().seconds();
-        latest_drone_state_.battery_voltage        = b.voltages[0] / 1000.0f;
-        latest_drone_state_.battery_current        = b.current_battery / 100.0f;
-        latest_drone_state_.battery_discharged_mah = static_cast<float>(b.current_consumed);
-        latest_drone_state_.battery_percentage     = static_cast<float>(b.battery_remaining);
-        drone_state_pub_->publish(latest_drone_state_);
+        asr_comms::msg::TelemetryBattery out{};
+        out.timestamp      = get_clock()->now().seconds();
+        out.voltage        = b.voltages[0] / 1000.0f;
+        out.current        = b.current_battery / 100.0f;
+        out.percentage     = static_cast<float>(b.battery_remaining);
+        out.discharged_mah = static_cast<float>(b.current_consumed);
+        battery_pub_->publish(out);
+        break;
+    }
+
+    case MAVLINK_MSG_ID_GPS_RAW_INT: {
+        mavlink_gps_raw_int_t g{};
+        mavlink_msg_gps_raw_int_decode(&msg, &g);
+
+        asr_comms::msg::TelemetryGPS out{};
+        out.timestamp       = g.time_usec / 1e6;
+        out.latitude        = g.lat / 1e7;
+        out.longitude       = g.lon / 1e7;
+        out.satellites_used = static_cast<int32_t>(g.satellites_visible);
+        gps_pub_->publish(out);
+        break;
+    }
+
+    case MAVLINK_MSG_ID_V2_EXTENSION: {
+        mavlink_v2_extension_t ext{};
+        mavlink_msg_v2_extension_decode(&msg, &ext);
+        if (ext.message_type != ASR_MSG_TELEMETRY_STATUS) break;
+
+#pragma pack(push, 1)
+        struct StatusPod {
+            double   timestamp;
+            double   flight_time;
+            float    actuator_speeds[4];
+            int32_t  probes_found;
+            int16_t  flight_mode;
+            int16_t  led_mode;
+            uint8_t  arming_state;
+            uint8_t  trajectory_mode;
+            uint8_t  estop;
+        };
+#pragma pack(pop)
+
+        StatusPod pod{};
+        std::memcpy(&pod, ext.payload, sizeof(pod));
+
+        asr_comms::msg::TelemetryStatus out{};
+        out.timestamp       = pod.timestamp;
+        out.flight_time     = pod.flight_time;
+        out.probes_found    = pod.probes_found;
+        out.flight_mode     = pod.flight_mode;
+        out.led_mode        = pod.led_mode;
+        out.arming_state    = pod.arming_state;
+        out.trajectory_mode = pod.trajectory_mode;
+        out.estop           = pod.estop;
+        out.actuator_speeds = {pod.actuator_speeds[0], pod.actuator_speeds[1],
+                               pod.actuator_speeds[2], pod.actuator_speeds[3]};
+        status_pub_->publish(out);
         break;
     }
 
@@ -181,12 +227,11 @@ void CommsGcs::send_heartbeat()
 
 void CommsGcs::send_rtcm(const std_msgs::msg::UInt8MultiArray::SharedPtr msg)
 {
-    const auto& data  = msg->data;
+    const auto& data   = msg->data;
     const size_t total = data.size();
     if (total == 0) return;
 
     if (total <= 180) {
-        // Fits in a single unfragmented packet (flags = 0)
         uint8_t payload[180]{};
         std::memcpy(payload, data.data(), total);
         mavlink_message_t mav{};
@@ -196,8 +241,8 @@ void CommsGcs::send_rtcm(const std_msgs::msg::UInt8MultiArray::SharedPtr msg)
         return;
     }
 
-    // Fragmented: up to 4 × 180-byte chunks per MAVLink GPS_RTCM_DATA.
-    // flags byte: bit 0 = 1 (fragmented), bits 1-2 = fragment index, bits 3-7 = sequence.
+    // Fragmented: up to 4 × 180-byte chunks.
+    // flags byte: bit0=fragmented, bits1-2=frag_idx, bits3-7=seq.
     const uint8_t seq = rtcm_seq_++ & 0x1F;
     size_t  offset   = 0;
     uint8_t frag_idx = 0;

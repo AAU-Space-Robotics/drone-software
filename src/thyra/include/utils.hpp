@@ -1,7 +1,7 @@
 #pragma once
 #include <Eigen/Dense>
 #include <geometry_msgs/msg/pose_stamped.hpp>
-#include <interfaces/msg/drone_state.hpp>
+#include <asr_comms/msg/telemetry_status.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 
 

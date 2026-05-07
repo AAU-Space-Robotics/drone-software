@@ -35,39 +35,29 @@ ament_target_dependencies(lidar
   px4_msgs
 )
 
-# Radio
-add_executable(radio_sender src/radio_sender.cpp)
-ament_target_dependencies(radio_sender rclcpp std_msgs serial_driver diagnostic_msgs)
-
-add_executable(radio_receiver src/radio_receiver.cpp)
-ament_target_dependencies(radio_receiver rclcpp std_msgs serial_driver diagnostic_msgs)
-
-# Base Station Configurator
-add_executable(base_station_config src/base_station_config.cpp)
-ament_target_dependencies(base_station_config rclcpp std_msgs serial_driver diagnostic_msgs)
-
-# RTK Base Station Node
-add_executable(rtk_base_station src/rtk_base_station.cpp)
-ament_target_dependencies(rtk_base_station rclcpp std_msgs serial_driver)
-
 # Install C++ executables
 install(TARGETS
   lidar
-  radio_sender
-  radio_receiver
-  base_station_config
-  rtk_base_station
   DESTINATION lib/${PROJECT_NAME}
 )
 
 install(PROGRAMS
-  script/image_republisher.py
-  script/image_republisher_pose.py
-  script/px4_to_cam.py
-  script/static_rgbd_test_node.py
-  script/probe_republisher.py
-  script/LED.py
-  script/rtcm_reader.py
+  script/camera/image_republisher.py
+  script/camera/image_republisher_pose.py
+  script/camera/px4_to_cam.py
+  script/camera/static_rgbd_test_node.py
+  script/camera/probe_republisher.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  script/led/LED.py
+  script/led/status_led.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  script/rtk_base/rtcm_reader.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

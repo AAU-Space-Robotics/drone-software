@@ -12,7 +12,7 @@
   
   <depend>rclcpp</depend>
   <depend>rclpy</depend>
-  <depend>interfaces</depend>
+  <depend>asr_comms</depend>
   <depend>px4_msgs</depend>
   <depend>serial</depend>
 

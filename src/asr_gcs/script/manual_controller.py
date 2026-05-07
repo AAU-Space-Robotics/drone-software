@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from interfaces.msg import ManualControlInput
+from asr_comms.msg import ManualControlInput
 import pygame
 
 class ManualController(Node):

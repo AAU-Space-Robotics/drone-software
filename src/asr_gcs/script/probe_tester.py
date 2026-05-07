@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from interfaces.msg import ProbeGlobalLocations  # Ensure this matches your package
+from asr_comms.msg import ProbeGlobalLocations  # Ensure this matches your package
 from builtin_interfaces.msg import Time
 
 class DummyProbeGlobalPublisher(Node):

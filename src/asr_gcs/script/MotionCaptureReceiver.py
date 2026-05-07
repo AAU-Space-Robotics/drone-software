@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from interfaces.msg import MotionCapturePose
+from asr_comms.msg import MotionCapturePose
 import time
 import socket
 

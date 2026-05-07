@@ -7,7 +7,7 @@ import rclpy
 from rclpy.action import ActionServer
 from rclpy.node import Node
 
-from interfaces.action import SystemControl
+from asr_comms.action import SystemControl
 
 
 class SystemManagerNode(Node):

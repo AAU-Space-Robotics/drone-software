@@ -3,21 +3,24 @@
 #include <array>
 #include <atomic>
 #include <cstring>
-#include <mutex>
 #include <thread>
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <px4_msgs/msg/gps_inject_data.hpp>
-#include <interfaces/msg/drone_state.hpp>
+#include <asr_comms/msg/telemetry_position.hpp>
+#include <asr_comms/msg/telemetry_attitude.hpp>
+#include <asr_comms/msg/telemetry_battery.hpp>
+#include <asr_comms/msg/telemetry_gps.hpp>
+#include <asr_comms/msg/telemetry_status.hpp>
 
 #include "common/mavlink.h"
 #include "transport.h"
 
 // Runs on the drone. Transport is either UDP or a serial SiK radio.
 // Receives from GCS: heartbeat, RTK corrections.
-// Sends to GCS:      heartbeat, DroneState (position, attitude, battery).
+// Sends to GCS:      heartbeat + telemetry (position, attitude, battery, GPS, status) at ≤10 Hz.
 class CommsUav : public rclcpp::Node {
 public:
     CommsUav();
@@ -33,22 +36,25 @@ private:
     // Send path
     void send_mavlink(mavlink_message_t& msg);
     void send_heartbeat();
-    void send_drone_state();
-    void on_drone_state(const interfaces::msg::DroneState::SharedPtr msg);
+    void on_position(const asr_comms::msg::TelemetryPosition::SharedPtr msg);
+    void on_attitude(const asr_comms::msg::TelemetryAttitude::SharedPtr msg);
+    void on_battery(const asr_comms::msg::TelemetryBattery::SharedPtr msg);
+    void on_gps(const asr_comms::msg::TelemetryGPS::SharedPtr msg);
+    void on_status(const asr_comms::msg::TelemetryStatus::SharedPtr msg);
 
     std::unique_ptr<ITransport> transport_;
 
     uint8_t system_id_   {1};
     uint8_t component_id_{1};
 
-    // Receive side — background thread + publishers
+    // Receive side
     std::thread       recv_thread_;
     std::atomic<bool> running_{true};
 
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr          heartbeat_pub_;
     rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr gps_inject_pub_;
 
-    // Fragment reassembly buffer — 32 sequence slots, 4 fragments each.
+    // Fragment reassembly buffer for incoming RTCM.
     // MAVLink GPS_RTCM_DATA flags: bit0=fragmented, bits1-2=frag_idx, bits3-7=seq.
     struct FragBuf {
         std::array<std::vector<uint8_t>, 4> frags;
@@ -66,12 +72,13 @@ private:
     std::array<FragBuf, 32> rtcm_frags_{};
 
     // Send side
-    interfaces::msg::DroneState latest_state_{};
-    std::mutex                  state_mutex_;
-    bool                        has_state_{false};
-
     rclcpp::TimerBase::SharedPtr heartbeat_timer_;
-    rclcpp::TimerBase::SharedPtr telemetry_timer_;
 
-    rclcpp::Subscription<interfaces::msg::DroneState>::SharedPtr drone_state_sub_;
+    rclcpp::Subscription<asr_comms::msg::TelemetryPosition>::SharedPtr position_sub_;
+    rclcpp::Subscription<asr_comms::msg::TelemetryAttitude>::SharedPtr attitude_sub_;
+    rclcpp::Subscription<asr_comms::msg::TelemetryBattery>::SharedPtr  battery_sub_;
+    rclcpp::Subscription<asr_comms::msg::TelemetryGPS>::SharedPtr      gps_sub_;
+    rclcpp::Subscription<asr_comms::msg::TelemetryStatus>::SharedPtr   status_sub_;
+
+    static constexpr uint16_t ASR_MSG_TELEMETRY_STATUS = 0x9001u;
 };

@@ -4,7 +4,7 @@ import math
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-from interfaces.msg import ServoCommand
+from asr_comms.msg import ServoCommand
 
 
 class GimbalPitchSweep(Node):

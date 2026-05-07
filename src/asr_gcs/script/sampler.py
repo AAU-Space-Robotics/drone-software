@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from px4_msgs.msg import VehicleLocalPosition #subscription for px4 local vehicle 
-from interfaces.msg import DroneState
+from asr_comms.msg import TelemetryPosition
 import time
 import math
 import numpy as np
@@ -37,8 +37,8 @@ class DroneSamplerNode(Node):
             qos
         )
         self.state_subscription = self.create_subscription(
-            DroneState,
-            "thyra/out/drone_state",
+            TelemetryPosition,
+            "thyra/out/telemetry/position",
             self.state_callback,
             10
         )
@@ -59,7 +59,6 @@ class DroneSamplerNode(Node):
    
 
     def state_callback(self, msg):
-        self.flight_time = msg.flight_time
         if len(msg.position) >= 3:
             new_measurement = np.array([[msg.position[0]],
                                          [msg.position[1]],

@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
-from interfaces.msg import DroneState
+from asr_comms.msg import TelemetryStatus
 import serial
 from std_msgs.msg import Int16
 led_mode = 0
@@ -18,8 +18,8 @@ class DroneLEDNode(Node):
         self.ser = serial.Serial( '/dev/ttyACM0', 9600, timeout=1)
         self.led_mode = 0
         self.subscription = self.create_subscription(
-            DroneState,
-            "thyra/out/drone_state",
+            TelemetryStatus,
+            "thyra/out/telemetry/status",
             self.state_callback,
             10
         )

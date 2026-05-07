@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from interfaces.msg import GcsHeartbeat
+from asr_comms.msg import GcsHeartbeat
 import time
 
 class GcsHeartbeatPublisher(Node):

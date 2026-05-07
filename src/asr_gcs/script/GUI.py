@@ -17,11 +17,11 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 import threading
 from threading import Thread
-from interfaces.msg import DroneState
-from interfaces.msg import GcsHeartbeat
-from interfaces.msg import ServoCommand
-from interfaces.msg import ProbeGlobalLocations
-from interfaces.action import DroneCommand
+from asr_comms.msg import TelemetryPosition, TelemetryAttitude, TelemetryBattery, TelemetryGPS, TelemetryStatus
+from asr_comms.msg import GcsHeartbeat
+from asr_comms.msg import ServoCommand
+from asr_comms.msg import ProbeGlobalLocations
+from asr_comms.action import DroneCommand
 from dataclasses import dataclass
 from decimal import Decimal
 import os
@@ -29,7 +29,7 @@ import ament_index_python.packages
 
 import rclpy
 from rclpy.node import Node
-from interfaces.msg import ManualControlInput
+from asr_comms.msg import ManualControlInput
 import pygame
 from datetime import datetime
 from collections import deque
@@ -287,12 +287,35 @@ class DroneGuiNode(Node):
         )
         
         super().__init__('thyra_gui_node')
-        self.subscription = self.create_subscription(
-            DroneState,
-            "/asr/thyra/out/drone_state",
-            self.state_callback,
+        self.position_sub = self.create_subscription(
+            TelemetryPosition,
+            "/asr/thyra/out/telemetry/position",
+            self.position_callback,
             10
-            
+        )
+        self.attitude_sub = self.create_subscription(
+            TelemetryAttitude,
+            "/asr/thyra/out/telemetry/attitude",
+            self.attitude_callback,
+            10
+        )
+        self.battery_sub = self.create_subscription(
+            TelemetryBattery,
+            "/asr/thyra/out/telemetry/battery",
+            self.battery_callback,
+            10
+        )
+        self.gps_sub = self.create_subscription(
+            TelemetryGPS,
+            "/asr/thyra/out/telemetry/gps",
+            self.gps_callback,
+            10
+        )
+        self.status_sub = self.create_subscription(
+            TelemetryStatus,
+            "/asr/thyra/out/telemetry/status",
+            self.status_callback,
+            10
         )
         
         self.subscription = self.create_subscription(
@@ -351,79 +374,75 @@ class DroneGuiNode(Node):
             
 
 
-    def state_callback(self, msg):
+    def position_callback(self, msg):
         global position_x, position_y, position_z, position_timestamp
         global target_position_x, target_position_y, target_position_z
-        global roll, pitch, yaw_velocity
         global velocity_x, velocity_y, velocity_z, velocity_timestamp
-        global battery_voltage, battery_state_timestamp, battery_current, battery_percentage, battery_discharge_rate, battery_average_current
-        global arming_state, flight_mode, takeoff_time, flight_time, trajectory_mode
-        global GUI_console_logs
-        global actuator_speed
-        global longitude, latitude, satellites_used
 
-
-        if hasattr(self, 'last_arming_state') and self.last_arming_state != msg.arming_state:
-            self.imgui_logger.warn(f"Arming state changed: {self.last_arming_state} -> {msg.arming_state}")
-        
-        if hasattr(self, 'last_flight_mode') and self.last_flight_mode != msg.flight_mode:
-            self.imgui_logger.warn(f"Flight mode changed: {self.last_flight_mode} -> {msg.flight_mode}")
-        
-        # Store previous states
-        self.last_arming_state = msg.arming_state
-        self.last_flight_mode = msg.flight_mode
-
-
-        position_timestamp = msg.position_timestamp
+        position_timestamp = msg.timestamp
         if len(msg.position) >= 3:
- 
             position_x = msg.position[0]
             position_y = msg.position[1]
             position_z = msg.position[2]
-        velocity_timestamp = msg.velocity_timestamp
-
         if len(msg.velocity) >= 3:
             velocity_x = msg.velocity[0]
             velocity_y = msg.velocity[1]
             velocity_z = msg.velocity[2]
-        if len(msg.orientation) >= 3:
-            roll = msg.orientation[0]
-            pitch = msg.orientation[1]
-            yaw_velocity = msg.orientation[2]
         if len(msg.target_position) >= 3:
             target_position_x = msg.target_position[0]
             target_position_y = msg.target_position[1]
             target_position_z = msg.target_position[2]
 
-        battery_state_timestamp = msg.battery_state_timestamp
-        battery_voltage = msg.battery_voltage
-        battery_current = msg.battery_current
-        battery_percentage = msg.battery_percentage
-        battery_discharge_rate = msg.battery_discharged_mah
-        battery_average_current = msg.battery_average_current
+    def attitude_callback(self, msg):
+        global roll, pitch, yaw_velocity
 
-        if len(msg.actuator_speeds) >= 4:
-            actuator_speeds[0] = msg.actuator_speeds[0]  
-            actuator_speeds[1] = msg.actuator_speeds[1]  
-            actuator_speeds[2] = msg.actuator_speeds[2]  
-            actuator_speeds[3] = msg.actuator_speeds[3]  
-       
+        if len(msg.orientation) >= 3:
+            roll = msg.orientation[0]
+            pitch = msg.orientation[1]
+            yaw_velocity = msg.orientation[2]
 
+    def battery_callback(self, msg):
+        global battery_voltage, battery_state_timestamp, battery_current, battery_percentage, battery_discharge_rate, battery_average_current
 
+        battery_state_timestamp = msg.timestamp
+        battery_voltage = msg.voltage
+        battery_current = msg.current
+        battery_percentage = msg.percentage
+        battery_discharge_rate = msg.discharged_mah
+        battery_average_current = msg.average_current
 
-        arming_state = msg.arming_state
+    def gps_callback(self, msg):
+        global longitude, latitude, satellites_used
 
-        trajectory_mode = msg.trajectory_mode
-
-        longitude = msg.longitude
         latitude = msg.latitude
+        longitude = msg.longitude
         satellites_used = msg.satellites_used
 
-        flight_mode = msg.flight_mode
-        GUI_console_logs[0] = str(self.get_logger())
+    def status_callback(self, msg):
+        global arming_state, flight_mode, flight_time, trajectory_mode
+        global GUI_console_logs
+        global actuator_speeds
 
+        if hasattr(self, 'last_arming_state') and self.last_arming_state != msg.arming_state:
+            self.imgui_logger.warn(f"Arming state changed: {self.last_arming_state} -> {msg.arming_state}")
+        if hasattr(self, 'last_flight_mode') and self.last_flight_mode != msg.flight_mode:
+            self.imgui_logger.warn(f"Flight mode changed: {self.last_flight_mode} -> {msg.flight_mode}")
+
+        self.last_arming_state = msg.arming_state
+        self.last_flight_mode = msg.flight_mode
+
+        arming_state = msg.arming_state
+        flight_mode = msg.flight_mode
+        trajectory_mode = msg.trajectory_mode
         flight_time = msg.flight_time
 
+        if len(msg.actuator_speeds) >= 4:
+            actuator_speeds[0] = msg.actuator_speeds[0]
+            actuator_speeds[1] = msg.actuator_speeds[1]
+            actuator_speeds[2] = msg.actuator_speeds[2]
+            actuator_speeds[3] = msg.actuator_speeds[3]
+
+        GUI_console_logs[0] = str(self.get_logger())
     def probe_callback(self, msg):
         global probes
         global probe_numb, probe_classification

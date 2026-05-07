@@ -18,7 +18,7 @@
   <depend>rclpy</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
-  <depend>interfaces</depend>
+  <depend>asr_comms</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
   

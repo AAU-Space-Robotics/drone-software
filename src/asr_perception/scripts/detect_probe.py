@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy, QoSHistoryPolicy
 from sensor_msgs.msg import Image, CompressedImage
-from interfaces.msg import ProbeLocations, ProbeGlobalLocations
+from asr_comms.msg import ProbeLocations, ProbeGlobalLocations
 from geometry_msgs.msg import PoseStamped
 from cv_bridge import CvBridge, CvBridgeError
 from ultralytics import YOLO

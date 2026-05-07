@@ -6,14 +6,14 @@
 #include <rcutils/logging.h>
 
 
-#include <interfaces/action/drone_command.hpp>
-#include <interfaces/msg/manual_control_input.hpp>
-#include <interfaces/msg/motion_capture_pose.hpp>
-#include <interfaces/msg/drone_state.hpp>
-#include <interfaces/msg/drone_scope.hpp>
-#include <interfaces/msg/gcs_heartbeat.hpp>
-#include <interfaces/msg/probe_global_locations.hpp>
-#include <interfaces/msg/attitude_setpoint_rpy.hpp>
+#include <asr_comms/action/drone_command.hpp>
+#include <asr_comms/msg/manual_control_input.hpp>
+#include <asr_comms/msg/motion_capture_pose.hpp>
+#include <asr_comms/msg/telemetry_status.hpp>
+#include <asr_comms/msg/drone_scope.hpp>
+#include <asr_comms/msg/gcs_heartbeat.hpp>
+#include <asr_comms/msg/probe_global_locations.hpp>
+#include <asr_comms/msg/attitude_setpoint_rpy.hpp>
 #include <opencv2/opencv.hpp>
 #include <opencv2/objdetect/objdetect.hpp>
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -25,7 +25,7 @@
 class ThyraMissionExecutor : public rclcpp::Node
 {
 public:
-    using DroneCommand = interfaces::action::DroneCommand;
+    using DroneCommand = asr_comms::action::DroneCommand;
     using GoalHandleDroneCommand = rclcpp_action::ServerGoalHandle<DroneCommand>;
 
 
@@ -68,9 +68,9 @@ public:
 
         
         // Subscribers
-        sub_state = create_subscription<interfaces::msg::DroneState>(
-            "/asr/thyra/out/drone_state", qos,
-            [this](const interfaces::msg::DroneState::SharedPtr msg)
+        sub_state = create_subscription<asr_comms::msg::TelemetryStatus>(
+            "/asr/thyra/out/telemetry/status", qos,
+            [this](const asr_comms::msg::TelemetryStatus::SharedPtr msg)
             { droneStateCallback(msg); }
         );
         sub_RGB_image = create_subscription<sensor_msgs::msg::CompressedImage>(
@@ -106,11 +106,10 @@ public:
         }
 private:
 
-    void droneStateCallback(const interfaces::msg::DroneState::SharedPtr msg)
+    void droneStateCallback(const asr_comms::msg::TelemetryStatus::SharedPtr msg)
     {
-        // Process drone state message
         last_drone_state = msg;
-        RCLCPP_INFO(get_logger(), "Received drone state message: arming_state=%d, flight_mode=%d", msg->arming_state, msg->flight_mode);
+        RCLCPP_INFO(get_logger(), "Received status: arming_state=%d, flight_mode=%d", msg->arming_state, msg->flight_mode);
     }
     void RGBCallback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr msg)
     {
@@ -149,14 +148,14 @@ private:
 
     std::shared_ptr<rclcpp::Clock> clock_;
 
-    rclcpp::Subscription<interfaces::msg::DroneState>::SharedPtr sub_state;
+    rclcpp::Subscription<asr_comms::msg::TelemetryStatus>::SharedPtr sub_state;
     rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr sub_RGB_image;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_pose_synced;
 
     rclcpp_action::Server<DroneCommand>::SharedPtr drone_command_server_;
 
 
-    interfaces::msg::DroneState::SharedPtr last_drone_state;
+    asr_comms::msg::TelemetryStatus::SharedPtr last_drone_state;
     sensor_msgs::msg::CompressedImage::ConstSharedPtr last_RGB_image;
     geometry_msgs::msg::PoseStamped::SharedPtr last_pose_synced;
 

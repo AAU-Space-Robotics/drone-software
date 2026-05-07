@@ -11,7 +11,7 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(interfaces REQUIRED)
+find_package(asr_comms REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -60,7 +60,7 @@ target_link_libraries(thyra_lib
 )
 
 ament_target_dependencies(thyra_lib
-  interfaces
+  asr_comms
   geometry_msgs
 )
 
@@ -91,7 +91,7 @@ ament_target_dependencies(thyra_mission_executor
   rclcpp_action
   std_msgs
   geometry_msgs
-  interfaces
+  asr_comms
   cv_bridge
 )
 

@@ -18,7 +18,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(px4_msgs REQUIRED)
-find_package(interfaces REQUIRED)
+find_package(asr_comms REQUIRED)
 
 # Include directories
 include_directories(include)
@@ -30,7 +30,7 @@ add_executable(asr_autopilot src/main.cpp src/controller.cpp src/state_manager.c
 ament_target_dependencies(asr_autopilot
   rclcpp
   rclcpp_action
-  interfaces
+  asr_comms
   px4_msgs
 )
 

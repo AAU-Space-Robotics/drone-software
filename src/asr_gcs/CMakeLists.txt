@@ -14,7 +14,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(interfaces REQUIRED)
+find_package(asr_comms REQUIRED)
 
 # Fetch Dear ImGui, GLFW, ImPlot, and tinyxml2 using FetchContent
 include(FetchContent)
@@ -111,7 +111,7 @@ target_link_libraries(asr_gcs_node
 ament_target_dependencies(asr_gcs_node
   rclcpp
   std_msgs
-  interfaces
+  asr_comms
 )
 
 # Install the executable
