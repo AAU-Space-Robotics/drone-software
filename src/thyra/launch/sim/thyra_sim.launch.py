@@ -76,7 +76,16 @@ def generate_launch_description():
             output='log',
         ),
         
-      
+        # MAVLink bridge — UAV side (UDP loopback to comms_gcs)
+        Node(
+            package='asr_comms',
+            executable='comms_uav',
+            name='comms_uav',
+            namespace='asr/thyra',
+            output='screen',
+            # No serial_port → UDP mode: binds :14551, sends to 127.0.0.1:14550
+        ),
+
         # Delay and launch FlightControllerInterface node
         TimerAction(
             period=20.0,  # Delay in seconds
