@@ -87,6 +87,9 @@ CommsUav::CommsUav()
         "out/telemetry/status", 10,
         std::bind(&CommsUav::on_status, this, std::placeholders::_1));
 
+    // Action client — forwards COMMAND_LONG from GCS to the autopilot action server
+    action_client_ = rclcpp_action::create_client<DroneCommand>(this, "in/drone_command");
+
     recv_thread_ = std::thread(&CommsUav::recv_loop, this);
 }
 
@@ -136,9 +139,110 @@ void CommsUav::handle_message(const mavlink_message_t& msg)
         break;
     }
 
+    case MAVLINK_MSG_ID_COMMAND_LONG: {
+        mavlink_command_long_t cmd{};
+        mavlink_msg_command_long_decode(&msg, &cmd);
+        forward_command(cmd);
+        break;
+    }
+
     default:
         break;
     }
+}
+
+void CommsUav::forward_command(const mavlink_command_long_t& cmd)
+{
+    DroneCommand::Goal goal{};
+
+    switch (cmd.command) {
+    case MAV_CMD_COMPONENT_ARM_DISARM:
+        if (cmd.param2 > 20000.0f)  goal.command_type = "estop";
+        else if (cmd.param1 > 0.5f) goal.command_type = "arm";
+        else                         goal.command_type = "disarm";
+        break;
+    case MAV_CMD_NAV_LAND:
+        goal.command_type = "land";
+        break;
+    case MAV_CMD_NAV_TAKEOFF:
+        goal.command_type = "takeoff";
+        goal.target_pose  = {static_cast<double>(cmd.param7)};
+        break;
+    case ASR_CMD_GOTO:
+        goal.command_type = "goto";
+        goal.target_pose  = {static_cast<double>(cmd.param1),
+                              static_cast<double>(cmd.param2),
+                              static_cast<double>(cmd.param3)};
+        goal.yaw = static_cast<double>(cmd.param4);
+        break;
+    case ASR_CMD_MANUAL:        goal.command_type = "manual";        break;
+    case ASR_CMD_MANUAL_AIDED:  goal.command_type = "manual_aided";  break;
+    case ASR_CMD_SET_ORIGIN:    goal.command_type = "set_origin";    break;
+    case ASR_CMD_ELAND:         goal.command_type = "eland";         break;
+    case ASR_CMD_SET_LINEAR_SPEED:
+        goal.command_type = "set_linear_speed";
+        goal.target_pose  = {static_cast<double>(cmd.param1)};
+        break;
+    case ASR_CMD_SET_ANGULAR_SPEED:
+        goal.command_type = "set_angular_speed";
+        goal.target_pose  = {static_cast<double>(cmd.param1)};
+        break;
+    case ASR_CMD_SPIN:
+        goal.command_type = "spin";
+        goal.target_pose  = {static_cast<double>(cmd.param1),
+                              static_cast<double>(cmd.param2),
+                              static_cast<double>(cmd.param3)};
+        break;
+    case ASR_CMD_VELOCITY:
+        goal.command_type = "velocity";
+        goal.target_pose  = {static_cast<double>(cmd.param1)};
+        break;
+    case ASR_CMD_MULTI_WAYPOINT:
+        goal.command_type = "test_multi_waypoint";
+        break;
+    default:
+        RCLCPP_WARN(get_logger(), "Ignoring unknown COMMAND_LONG id %u", cmd.command);
+        return;
+    }
+
+    if (!action_client_->action_server_is_ready()) {
+        RCLCPP_WARN(get_logger(), "Autopilot action server not ready — dropping command '%s'",
+                    goal.command_type.c_str());
+        mavlink_message_t mav{};
+        mavlink_msg_command_ack_pack(system_id_, component_id_, &mav,
+            cmd.command, MAV_RESULT_TEMPORARILY_REJECTED, 255, 0, 0, 0);
+        send_mavlink(mav);
+        return;
+    }
+
+    const uint16_t cmd_id = cmd.command;
+    auto opts = rclcpp_action::Client<DroneCommand>::SendGoalOptions{};
+
+    opts.goal_response_callback = [this, cmd_id](const GoalHandleDroneCmd::SharedPtr& handle) {
+        if (!handle) {
+            mavlink_message_t mav{};
+            mavlink_msg_command_ack_pack(system_id_, component_id_, &mav,
+                cmd_id, MAV_RESULT_DENIED, 255, 0, 0, 0);
+            send_mavlink(mav);
+        }
+    };
+
+    opts.result_callback = [this, cmd_id](const GoalHandleDroneCmd::WrappedResult& res) {
+        uint8_t mav_result;
+        if (res.code == rclcpp_action::ResultCode::SUCCEEDED && res.result->success)
+            mav_result = MAV_RESULT_ACCEPTED;
+        else if (res.code == rclcpp_action::ResultCode::CANCELED)
+            mav_result = MAV_RESULT_CANCELLED;
+        else
+            mav_result = MAV_RESULT_FAILED;
+
+        mavlink_message_t mav{};
+        mavlink_msg_command_ack_pack(system_id_, component_id_, &mav,
+            cmd_id, mav_result, 255, 0, 0, 0);
+        send_mavlink(mav);
+    };
+
+    action_client_->async_send_goal(goal, opts);
 }
 
 void CommsUav::handle_rtcm(const mavlink_gps_rtcm_data_t& rtcm)

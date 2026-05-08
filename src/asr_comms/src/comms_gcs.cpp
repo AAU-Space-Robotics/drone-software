@@ -64,6 +64,7 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     battery_pub_  = create_publisher<asr_comms::msg::TelemetryBattery>( "/comms/telemetry/battery",  10);
     gps_pub_      = create_publisher<asr_comms::msg::TelemetryGPS>(     "/comms/telemetry/gps",      10);
     status_pub_   = create_publisher<asr_comms::msg::TelemetryStatus>(  "/comms/telemetry/status",   10);
+    command_ack_pub_ = create_publisher<asr_comms::msg::CommandAck>("/comms/command_ack", 10);
 
     // Send side
     heartbeat_timer_ = create_wall_timer(1s, std::bind(&CommsGcs::send_heartbeat, this));
@@ -71,6 +72,10 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     rtcm_sub_ = create_subscription<std_msgs::msg::UInt8MultiArray>(
         "/rtcm", 10,
         std::bind(&CommsGcs::send_rtcm, this, std::placeholders::_1));
+
+    uav_command_sub_ = create_subscription<asr_comms::msg::UAVCommand>(
+        "/comms/in/uav_command", 10,
+        std::bind(&CommsGcs::on_uav_command, this, std::placeholders::_1));
 
     recv_thread_ = std::thread(&CommsGcs::recv_loop, this);
 }
@@ -202,6 +207,26 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
         break;
     }
 
+    case MAVLINK_MSG_ID_COMMAND_ACK: {
+        mavlink_command_ack_t ack{};
+        mavlink_msg_command_ack_decode(&msg, &ack);
+
+        static const char* result_strings[] = {
+            "accepted", "temporarily rejected", "denied",
+            "unsupported", "failed", "in progress", "cancelled"
+        };
+        const char* result_str = (ack.result < 7) ? result_strings[ack.result] : "unknown";
+
+        asr_comms::msg::CommandAck out{};
+        out.command_type = pending_command_type_;
+        out.result       = ack.result;
+        out.message      = std::string(pending_command_type_) + ": " + result_str;
+        command_ack_pub_->publish(out);
+        RCLCPP_INFO(get_logger(), "Command ack — '%s' %s",
+                    pending_command_type_.c_str(), result_str);
+        break;
+    }
+
     default:
         break;
     }
@@ -269,6 +294,49 @@ void CommsGcs::send_rtcm(const std_msgs::msg::UInt8MultiArray::SharedPtr msg)
         offset += chunk;
         ++frag_idx;
     }
+}
+
+void CommsGcs::on_uav_command(const asr_comms::msg::UAVCommand::SharedPtr msg)
+{
+    pending_command_type_ = msg->command_type;
+    const auto& cmd = msg->command_type;
+    mavlink_message_t mav{};
+
+    auto pack_long = [&](uint16_t command,
+                         float p1=0, float p2=0, float p3=0, float p4=0,
+                         float p5=0, float p6=0, float p7=0) {
+        mavlink_msg_command_long_pack(system_id_, component_id_, &mav,
+            1, 1, command, 0, p1, p2, p3, p4, p5, p6, p7);
+    };
+
+    const auto& tp = msg->target_pose;
+    auto p = [&](size_t i) -> float {
+        return (i < tp.size()) ? static_cast<float>(tp[i]) : 0.0f;
+    };
+
+    if      (cmd == "arm")    pack_long(MAV_CMD_COMPONENT_ARM_DISARM, 1.0f);
+    else if (cmd == "disarm") pack_long(MAV_CMD_COMPONENT_ARM_DISARM, 0.0f);
+    else if (cmd == "estop")  pack_long(MAV_CMD_COMPONENT_ARM_DISARM, 0.0f, 21196.0f);
+    else if (cmd == "land")   pack_long(MAV_CMD_NAV_LAND);
+    else if (cmd == "takeoff")       pack_long(MAV_CMD_NAV_TAKEOFF, 0,0,0,0,0,0, p(0));
+    else if (cmd == "goto")          pack_long(ASR_CMD_GOTO,        p(0), p(1), p(2),
+                                               static_cast<float>(msg->yaw));
+    else if (cmd == "manual")        pack_long(ASR_CMD_MANUAL);
+    else if (cmd == "manual_aided")  pack_long(ASR_CMD_MANUAL_AIDED);
+    else if (cmd == "set_origin")    pack_long(ASR_CMD_SET_ORIGIN);
+    else if (cmd == "eland")         pack_long(ASR_CMD_ELAND);
+    else if (cmd == "set_linear_speed")  pack_long(ASR_CMD_SET_LINEAR_SPEED,  p(0));
+    else if (cmd == "set_angular_speed") pack_long(ASR_CMD_SET_ANGULAR_SPEED, p(0));
+    else if (cmd == "spin")      pack_long(ASR_CMD_SPIN,         p(0), p(1), p(2));
+    else if (cmd == "velocity")  pack_long(ASR_CMD_VELOCITY,     p(0));
+    else if (cmd == "test_multi_waypoint") pack_long(ASR_CMD_MULTI_WAYPOINT);
+    else {
+        RCLCPP_WARN(get_logger(), "Unknown command_type: '%s'", cmd.c_str());
+        return;
+    }
+
+    send_mavlink(mav);
+    RCLCPP_INFO(get_logger(), "Sent command '%s' over MAVLink", cmd.c_str());
 }
 
 int main(int argc, char* argv[])

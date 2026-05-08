@@ -1,0 +1,3 @@
+string   command_type     # "arm", "disarm", "goto", "takeoff", "land", "estop", ...
+float64[] target_pose      # command-specific parameters (e.g. [x,y,z] for goto)
+float64  yaw               # yaw angle, used by goto and spin

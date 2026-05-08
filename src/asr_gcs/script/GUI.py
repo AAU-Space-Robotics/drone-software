@@ -13,15 +13,14 @@ from PIL import Image
 from OpenGL.GL import *
 
 import rclpy
-from rclpy.action import ActionClient
 from rclpy.node import Node
 import threading
 from threading import Thread
 from asr_comms.msg import TelemetryPosition, TelemetryAttitude, TelemetryBattery, TelemetryGPS, TelemetryStatus
 from asr_comms.msg import GcsHeartbeat
+from asr_comms.msg import UAVCommand, CommandAck
 from asr_comms.msg import ServoCommand
 from asr_comms.msg import ProbeGlobalLocations
-from asr_comms.action import DroneCommand
 from dataclasses import dataclass
 from decimal import Decimal
 import os
@@ -352,11 +351,10 @@ class DroneGuiNode(Node):
         self.counter = 0.0
         self.get_logger().info('GUI Publisher Started')
         self.imgui_logger = ImGuiLogger()
-        self.manual_control_publisher = self.create_publisher(ManualControlInput, '/asr/thyra/in/manual_input',qos)
-        self._action_client = ActionClient(self, DroneCommand, '/asr/thyra/in/drone_command')   
-        self.imgui_logger.info('DroneCommand client initialized, waiting for action server...')
-        self._action_client.wait_for_server()
-        self.goal_handle = None 
+        self.manual_control_publisher = self.create_publisher(ManualControlInput, '/asr/thyra/in/manual_input', qos)
+        self.command_pub = self.create_publisher(UAVCommand, '/comms/in/uav_command', 10)
+        self.command_ack_sub = self.create_subscription(
+            CommandAck, '/comms/command_ack', self.ack_callback, 10)
         self.log_filters = {
             'show_info': True,
             'show_warn': True,
@@ -478,47 +476,23 @@ class DroneGuiNode(Node):
 
 
     def send_command(self, command_type, target_pose=None, yaw=None):
-        goal_msg = DroneCommand.Goal()
-        goal_msg.command_type = command_type
+        msg = UAVCommand()
+        msg.command_type = command_type
         if target_pose is not None:
-            goal_msg.target_pose = target_pose
+            msg.target_pose = [float(v) for v in target_pose]
         if yaw is not None:
-            goal_msg.yaw = yaw
-        log_msg = f'Sending command: {command_type}, target_pose: {target_pose} yaw: {yaw}'
-        self.get_logger().info(log_msg)
-        #self.imgui_logger.info(log_msg)
-        future = self._action_client.send_goal_async(
-            goal_msg,
-            feedback_callback=self.feedback_callback
-        )
-        future.add_done_callback(self.goal_response_callback)
-    
-    def goal_response_callback(self, future):
-        self.goal_handle = future.result()
-        if not self.goal_handle.accepted:
-            msg = 'Goal was rejected by the server'
-            self.get_logger().warn(msg)
-            self.imgui_logger.warn(msg)
-            return
-        msg = 'Goal accepted by server, waiting for result...'
-        self.get_logger().info(msg)
-        self.imgui_logger.info(msg)
-        self.goal_handle.get_result_async().add_done_callback(self.result_callback)
+            msg.yaw = float(yaw)
+        self.command_pub.publish(msg)
+        self.imgui_logger.info(f'Sent: {command_type}  pose={target_pose}  yaw={yaw}')
 
-    def feedback_callback(self, feedback_msg):
-        msg = f'Feedback received: {feedback_msg.feedback}'
-        self.get_logger().info(msg)
-        self.imgui_logger.info(msg)
-
-    def result_callback(self, future):
-        result = future.result().result
-        msg = f'Action completed with result: success={result.success}, message={result.message}'
-        self.get_logger().info(msg)
-        if result.success:
-            self.imgui_logger.info(msg)
+    def ack_callback(self, msg):
+        result_labels = {0: 'ACCEPTED', 1: 'TEMP_REJECTED', 2: 'DENIED',
+                         3: 'UNSUPPORTED', 4: 'FAILED', 6: 'CANCELLED'}
+        label = result_labels.get(msg.result, 'UNKNOWN')
+        if msg.result == 0:
+            self.imgui_logger.info(f'ACK {label}: {msg.message}')
         else:
-            self.imgui_logger.error(msg)
-        self.goal_handle = None
+            self.imgui_logger.warn(f'ACK {label}: {msg.message}')
     def send_manual_control(self, roll, pitch, yaw_velocity_m, thrust):
         msg = ManualControlInput()
         msg.roll = float(roll)

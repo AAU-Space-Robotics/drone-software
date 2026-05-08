@@ -11,6 +11,8 @@
 #include <asr_comms/msg/telemetry_battery.hpp>
 #include <asr_comms/msg/telemetry_gps.hpp>
 #include <asr_comms/msg/telemetry_status.hpp>
+#include <asr_comms/msg/uav_command.hpp>
+#include <asr_comms/msg/command_ack.hpp>
 
 #include "common/mavlink.h"
 #include "transport.h"
@@ -32,6 +34,7 @@ private:
     void send_mavlink(mavlink_message_t& msg);
     void send_heartbeat();
     void send_rtcm(const std_msgs::msg::UInt8MultiArray::SharedPtr msg);
+    void on_uav_command(const asr_comms::msg::UAVCommand::SharedPtr msg);
 
     std::unique_ptr<ITransport> transport_;
 
@@ -52,7 +55,22 @@ private:
     // Send side
     rclcpp::TimerBase::SharedPtr heartbeat_timer_;
     rclcpp::Subscription<std_msgs::msg::UInt8MultiArray>::SharedPtr rtcm_sub_;
+    rclcpp::Subscription<asr_comms::msg::UAVCommand>::SharedPtr     uav_command_sub_;
+    rclcpp::Publisher<asr_comms::msg::CommandAck>::SharedPtr        command_ack_pub_;
     uint8_t rtcm_seq_{0};
+    std::string pending_command_type_;  // tracks last command sent for ack matching
 
     static constexpr uint16_t ASR_MSG_TELEMETRY_STATUS = 0x9001u;
+
+    // ASR custom MAVLink command IDs (local experiment range ≥ 32768)
+    static constexpr uint16_t ASR_CMD_GOTO              = 32768u;
+    static constexpr uint16_t ASR_CMD_MANUAL            = 32769u;
+    static constexpr uint16_t ASR_CMD_MANUAL_AIDED      = 32770u;
+    static constexpr uint16_t ASR_CMD_SET_ORIGIN        = 32771u;
+    static constexpr uint16_t ASR_CMD_SET_LINEAR_SPEED  = 32772u;
+    static constexpr uint16_t ASR_CMD_SET_ANGULAR_SPEED = 32773u;
+    static constexpr uint16_t ASR_CMD_SPIN              = 32774u;
+    static constexpr uint16_t ASR_CMD_ELAND             = 32775u;
+    static constexpr uint16_t ASR_CMD_VELOCITY          = 32776u;
+    static constexpr uint16_t ASR_CMD_MULTI_WAYPOINT    = 32777u;
 };

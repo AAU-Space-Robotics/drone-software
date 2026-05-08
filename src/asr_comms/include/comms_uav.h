@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <px4_msgs/msg/gps_inject_data.hpp>
 #include <asr_comms/msg/telemetry_position.hpp>
@@ -14,24 +15,29 @@
 #include <asr_comms/msg/telemetry_battery.hpp>
 #include <asr_comms/msg/telemetry_gps.hpp>
 #include <asr_comms/msg/telemetry_status.hpp>
+#include <asr_comms/action/drone_command.hpp>
 
 #include "common/mavlink.h"
 #include "transport.h"
 
 // Runs on the drone. Transport is either UDP or a serial SiK radio.
-// Receives from GCS: heartbeat, RTK corrections.
-// Sends to GCS:      heartbeat + telemetry (position, attitude, battery, GPS, status) at ≤10 Hz.
+// Receives from GCS: heartbeat, RTK corrections, UAVCommand.
+// Sends to GCS:      heartbeat + telemetry + CommandAck.
 class CommsUav : public rclcpp::Node {
 public:
     CommsUav();
     ~CommsUav();
 
 private:
+    using DroneCommand        = asr_comms::action::DroneCommand;
+    using GoalHandleDroneCmd  = rclcpp_action::ClientGoalHandle<DroneCommand>;
+
     // Receive path
     void recv_loop();
     void handle_message(const mavlink_message_t& msg);
     void handle_rtcm(const mavlink_gps_rtcm_data_t& rtcm);
     void publish_gps_inject(const uint8_t* data, size_t len);
+    void forward_command(const mavlink_command_long_t& cmd);
 
     // Send path
     void send_mavlink(mavlink_message_t& msg);
@@ -80,5 +86,20 @@ private:
     rclcpp::Subscription<asr_comms::msg::TelemetryGPS>::SharedPtr      gps_sub_;
     rclcpp::Subscription<asr_comms::msg::TelemetryStatus>::SharedPtr   status_sub_;
 
+    // Command forwarding: COMMAND_LONG → autopilot action → COMMAND_ACK
+    rclcpp_action::Client<DroneCommand>::SharedPtr action_client_;
+
     static constexpr uint16_t ASR_MSG_TELEMETRY_STATUS = 0x9001u;
+
+    // ASR custom MAVLink command IDs (local experiment range ≥ 32768)
+    static constexpr uint16_t ASR_CMD_GOTO              = 32768u;
+    static constexpr uint16_t ASR_CMD_MANUAL            = 32769u;
+    static constexpr uint16_t ASR_CMD_MANUAL_AIDED      = 32770u;
+    static constexpr uint16_t ASR_CMD_SET_ORIGIN        = 32771u;
+    static constexpr uint16_t ASR_CMD_SET_LINEAR_SPEED  = 32772u;
+    static constexpr uint16_t ASR_CMD_SET_ANGULAR_SPEED = 32773u;
+    static constexpr uint16_t ASR_CMD_SPIN              = 32774u;
+    static constexpr uint16_t ASR_CMD_ELAND             = 32775u;
+    static constexpr uint16_t ASR_CMD_VELOCITY          = 32776u;
+    static constexpr uint16_t ASR_CMD_MULTI_WAYPOINT    = 32777u;
 };

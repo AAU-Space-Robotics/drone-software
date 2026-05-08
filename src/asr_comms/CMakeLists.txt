@@ -17,6 +17,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(action_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 # Generate all custom interfaces (formerly the interfaces package)
@@ -31,6 +32,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "ros/msg/ProbeGlobalLocations.msg"
   "ros/msg/AttitudeSetpointRPY.msg"
   "ros/msg/ServoCommand.msg"
+  "ros/msg/command/UAVCommand.msg"
+  "ros/msg/command/CommandAck.msg"
   "ros/msg/telemetry/TelemetryPosition.msg"
   "ros/msg/telemetry/TelemetryAttitude.msg"
   "ros/msg/telemetry/TelemetryBattery.msg"
@@ -51,7 +54,7 @@ set(COMMS_DEPS rclcpp px4_msgs std_msgs)
 add_executable(comms_uav
   src/comms_uav.cpp
 )
-ament_target_dependencies(comms_uav ${COMMS_DEPS})
+ament_target_dependencies(comms_uav ${COMMS_DEPS} rclcpp_action)
 target_include_directories(comms_uav PRIVATE include)
 target_include_directories(comms_uav SYSTEM PRIVATE ${MAVLINK_INCLUDE_DIR})
 
