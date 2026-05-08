@@ -19,7 +19,7 @@ class SystemManagerNode(Node):
         self._ros2_path = shutil.which('ros2') or '/opt/ros/humble/bin/ros2'
 
         self.declare_parameter('system.autostart_flight_stack', True)
-        self.declare_parameter('system.flight_stack_launch', 'thyra_jetson')
+        self.declare_parameter('system.flight_stack_launch', 'uav/thyra_jetson')
 
         self._action_server = ActionServer(
             self,

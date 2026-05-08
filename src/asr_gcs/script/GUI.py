@@ -288,31 +288,31 @@ class DroneGuiNode(Node):
         super().__init__('thyra_gui_node')
         self.position_sub = self.create_subscription(
             TelemetryPosition,
-            "/asr/thyra/out/telemetry/position",
+            "telemetry/position",
             self.position_callback,
             10
         )
         self.attitude_sub = self.create_subscription(
             TelemetryAttitude,
-            "/asr/thyra/out/telemetry/attitude",
+            "telemetry/attitude",
             self.attitude_callback,
             10
         )
         self.battery_sub = self.create_subscription(
             TelemetryBattery,
-            "/asr/thyra/out/telemetry/battery",
+            "telemetry/battery",
             self.battery_callback,
             10
         )
         self.gps_sub = self.create_subscription(
             TelemetryGPS,
-            "/asr/thyra/out/telemetry/gps",
+            "telemetry/gps",
             self.gps_callback,
             10
         )
         self.status_sub = self.create_subscription(
             TelemetryStatus,
-            "/asr/thyra/out/telemetry/status",
+            "telemetry/status",
             self.status_callback,
             10
         )
@@ -352,9 +352,9 @@ class DroneGuiNode(Node):
         self.get_logger().info('GUI Publisher Started')
         self.imgui_logger = ImGuiLogger()
         self.manual_control_publisher = self.create_publisher(ManualControlInput, '/asr/thyra/in/manual_input', qos)
-        self.command_pub = self.create_publisher(UAVCommand, '/comms/in/uav_command', 10)
+        self.command_pub = self.create_publisher(UAVCommand, 'in/uav_command', 10)
         self.command_ack_sub = self.create_subscription(
-            CommandAck, '/comms/command_ack', self.ack_callback, 10)
+            CommandAck, 'command_ack', self.ack_callback, 10)
         self.log_filters = {
             'show_info': True,
             'show_warn': True,

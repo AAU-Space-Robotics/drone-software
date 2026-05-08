@@ -58,13 +58,13 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     }
 
     // Publishers — incoming telemetry from UAV
-    uav_heartbeat_pub_ = create_publisher<std_msgs::msg::Bool>("/comms/uav_heartbeat", 10);
-    position_pub_ = create_publisher<asr_comms::msg::TelemetryPosition>("/comms/telemetry/position", 10);
-    attitude_pub_ = create_publisher<asr_comms::msg::TelemetryAttitude>("/comms/telemetry/attitude", 10);
-    battery_pub_  = create_publisher<asr_comms::msg::TelemetryBattery>( "/comms/telemetry/battery",  10);
-    gps_pub_      = create_publisher<asr_comms::msg::TelemetryGPS>(     "/comms/telemetry/gps",      10);
-    status_pub_   = create_publisher<asr_comms::msg::TelemetryStatus>(  "/comms/telemetry/status",   10);
-    command_ack_pub_ = create_publisher<asr_comms::msg::CommandAck>("/comms/command_ack", 10);
+    uav_heartbeat_pub_ = create_publisher<std_msgs::msg::Bool>("uav_heartbeat", 10);
+    position_pub_ = create_publisher<asr_comms::msg::TelemetryPosition>("telemetry/position", 10);
+    attitude_pub_ = create_publisher<asr_comms::msg::TelemetryAttitude>("telemetry/attitude", 10);
+    battery_pub_  = create_publisher<asr_comms::msg::TelemetryBattery>( "telemetry/battery",  10);
+    gps_pub_      = create_publisher<asr_comms::msg::TelemetryGPS>(     "telemetry/gps",      10);
+    status_pub_   = create_publisher<asr_comms::msg::TelemetryStatus>(  "telemetry/status",   10);
+    command_ack_pub_ = create_publisher<asr_comms::msg::CommandAck>("command_ack", 10);
 
     // Send side
     heartbeat_timer_ = create_wall_timer(1s, std::bind(&CommsGcs::send_heartbeat, this));
@@ -74,7 +74,7 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
         std::bind(&CommsGcs::send_rtcm, this, std::placeholders::_1));
 
     uav_command_sub_ = create_subscription<asr_comms::msg::UAVCommand>(
-        "/comms/in/uav_command", 10,
+        "in/uav_command", 10,
         std::bind(&CommsGcs::on_uav_command, this, std::placeholders::_1));
 
     recv_thread_ = std::thread(&CommsGcs::recv_loop, this);
