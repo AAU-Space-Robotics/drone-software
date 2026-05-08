@@ -8,7 +8,7 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     thyra_pkg_share = FindPackageShare('thyra')
-    sensors_pkg_share = FindPackageShare('asr_sensors')
+    sensors_pkg_share = FindPackageShare('asr_drivers')
 
     params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'thyra_params.yaml'])
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
@@ -30,7 +30,7 @@ def generate_launch_description():
             output='log',
         ),
         Node(
-            package='asr_sensors',
+            package='asr_drivers',
             executable='LED.py',
             name='led',
             namespace='asr/thyra',

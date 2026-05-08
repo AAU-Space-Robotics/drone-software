@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 
-project(asr_sensors)
+project(asr_drivers)
 
 # Default to C++20
 if(NOT CMAKE_CXX_STANDARD)

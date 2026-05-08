@@ -13,7 +13,7 @@
   <!-- ASR core packages -->
   <exec_depend>asr_autopilot</exec_depend>
   <exec_depend>asr_perception</exec_depend>
-  <exec_depend>asr_sensors</exec_depend>
+  <exec_depend>asr_drivers</exec_depend>
   <!-- ROS dependencies -->
   <depend>rclpy</depend>
   <depend>geometry_msgs</depend>

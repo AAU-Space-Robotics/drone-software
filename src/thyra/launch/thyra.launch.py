@@ -12,7 +12,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 def generate_launch_description():
     # Define workspace directory (one level up from package)
     pkg_share = FindPackageShare('asr_autopilot')
-    sensors_pkg_share = FindPackageShare('asr_sensors')
+    sensors_pkg_share = FindPackageShare('asr_drivers')
     thyra_pkg_share = FindPackageShare('thyra')
     
     # Path to the thyra config file
@@ -43,7 +43,7 @@ def generate_launch_description():
         
         # Start LED node
         Node(
-            package='asr_sensors',
+            package='asr_drivers',
             executable='LED.py',
             name='led',
             namespace='asr/thyra',
