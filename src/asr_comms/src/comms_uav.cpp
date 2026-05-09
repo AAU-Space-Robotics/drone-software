@@ -59,11 +59,14 @@ CommsUav::CommsUav()
                     bind_port, target_ip.c_str(), target_port);
     }
 
-    // Incoming from GCS
-    heartbeat_pub_      = create_publisher<asr_comms::msg::GcsHeartbeat>("in/gcs_heartbeat", 10);
+    // Incoming from GCS — QoS must match the autopilot's subscriber profiles
+    auto qos_be_tl = rclcpp::QoS(10).best_effort().transient_local();
+    auto qos_be_vo = rclcpp::QoS(10).best_effort().durability_volatile();
+
+    heartbeat_pub_      = create_publisher<asr_comms::msg::GcsHeartbeat>("in/gcs_heartbeat", qos_be_tl);
     gps_inject_pub_     = create_publisher<px4_msgs::msg::GpsInjectData>("/fmu/in/gps_inject_data", 10);
-    manual_input_pub_   = create_publisher<asr_comms::msg::ManualControlInput>("in/manual_input", 10);
-    servo_command_pub_  = create_publisher<asr_comms::msg::ServoCommand>("in/servo_command", 10);
+    manual_input_pub_   = create_publisher<asr_comms::msg::ManualControlInput>("in/manual_input", qos_be_tl);
+    servo_command_pub_  = create_publisher<asr_comms::msg::ServoCommand>("in/servo_command", qos_be_vo);
 
     // Outgoing to GCS — one subscription per telemetry topic.
     // The autopilot controls the publish rate (target ≤10 Hz).
@@ -385,7 +388,7 @@ void CommsUav::on_battery(const asr_comms::msg::TelemetryBattery::SharedPtr msg)
     std::fill(std::begin(cell_voltages), std::end(cell_voltages), UINT16_MAX);
     cell_voltages[0] = static_cast<uint16_t>(msg->voltage * 1000.0f);
 
-    const int8_t pct = static_cast<int8_t>(std::clamp(msg->percentage, 0.0f, 100.0f));
+    const int8_t pct = static_cast<int8_t>(std::clamp(msg->percentage * 100.0f, 0.0f, 100.0f));
 
     mavlink_message_t mav{};
     mavlink_msg_battery_status_pack(system_id_, component_id_, &mav,
