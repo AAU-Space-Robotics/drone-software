@@ -9,15 +9,10 @@ from launch.actions import TimerAction
 
 
 def generate_launch_description():
-    # Define workspace directory (one level up from package)
-    workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
     pkg_share = FindPackageShare('asr_autopilot')
     thyra_pkg_share = FindPackageShare('thyra')
 
-    
-    # directory which workspace is located in
-    general_dir = os.path.abspath(os.path.join(workspace_dir, '..', '..', '..'))
-    px4_dir = os.path.join(general_dir, 'PX4-Autopilot_thyra')
+    px4_dir = os.path.expanduser('~/PX4-Autopilot_thyra')
     
     # Path to the thyra simulation config file
     params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'thyra_params_sim.yaml'])
@@ -66,7 +61,6 @@ def generate_launch_description():
                 make px4_sitl gz_x500_lidar_down_windy > /dev/null 2>&1
                 '''
             ],
-            shell=True,
             output='screen',
         ),
         
@@ -83,7 +77,11 @@ def generate_launch_description():
             name='comms_uav',
             namespace='asr/thyra',
             output='screen',
-            # No serial_port → UDP mode: binds :14551, sends to 127.0.0.1:14550
+            # Uses 14561/14560 to avoid clashing with QGroundControl (14550/14551)
+            parameters=[{
+                'bind_port':   14561,
+                'target_port': 14560,
+            }],
         ),
 
         # Delay and launch FlightControllerInterface node

@@ -12,6 +12,21 @@ import OpenGL.GL as gl
 from PIL import Image
 from OpenGL.GL import *
 
+# WSL2/EGL workaround: GLFW may create an EGL context that PyOpenGL's GLX-based
+# context detector can't find. Patch getContext to return a stable fake handle
+# instead of crashing, so per-context pointer tracking still works.
+import OpenGL.contextdata as _gl_ctx
+import OpenGL.error as _gl_err
+_orig_get_ctx = _gl_ctx.getContext
+def _patched_get_ctx(context=None):
+    if context is not None:
+        return context
+    try:
+        return _orig_get_ctx()
+    except _gl_err.Error:
+        return 1  # stable fake handle for single-window apps
+_gl_ctx.getContext = _patched_get_ctx
+
 import rclpy
 from rclpy.node import Node
 import threading
@@ -22,7 +37,12 @@ from asr_comms.msg import UAVCommand, CommandAck
 from asr_comms.msg import ServoCommand
 from asr_comms.msg import ProbeGlobalLocations
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal as _BaseDecimal
+import numpy as _np
+def Decimal(v):
+    if isinstance(v, (_np.floating, _np.integer)):
+        v = float(v)
+    return _BaseDecimal(v)
 import os
 import ament_index_python.packages
 
@@ -332,15 +352,9 @@ class DroneGuiNode(Node):
             qos
         )
         self.publisher_ = self.create_publisher(
-           GcsHeartbeat, 
-           "/asr/thyra/in/gcs_heartbeat",
-           qos
-        )
+            GcsHeartbeat, 'in/gcs_heartbeat', qos)
         self.gimbal_publisher = self.create_publisher(
-            ServoCommand,
-             "/asr/thyra/in/servo_command",
-                qos
-        )
+            ServoCommand, 'in/servo_command', qos)
 
 
         
@@ -351,7 +365,7 @@ class DroneGuiNode(Node):
         self.counter = 0.0
         self.get_logger().info('GUI Publisher Started')
         self.imgui_logger = ImGuiLogger()
-        self.manual_control_publisher = self.create_publisher(ManualControlInput, '/asr/thyra/in/manual_input', qos)
+        self.manual_control_publisher = self.create_publisher(ManualControlInput, 'in/manual_input', qos)
         self.command_pub = self.create_publisher(UAVCommand, 'in/uav_command', 10)
         self.command_ack_sub = self.create_subscription(
             CommandAck, 'command_ack', self.ack_callback, 10)
@@ -1840,6 +1854,10 @@ def main(args=None):
     screen_height = video_mode.size.height
     
 
+    glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
+    glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
+    glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+    glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
     glfw.window_hint(glfw.RESIZABLE, glfw.TRUE)
     glfw.window_hint(glfw.DECORATED, glfw.TRUE)
     glfw.window_hint(glfw.MAXIMIZED, glfw.TRUE)

@@ -77,6 +77,18 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
         "in/uav_command", 10,
         std::bind(&CommsGcs::on_uav_command, this, std::placeholders::_1));
 
+    gcs_heartbeat_sub_ = create_subscription<asr_comms::msg::GcsHeartbeat>(
+        "in/gcs_heartbeat", 10,
+        std::bind(&CommsGcs::on_gcs_heartbeat, this, std::placeholders::_1));
+
+    manual_input_sub_ = create_subscription<asr_comms::msg::ManualControlInput>(
+        "in/manual_input", 10,
+        std::bind(&CommsGcs::on_manual_input, this, std::placeholders::_1));
+
+    servo_command_sub_ = create_subscription<asr_comms::msg::ServoCommand>(
+        "in/servo_command", 10,
+        std::bind(&CommsGcs::on_servo_command, this, std::placeholders::_1));
+
     recv_thread_ = std::thread(&CommsGcs::recv_loop, this);
 }
 
@@ -246,8 +258,59 @@ void CommsGcs::send_heartbeat()
     mavlink_message_t msg{};
     mavlink_msg_heartbeat_pack(system_id_, component_id_, &msg,
         MAV_TYPE_GCS, MAV_AUTOPILOT_INVALID,
-        0, 0, MAV_STATE_ACTIVE);
+        static_cast<uint8_t>(gcs_nominal_), 0, MAV_STATE_ACTIVE);
     send_mavlink(msg);
+}
+
+void CommsGcs::on_gcs_heartbeat(const asr_comms::msg::GcsHeartbeat::SharedPtr msg)
+{
+    gcs_nominal_ = msg->gcs_nominal;
+}
+
+void CommsGcs::on_manual_input(const asr_comms::msg::ManualControlInput::SharedPtr msg)
+{
+    const int16_t x = static_cast<int16_t>(msg->pitch        * 1000.0f);
+    const int16_t y = static_cast<int16_t>(msg->roll         * 1000.0f);
+    const int16_t z = static_cast<int16_t>(msg->thrust       * 1000.0f);
+    const int16_t r = static_cast<int16_t>(msg->yaw_velocity * 1000.0f);
+    const uint16_t buttons =
+          static_cast<uint16_t>(msg->arm          & 0x01u)
+        | static_cast<uint16_t>((msg->estop        & 0x01u) << 1)
+        | static_cast<uint16_t>((msg->selfdestruct & 0x01u) << 2);
+
+    mavlink_message_t mav{};
+    mavlink_msg_manual_control_pack(system_id_, component_id_, &mav,
+        1 /* target_system */, x, y, z, r, buttons,
+        0 /* buttons2 */, 0 /* enabled_extensions */,
+        0, 0, 0, 0, 0, 0, 0, 0 /* aux1-6, s, t */);
+    send_mavlink(mav);
+}
+
+void CommsGcs::on_servo_command(const asr_comms::msg::ServoCommand::SharedPtr msg)
+{
+#pragma pack(push, 1)
+    struct ServoPod {
+        uint64_t timestamp;
+        int32_t  aux_index;
+        int32_t  id;
+        float    value;
+    };
+#pragma pack(pop)
+    static_assert(sizeof(ServoPod) <= 249);
+
+    ServoPod pod{};
+    pod.timestamp = msg->timestamp;
+    pod.aux_index = msg->aux_index;
+    pod.id        = msg->id;
+    pod.value     = msg->value;
+
+    uint8_t payload[249]{};
+    std::memcpy(payload, &pod, sizeof(pod));
+
+    mavlink_message_t mav{};
+    mavlink_msg_v2_extension_pack(system_id_, component_id_, &mav,
+        0, 0, 0, ASR_MSG_SERVO_COMMAND, payload);
+    send_mavlink(mav);
 }
 
 void CommsGcs::send_rtcm(const std_msgs::msg::UInt8MultiArray::SharedPtr msg)

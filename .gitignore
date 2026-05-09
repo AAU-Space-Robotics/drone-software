@@ -22,5 +22,8 @@ venv
 src/asr_sensors/script/neopixel-env/
 src/asr_sensors/script/.lgd-nfy0/
 
+
+.venv/
+
 **/rosbag*/
 probe_data/

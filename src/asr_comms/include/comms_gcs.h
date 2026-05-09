@@ -13,6 +13,9 @@
 #include <asr_comms/msg/telemetry_status.hpp>
 #include <asr_comms/msg/uav_command.hpp>
 #include <asr_comms/msg/command_ack.hpp>
+#include <asr_comms/msg/gcs_heartbeat.hpp>
+#include <asr_comms/msg/manual_control_input.hpp>
+#include <asr_comms/msg/servo_command.hpp>
 
 #include "common/mavlink.h"
 #include "transport.h"
@@ -35,6 +38,9 @@ private:
     void send_heartbeat();
     void send_rtcm(const std_msgs::msg::UInt8MultiArray::SharedPtr msg);
     void on_uav_command(const asr_comms::msg::UAVCommand::SharedPtr msg);
+    void on_gcs_heartbeat(const asr_comms::msg::GcsHeartbeat::SharedPtr msg);
+    void on_manual_input(const asr_comms::msg::ManualControlInput::SharedPtr msg);
+    void on_servo_command(const asr_comms::msg::ServoCommand::SharedPtr msg);
 
     std::unique_ptr<ITransport> transport_;
 
@@ -54,13 +60,18 @@ private:
 
     // Send side
     rclcpp::TimerBase::SharedPtr heartbeat_timer_;
-    rclcpp::Subscription<std_msgs::msg::UInt8MultiArray>::SharedPtr rtcm_sub_;
-    rclcpp::Subscription<asr_comms::msg::UAVCommand>::SharedPtr     uav_command_sub_;
-    rclcpp::Publisher<asr_comms::msg::CommandAck>::SharedPtr        command_ack_pub_;
-    uint8_t rtcm_seq_{0};
-    std::string pending_command_type_;  // tracks last command sent for ack matching
+    rclcpp::Subscription<std_msgs::msg::UInt8MultiArray>::SharedPtr         rtcm_sub_;
+    rclcpp::Subscription<asr_comms::msg::UAVCommand>::SharedPtr             uav_command_sub_;
+    rclcpp::Subscription<asr_comms::msg::GcsHeartbeat>::SharedPtr          gcs_heartbeat_sub_;
+    rclcpp::Subscription<asr_comms::msg::ManualControlInput>::SharedPtr    manual_input_sub_;
+    rclcpp::Subscription<asr_comms::msg::ServoCommand>::SharedPtr          servo_command_sub_;
+    rclcpp::Publisher<asr_comms::msg::CommandAck>::SharedPtr               command_ack_pub_;
+    uint8_t  rtcm_seq_{0};
+    int8_t   gcs_nominal_{1};          // latest value from in/gcs_heartbeat, sent in MAVLink heartbeat
+    std::string pending_command_type_;
 
     static constexpr uint16_t ASR_MSG_TELEMETRY_STATUS = 0x9001u;
+    static constexpr uint16_t ASR_MSG_SERVO_COMMAND    = 0x9002u;
 
     // ASR custom MAVLink command IDs (local experiment range ≥ 32768)
     static constexpr uint16_t ASR_CMD_GOTO              = 32768u;

@@ -15,6 +15,9 @@
 #include <asr_comms/msg/telemetry_battery.hpp>
 #include <asr_comms/msg/telemetry_gps.hpp>
 #include <asr_comms/msg/telemetry_status.hpp>
+#include <asr_comms/msg/gcs_heartbeat.hpp>
+#include <asr_comms/msg/manual_control_input.hpp>
+#include <asr_comms/msg/servo_command.hpp>
 #include <asr_comms/action/drone_command.hpp>
 
 #include "common/mavlink.h"
@@ -57,8 +60,10 @@ private:
     std::thread       recv_thread_;
     std::atomic<bool> running_{true};
 
-    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr          heartbeat_pub_;
-    rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr gps_inject_pub_;
+    rclcpp::Publisher<asr_comms::msg::GcsHeartbeat>::SharedPtr        heartbeat_pub_;
+    rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr        gps_inject_pub_;
+    rclcpp::Publisher<asr_comms::msg::ManualControlInput>::SharedPtr  manual_input_pub_;
+    rclcpp::Publisher<asr_comms::msg::ServoCommand>::SharedPtr        servo_command_pub_;
 
     // Fragment reassembly buffer for incoming RTCM.
     // MAVLink GPS_RTCM_DATA flags: bit0=fragmented, bits1-2=frag_idx, bits3-7=seq.
@@ -90,6 +95,7 @@ private:
     rclcpp_action::Client<DroneCommand>::SharedPtr action_client_;
 
     static constexpr uint16_t ASR_MSG_TELEMETRY_STATUS = 0x9001u;
+    static constexpr uint16_t ASR_MSG_SERVO_COMMAND    = 0x9002u;
 
     // ASR custom MAVLink command IDs (local experiment range ≥ 32768)
     static constexpr uint16_t ASR_CMD_GOTO              = 32768u;

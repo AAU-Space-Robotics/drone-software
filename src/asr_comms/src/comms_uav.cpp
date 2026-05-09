@@ -60,8 +60,10 @@ CommsUav::CommsUav()
     }
 
     // Incoming from GCS
-    heartbeat_pub_  = create_publisher<std_msgs::msg::Bool>("in/gcs_heartbeat", 10);
-    gps_inject_pub_ = create_publisher<px4_msgs::msg::GpsInjectData>("/fmu/in/gps_inject_data", 10);
+    heartbeat_pub_      = create_publisher<asr_comms::msg::GcsHeartbeat>("in/gcs_heartbeat", 10);
+    gps_inject_pub_     = create_publisher<px4_msgs::msg::GpsInjectData>("/fmu/in/gps_inject_data", 10);
+    manual_input_pub_   = create_publisher<asr_comms::msg::ManualControlInput>("in/manual_input", 10);
+    servo_command_pub_  = create_publisher<asr_comms::msg::ServoCommand>("in/servo_command", 10);
 
     // Outgoing to GCS — one subscription per telemetry topic.
     // The autopilot controls the publish rate (target ≤10 Hz).
@@ -126,9 +128,52 @@ void CommsUav::handle_message(const mavlink_message_t& msg)
         mavlink_heartbeat_t hb{};
         mavlink_msg_heartbeat_decode(&msg, &hb);
         RCLCPP_DEBUG(get_logger(), "GCS heartbeat — type %u", hb.type);
-        std_msgs::msg::Bool out{};
-        out.data = true;
+        asr_comms::msg::GcsHeartbeat out{};
+        out.timestamp   = get_clock()->now().seconds();
+        out.gcs_nominal = static_cast<int8_t>(hb.base_mode);
         heartbeat_pub_->publish(out);
+        break;
+    }
+
+    case MAVLINK_MSG_ID_MANUAL_CONTROL: {
+        mavlink_manual_control_t mc{};
+        mavlink_msg_manual_control_decode(&msg, &mc);
+
+        asr_comms::msg::ManualControlInput out{};
+        out.pitch        =  mc.x / 1000.0f;
+        out.roll         =  mc.y / 1000.0f;
+        out.thrust       =  mc.z / 1000.0f;
+        out.yaw_velocity =  mc.r / 1000.0f;
+        out.arm          =  (mc.buttons >> 0) & 0x01u;
+        out.estop        =  (mc.buttons >> 1) & 0x01u;
+        out.selfdestruct =  (mc.buttons >> 2) & 0x01u;
+        manual_input_pub_->publish(out);
+        break;
+    }
+
+    case MAVLINK_MSG_ID_V2_EXTENSION: {
+        mavlink_v2_extension_t ext{};
+        mavlink_msg_v2_extension_decode(&msg, &ext);
+        if (ext.message_type != ASR_MSG_SERVO_COMMAND) break;
+
+#pragma pack(push, 1)
+        struct ServoPod {
+            uint64_t timestamp;
+            int32_t  aux_index;
+            int32_t  id;
+            float    value;
+        };
+#pragma pack(pop)
+
+        ServoPod pod{};
+        std::memcpy(&pod, ext.payload, sizeof(pod));
+
+        asr_comms::msg::ServoCommand out{};
+        out.timestamp = pod.timestamp;
+        out.aux_index = pod.aux_index;
+        out.id        = pod.id;
+        out.value     = pod.value;
+        servo_command_pub_->publish(out);
         break;
     }
 

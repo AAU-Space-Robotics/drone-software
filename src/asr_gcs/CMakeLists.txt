@@ -86,7 +86,6 @@ add_executable(asr_gcs_node
   ${implot_SOURCE_DIR}/implot_items.cpp     # Add ImPlot items source
 )
 
-# Manual controller node executable
 install(PROGRAMS
   script/manual_controller.py
   script/manual_arrow_controller.py
@@ -97,7 +96,7 @@ install(PROGRAMS
   script/gcs_heartbeat.py
   script/fft.py
   script/probe_tester.py
-  DESTINATION lib/${PROJECT_NAME}/scripts
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 # Link the necessary libraries
