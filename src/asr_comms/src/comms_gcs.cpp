@@ -67,7 +67,9 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     command_ack_pub_ = create_publisher<asr_comms::msg::CommandAck>("command_ack", 10);
 
     // Send side
-    heartbeat_timer_ = create_wall_timer(1s, std::bind(&CommsGcs::send_heartbeat, this));
+    heartbeat_timer_  = create_wall_timer(1s, std::bind(&CommsGcs::send_heartbeat, this));
+    stats_timer_      = create_wall_timer(1s, std::bind(&CommsGcs::publish_link_stats, this));
+    link_stats_pub_   = create_publisher<asr_comms::msg::LinkStats>("link_stats", 10);
 
     rtcm_sub_ = create_subscription<std_msgs::msg::UInt8MultiArray>(
         "/rtcm", 10,
@@ -113,6 +115,9 @@ void CommsGcs::recv_loop()
         const ssize_t n = transport_->recv(buf, sizeof(buf));
         if (n <= 0) continue;
 
+        rx_bytes_ += static_cast<size_t>(n);
+        last_rx_ns_.store(static_cast<uint64_t>(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
         for (ssize_t i = 0; i < n; ++i) {
             if (mavlink_parse_char(MAVLINK_COMM_0, buf[i], &msg, &status))
                 handle_message(msg);
@@ -255,6 +260,21 @@ void CommsGcs::send_mavlink(mavlink_message_t& msg)
     uint8_t buf[MAVLINK_MAX_PACKET_LEN];
     const uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     transport_->send(buf, len);
+    tx_bytes_ += len;
+}
+
+void CommsGcs::publish_link_stats()
+{
+    const uint64_t now_ns = static_cast<uint64_t>(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    const uint64_t last  = last_rx_ns_.load();
+    constexpr uint64_t TIMEOUT_NS = 500'000'000ULL; // 0.5 s
+
+    asr_comms::msg::LinkStats out{};
+    out.tx_kbps   = static_cast<float>(tx_bytes_.exchange(0)) / 1024.0f;
+    out.rx_kbps   = static_cast<float>(rx_bytes_.exchange(0)) / 1024.0f;
+    out.connected = (last != 0) && ((now_ns - last) < TIMEOUT_NS);
+    link_stats_pub_->publish(out);
 }
 
 void CommsGcs::send_heartbeat()

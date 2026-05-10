@@ -22,6 +22,7 @@ find_package(rosidl_default_generators REQUIRED)
 
 # Generate all custom interfaces (formerly the interfaces package)
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "ros/msg/LinkStats.msg"
   "ros/msg/ManualControlInput.msg"
   "ros/msg/DroneCommand.msg"
   "ros/msg/MotionCapturePose.msg"

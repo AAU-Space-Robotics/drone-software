@@ -16,6 +16,7 @@
 #include <asr_comms/msg/gcs_heartbeat.hpp>
 #include <asr_comms/msg/manual_control_input.hpp>
 #include <asr_comms/msg/servo_command.hpp>
+#include <asr_comms/msg/link_stats.hpp>
 
 #include "common/mavlink.h"
 #include "transport.h"
@@ -41,6 +42,7 @@ private:
     void on_gcs_heartbeat(const asr_comms::msg::GcsHeartbeat::SharedPtr msg);
     void on_manual_input(const asr_comms::msg::ManualControlInput::SharedPtr msg);
     void on_servo_command(const asr_comms::msg::ServoCommand::SharedPtr msg);
+    void publish_link_stats();
 
     std::unique_ptr<ITransport> transport_;
 
@@ -60,6 +62,11 @@ private:
 
     // Send side
     rclcpp::TimerBase::SharedPtr heartbeat_timer_;
+    rclcpp::TimerBase::SharedPtr stats_timer_;
+    rclcpp::Publisher<asr_comms::msg::LinkStats>::SharedPtr link_stats_pub_;
+    std::atomic<size_t>   tx_bytes_{0};
+    std::atomic<size_t>   rx_bytes_{0};
+    std::atomic<uint64_t> last_rx_ns_{0};  // nanoseconds timestamp of last received byte
     rclcpp::Subscription<std_msgs::msg::UInt8MultiArray>::SharedPtr         rtcm_sub_;
     rclcpp::Subscription<asr_comms::msg::UAVCommand>::SharedPtr             uav_command_sub_;
     rclcpp::Subscription<asr_comms::msg::GcsHeartbeat>::SharedPtr          gcs_heartbeat_sub_;
