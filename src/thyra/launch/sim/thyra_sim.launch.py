@@ -15,7 +15,7 @@ def generate_launch_description():
     px4_dir = os.path.expanduser('~/PX4-Autopilot_thyra')
     
     # Path to the thyra simulation config file
-    params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'thyra_params_sim.yaml'])
+    params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'uav', 'thyra_params_sim.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
@@ -94,9 +94,6 @@ def generate_launch_description():
                     name='autopilot',
                     namespace='asr/thyra',
                     remappings=[
-                        #('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),
-                        #('/fmu/out/battery_status', '/fmu/out/battery_status_v1'),
-                        #('/fmu/in/vehicle_attitude_setpoint', '/fmu/in/vehicle_attitude_setpoint_v1'),
                         ('/asr/thyra/out/distance_sensor', '/fmu/out/distance_sensor'),
                     ],
                     parameters=[

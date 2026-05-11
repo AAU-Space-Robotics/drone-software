@@ -9,7 +9,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
 
     mission_pkg_share = FindPackageShare('thyra')
-    params_path = PathJoinSubstitution([mission_pkg_share, 'config', 'thyra_params.yaml'])
+    params_path = PathJoinSubstitution([mission_pkg_share, 'config', 'uav', 'thyra_params.yaml'])
 
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')

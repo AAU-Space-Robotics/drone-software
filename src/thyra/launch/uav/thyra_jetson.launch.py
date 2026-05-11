@@ -10,7 +10,7 @@ def generate_launch_description():
     thyra_pkg_share = FindPackageShare('thyra')
     sensors_pkg_share = FindPackageShare('asr_drivers')
 
-    params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'thyra_params.yaml'])
+    params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'uav', 'thyra_params.yaml'])
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     position_source = LaunchConfiguration('position_source', default='px4')
 

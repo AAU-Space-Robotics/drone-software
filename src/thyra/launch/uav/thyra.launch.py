@@ -16,7 +16,7 @@ def generate_launch_description():
     thyra_pkg_share = FindPackageShare('thyra')
     
     # Path to the thyra config files
-    params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'thyra_params.yaml'])
+    params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'uav', 'thyra_params.yaml'])
     comms_path  = PathJoinSubstitution([thyra_pkg_share, 'config', 'comms', 'thyra_comms.yaml'])
     
     # Launch arguments

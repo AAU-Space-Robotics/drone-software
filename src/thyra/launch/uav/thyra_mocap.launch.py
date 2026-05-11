@@ -20,7 +20,7 @@ def generate_launch_description():
     px4_dir = os.path.join(general_dir, 'PX4-Autopilot')
     
     # Path to the thyra config file
-    params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'thyra_params.yaml'])
+    params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'uav', 'thyra_params.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
