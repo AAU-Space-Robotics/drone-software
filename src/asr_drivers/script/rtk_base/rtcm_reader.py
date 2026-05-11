@@ -117,11 +117,18 @@ class RtcmReaderNode(Node):
     def _wait_for_survey(self):
         self.get_logger().info('Waiting for survey-in to complete...')
         reader = UBXReader(self._serial)
+        consecutive_errors = 0
 
         while rclpy.ok():
             try:
                 _, msg = reader.read()
-            except Exception:
+                consecutive_errors = 0
+            except Exception as e:
+                consecutive_errors += 1
+                if consecutive_errors == 1 or consecutive_errors % 50 == 0:
+                    self.get_logger().warn(
+                        f'UBX read error (x{consecutive_errors}): {e}'
+                    )
                 continue
 
             if msg is None:
@@ -142,14 +149,23 @@ class RtcmReaderNode(Node):
 
     def _stream_rtcm(self):
         reader = RTCMReader(self._serial)
+        consecutive_errors = 0
 
         for raw, _ in reader:
             if not rclpy.ok():
                 break
-            if raw:
-                out = UInt8MultiArray()
-                out.data = list(raw)
-                self._rtcm_pub.publish(out)
+            try:
+                if raw:
+                    out = UInt8MultiArray()
+                    out.data = list(raw)
+                    self._rtcm_pub.publish(out)
+                    consecutive_errors = 0
+            except Exception as e:
+                consecutive_errors += 1
+                if consecutive_errors == 1 or consecutive_errors % 50 == 0:
+                    self.get_logger().error(
+                        f'RTCM publish error (x{consecutive_errors}): {e} — corrections may have stopped'
+                    )
 
 
 def main(args=None):

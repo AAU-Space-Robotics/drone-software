@@ -22,7 +22,7 @@ private:
     void configure(uint8_t configuration, uint8_t address);
     void take_range(uint8_t address);
     uint8_t get_busy_flag(uint8_t address);
-    void wait_for_busy(uint8_t address);
+    bool wait_for_busy(uint8_t address);  // returns false on I2C busy timeout
     uint16_t read_distance(uint8_t address);
     int32_t i2c_write(uint8_t reg_addr, uint8_t* data, uint8_t num_bytes, uint8_t address);
     int32_t i2c_read(uint8_t reg_addr, uint8_t* data, uint8_t num_bytes, uint8_t address);

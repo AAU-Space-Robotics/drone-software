@@ -18,8 +18,9 @@ def generate_launch_description():
     params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'uav', 'thyra_params_sim.yaml'])
     
     # Launch arguments
-    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+    use_sim_time    = LaunchConfiguration('use_sim_time',    default='true')
     position_source = LaunchConfiguration('position_source', default='px4')
+    autopilot_delay = LaunchConfiguration('autopilot_delay', default='20.0')
 
     return LaunchDescription([
         # Declare launch arguments
@@ -33,7 +34,12 @@ def generate_launch_description():
             default_value='px4',
             description='Position source: px4 or mocap'
         ),
-        
+        DeclareLaunchArgument(
+            'autopilot_delay',
+            default_value='20.0',
+            description='Seconds to wait before launching the autopilot node',
+        ),
+
         # ExecuteProcess(
         #     cmd=[
         #         'bash', '-c',
@@ -86,7 +92,7 @@ def generate_launch_description():
 
         # Delay and launch FlightControllerInterface node
         TimerAction(
-            period=20.0,  # Delay in seconds
+            period=autopilot_delay,
             actions=[
                 Node(
                     package='asr_autopilot',

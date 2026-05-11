@@ -259,9 +259,8 @@ struct BatteryState {
 
 // Controller errors
 struct PIDError {
-    double error;
-    double error_d;
-    double error_integral;
+    double error          = 0.0;
+    double error_integral = 0.0;
 };
 
 struct PositionError {

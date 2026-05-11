@@ -1,48 +1,62 @@
-import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from launch.actions import IncludeLaunchDescription, TimerAction
-from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 
 def generate_launch_description():
-    # Define workspace directory (one level up from package)
-    pkg_share = FindPackageShare('asr_autopilot')
-    sensors_pkg_share = FindPackageShare('asr_drivers')
     thyra_pkg_share = FindPackageShare('thyra')
-    
-    # Path to the thyra config files
+    sensors_pkg_share = FindPackageShare('asr_drivers')
+
     params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'uav', 'thyra_params.yaml'])
     comms_path  = PathJoinSubstitution([thyra_pkg_share, 'config', 'comms', 'thyra_comms.yaml'])
-    
-    # Launch arguments
-    use_sim_time = LaunchConfiguration('use_sim_time', default='false')
+
+    hardware        = LaunchConfiguration('hardware',        default='jetson')
+    use_sim_time    = LaunchConfiguration('use_sim_time',    default='false')
     position_source = LaunchConfiguration('position_source', default='px4')
+    with_comms      = LaunchConfiguration('with_comms',      default='false')
+    autopilot_delay = LaunchConfiguration('autopilot_delay', default='15.0')
+
+    # Jetson uses /dev/ttyTHS1, Pi uses /dev/ttyAMA0
+    serial_device = PythonExpression([
+        '"/dev/ttyTHS1" if "', hardware, '" == "jetson" else "/dev/ttyAMA0"'
+    ])
 
     return LaunchDescription([
-        # Declare launch arguments
+        DeclareLaunchArgument(
+            'hardware',
+            default_value='jetson',
+            description='Hardware target: jetson or pi',
+        ),
         DeclareLaunchArgument(
             'use_sim_time',
             default_value='false',
-            description='Use simulation (Gazebo) clock if true'
+            description='Use simulation clock if true',
         ),
         DeclareLaunchArgument(
             'position_source',
             default_value='px4',
-            description='Position source: px4 or mocap'
+            description='Position source: px4 or mocap',
         ),
-        
-        # Start MicroXRCEAgent (output suppressed)
+        DeclareLaunchArgument(
+            'with_comms',
+            default_value='false',
+            description='Launch comms_uav SiK radio bridge node',
+        ),
+        DeclareLaunchArgument(
+            'autopilot_delay',
+            default_value='15.0',
+            description='Seconds to wait before launching the autopilot node',
+        ),
+
         ExecuteProcess(
-            cmd=['MicroXRCEAgent', 'serial', '--dev', '/dev/ttyAMA0', '-b', '921600'],
+            cmd=['MicroXRCEAgent', 'serial', '--dev', serial_device, '-b', '921600'],
             output='log',
         ),
-        
-        # Start LED node
+
         Node(
             package='asr_drivers',
             executable='LED.py',
@@ -51,15 +65,14 @@ def generate_launch_description():
             output='screen',
         ),
 
-        # Include thyra_cam launch file
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution([sensors_pkg_share, 'launch', 'thyra_cam.launch.py'])
             ),
         ),
 
-        # Start comms_uav (serial SiK radio bridge)
         Node(
+            condition=IfCondition(with_comms),
             package='asr_comms',
             executable='comms_uav',
             name='comms_uav',
@@ -68,29 +81,21 @@ def generate_launch_description():
             parameters=[comms_path],
         ),
 
-        # Delay and launch FlightControllerInterface node
         TimerAction(
-            period=15.0,  # Delay in seconds
+            period=autopilot_delay,
             actions=[
                 Node(
                     package='asr_autopilot',
                     executable='asr_autopilot',
                     name='autopilot',
                     namespace='asr/thyra',
-                    remappings=[
-                        #('/fmu/out/vehicle_status', '/fmu/out/vehicle_status_v1'),
-                        #('/fmu/in/vehicle_attitude_setpoint', '/fmu/in/vehicle_attitude_setpoint_v1'),
-                        #('/fmu/out/vehicle_local_position', '/fmu/out/vehicle_local_position_v1'),
-                        #('/fmu/out/battery_status', '/fmu/out/battery_status_v1'),
-                        
-                    ],
                     output='screen',
                     parameters=[
                         params_path,
                         {'use_sim_time': use_sim_time},
-                        {'position_source': position_source}
-                    ]
-                )
-            ]
+                        {'position_source': position_source},
+                    ],
+                ),
+            ],
         ),
     ])

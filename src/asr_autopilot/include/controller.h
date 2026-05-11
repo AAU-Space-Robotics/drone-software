@@ -28,11 +28,6 @@ struct PIDPosControllerGains {
     PIDGains z{0.1, 0.0, 0.05};
 };
 
-struct AccelerationControllerGains {
-    PIDGains roll{0.1, 0.0, 0.05};
-    PIDGains pitch{0.1, 0.0, 0.05};
-    PIDGains thrust{0.4, 0.0, 0.0};
-};
 
 class Controller {
 public:
@@ -42,14 +37,6 @@ public:
     void setPIDGains(const PIDControllerGains& gains);
 
     void setPositionPIDGains(const PIDPosControllerGains& gains);
-
-    // Position PID control (returns roll, pitch, yaw, thrust)
-    Eigen::Vector4d pidControl(double sample_time,
-                               PositionError& previous_position_error,
-                               const Stamped3DVector& position_ned_earth,
-                               const StampedQuaternion& attitude,
-                               const Stamped3DVector& target_position_ned_earth,
-                               const Eigen::Vector4d& previous_control_signal);
 
     Eigen::Vector3d positionControl(double sample_time,
                                     PositionError& previous_position_error,
@@ -87,7 +74,6 @@ public:
 private:
     const Transformations& transformations_; // Reference to transformations utility
     PIDControllerGains attitude_pid_gains_;      // PID gains for attitude and thrust
-    AccelerationControllerGains acceleration_pid_gains_; // PID gains for acceleration
     PIDPosControllerGains position_pid_gains_;   // PID gains for position control
 
     double EMA_filter(double current_value, double previous_value) const;

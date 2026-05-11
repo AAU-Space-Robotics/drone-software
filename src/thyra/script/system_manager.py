@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import re
 import shutil
 import subprocess
 
@@ -19,7 +20,7 @@ class SystemManagerNode(Node):
         self._ros2_path = shutil.which('ros2') or '/opt/ros/humble/bin/ros2'
 
         self.declare_parameter('system.autostart_flight_stack', True)
-        self.declare_parameter('system.flight_stack_launch', 'uav/thyra_jetson')
+        self.declare_parameter('system.flight_stack_launch', 'uav/thyra')
 
         self._action_server = ActionServer(
             self,
@@ -39,6 +40,9 @@ class SystemManagerNode(Node):
 
     def _start_flight_stack(self):
         launch_file = self.get_parameter('system.flight_stack_launch').get_parameter_value().string_value
+        if not re.fullmatch(r'[a-zA-Z0-9_/]+', launch_file) or '..' in launch_file:
+            self.get_logger().error(f'Refusing to launch invalid flight_stack_launch value: {launch_file!r}')
+            return
         subprocess.Popen(
             [self._ros2_path, 'launch', 'thyra', f'{launch_file}.launch.py'],
         )

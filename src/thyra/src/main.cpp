@@ -1,4 +1,5 @@
 #include <iostream>
+#include <thread>
 #include <vector>
 #include <eigen3/Eigen/Geometry>
 #include <rclcpp/rclcpp.hpp>
@@ -29,6 +30,13 @@ public:
     using GoalHandleDroneCommand = rclcpp_action::ServerGoalHandle<DroneCommand>;
 
 
+
+    ~ThyraMissionExecutor()
+    {
+        if (execute_thread_.joinable()) {
+            execute_thread_.join();
+        }
+    }
 
     ThyraMissionExecutor()
     : Node("thyra_mission_node")
@@ -141,12 +149,14 @@ private:
     }
     void handleAccepted(const std::shared_ptr<GoalHandleDroneCommand> goal_handle)
     {
-        std::thread([this, goal_handle]()
-                    { execute(goal_handle); })
-            .detach();
+        if (execute_thread_.joinable()) {
+            execute_thread_.join();
+        }
+        execute_thread_ = std::thread([this, goal_handle]() { execute(goal_handle); });
     }
 
     std::shared_ptr<rclcpp::Clock> clock_;
+    std::thread execute_thread_;
 
     rclcpp::Subscription<asr_comms::msg::TelemetryStatus>::SharedPtr sub_state;
     rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr sub_RGB_image;

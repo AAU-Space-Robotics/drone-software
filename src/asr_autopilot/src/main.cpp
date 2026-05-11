@@ -1,3 +1,4 @@
+#include <thread>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <rcutils/logging.h>
@@ -48,6 +49,13 @@ class AAUAutopilot : public rclcpp::Node
 public:
     using DroneCommand = asr_comms::action::DroneCommand;
     using GoalHandleDroneCommand = rclcpp_action::ServerGoalHandle<DroneCommand>;
+
+    ~AAUAutopilot()
+    {
+        if (execute_thread_.joinable()) {
+            execute_thread_.join();
+        }
+    }
 
     AAUAutopilot()
     : Node("aau_autopilot_node"),
@@ -1204,6 +1212,11 @@ private:
         }
     }
 
+    bool isModeChangePending()
+    {
+        return get_clock()->now() < mode_change_deadline_;
+    }
+
     void setDroneMode(FlightMode mode)
     {
         DroneState drone_state = state_manager_.getDroneState();
@@ -1217,7 +1230,7 @@ private:
             state_manager_.setDroneState(drone_state);
 
             // Only delay if switching between autonomous/manual, but NOT if switching to standby or between estop and standby
-            if (do_mode_change_delay_ && 
+            if (do_mode_change_delay_ &&
                 (getFlightModeTraits(mode)[0] != getFlightModeTraits(old_flight_mode)[0]) &&
                 mode != FlightMode::STANDBY &&
                 mode != FlightMode::EMERGENCY_STOP &&
@@ -1225,8 +1238,9 @@ private:
                    (mode == FlightMode::STANDBY && old_flight_mode == FlightMode::EMERGENCY_STOP) )
             )
             {
-                RCLCPP_INFO(get_logger(), "Switching flight mode waiting for %.2f seconds...", mode_change_delay_);
-                rclcpp::sleep_for(std::chrono::nanoseconds(static_cast<int64_t>(mode_change_delay_ * 1e9)));
+                // Record deadline instead of blocking — callers check isModeChangePending()
+                mode_change_deadline_ = get_clock()->now() + rclcpp::Duration::from_seconds(mode_change_delay_);
+                RCLCPP_INFO(get_logger(), "Mode change delay of %.2f s started (non-blocking)", mode_change_delay_);
             }
         }
     }
@@ -1491,9 +1505,10 @@ private:
 
     void handleAccepted(const std::shared_ptr<GoalHandleDroneCommand> goal_handle)
     {
-        std::thread([this, goal_handle]()
-                    { execute(goal_handle); })
-            .detach();
+        if (execute_thread_.joinable()) {
+            execute_thread_.join();
+        }
+        execute_thread_ = std::thread([this, goal_handle]() { execute(goal_handle); });
     }
 
     // Command execution handlers
@@ -1836,6 +1851,9 @@ private:
     bool check_position_timeout_;
     float mode_change_delay_;
     bool do_mode_change_delay_;
+    rclcpp::Time mode_change_deadline_{0, 0, RCL_ROS_TIME};
+
+    std::thread execute_thread_;
     float safety_thrust_;
     float safety_thrust_initial_;
     float safety_thrust_final_;

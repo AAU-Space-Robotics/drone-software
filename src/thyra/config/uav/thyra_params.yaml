@@ -77,14 +77,14 @@
     # Setup Parameters
     setup:
       lidar_offset: 0.0 # Lidar offset for zero height calibration (meters)
-      takeoff_height_: -1.5 # Default takeoff height (meters)
+      takeoff_height: -1.5 # Default takeoff height (meters)
       motor_speed_min: 1000.0 # Motor speed min expected value
       motor_speed_max: 1900.0 # Motor speed max expected value
 
     # System Parameters
     system:
       autostart_flight_stack: false   # Set false to skip auto-start; use START_FLIGHT_STACK action to start manually
-      flight_stack_launch: thyra_jetson
+      flight_stack_launch: thyra
 
     # Camera Parameters
     camera:
@@ -101,7 +101,7 @@
         k1: 0
         k2: 0
         k3: 0
-      Tangiential_distortion:
+      Tangential_distortion:
         p1: 0
         p2: 0
       Skew: 0.0

@@ -95,8 +95,13 @@ uint8_t LidarNode::get_busy_flag(uint8_t address) {
     return status & 0x01;
 }
 
-void LidarNode::wait_for_busy(uint8_t address) {
-    while (get_busy_flag(address)) {}
+bool LidarNode::wait_for_busy(uint8_t address) {
+    constexpr int kMaxIter = 500;
+    for (int i = 0; i < kMaxIter; ++i) {
+        if (!get_busy_flag(address)) return true;
+    }
+    RCLCPP_WARN(get_logger(), "wait_for_busy: I2C busy timeout after %d iterations", kMaxIter);
+    return false;
 }
 
 uint16_t LidarNode::read_distance(uint8_t address) {
@@ -143,7 +148,7 @@ void LidarNode::read_and_publish() {
     static int sample_count = 0; // Counter for downsampling
 
     take_range(LIDAR_ADDR_DEFAULT);
-    wait_for_busy(LIDAR_ADDR_DEFAULT);
+    if (!wait_for_busy(LIDAR_ADDR_DEFAULT)) return;
     auto distance = read_distance(LIDAR_ADDR_DEFAULT);
     distance = moving_average(static_cast<double>(distance)); // Apply moving average filter
 
