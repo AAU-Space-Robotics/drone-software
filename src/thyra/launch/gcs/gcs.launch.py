@@ -1,31 +1,14 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    serial_port = LaunchConfiguration('serial_port', default='auto')
-    baud_rate   = LaunchConfiguration('baud_rate',   default='57600')
-    rtk_port    = LaunchConfiguration('rtk_port',    default='/dev/ttyACM0')
+    thyra_pkg_share = FindPackageShare('thyra')
+    comms_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'comms', 'gcs_comms.yaml'])
 
     return LaunchDescription([
-        DeclareLaunchArgument(
-            'serial_port',
-            default_value='auto',
-            description='Serial device for SiK radio (auto to detect /dev/ttyUSB* or /dev/ttyACM*)',
-        ),
-        DeclareLaunchArgument(
-            'baud_rate',
-            default_value='57600',
-            description='Baud rate for the SiK radio',
-        ),
-        DeclareLaunchArgument(
-            'rtk_port',
-            default_value='/dev/ttyACM0',
-            description='Serial device for the u-blox RTK base station',
-        ),
-
         # MAVLink bridge — GCS side
         Node(
             package='asr_comms',
@@ -33,10 +16,7 @@ def generate_launch_description():
             name='comms_gcs',
             namespace='asr/gcs',
             output='screen',
-            parameters=[{
-                'serial_port': serial_port,
-                'baud_rate':   baud_rate,
-            }],
+            parameters=[comms_path],
         ),
 
         # RTK base station — streams RTCM corrections to /rtcm
@@ -46,9 +26,7 @@ def generate_launch_description():
             name='rtcm_reader',
             namespace='asr/gcs',
             output='screen',
-            parameters=[{
-                'port': rtk_port,
-            }],
+            parameters=[comms_path],
         ),
 
         # Ground control station GUI

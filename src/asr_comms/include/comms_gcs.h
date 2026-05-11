@@ -66,7 +66,17 @@ private:
     rclcpp::Publisher<asr_comms::msg::LinkStats>::SharedPtr link_stats_pub_;
     std::atomic<size_t>   tx_bytes_{0};
     std::atomic<size_t>   rx_bytes_{0};
-    std::atomic<uint64_t> last_rx_ns_{0};  // nanoseconds timestamp of last received byte
+    std::atomic<uint64_t> last_rx_ns_{0};    // ns timestamp of last received byte
+
+    // SiK RADIO_STATUS fields (MAVLINK_MSG_ID_RADIO_STATUS = 109)
+    std::atomic<uint8_t>  radio_rssi_{255};
+    std::atomic<uint8_t>  radio_remrssi_{255};
+    std::atomic<uint8_t>  radio_noise_{255};
+    std::atomic<uint8_t>  radio_remnoise_{255};
+    std::atomic<uint8_t>  radio_txbuf_{0};
+    std::atomic<uint16_t> radio_rxerrors_{0};
+    std::atomic<uint16_t> radio_fixed_{0};
+    std::atomic<uint64_t> last_radio_ns_{0}; // ns timestamp of last RADIO_STATUS
     rclcpp::Subscription<std_msgs::msg::UInt8MultiArray>::SharedPtr         rtcm_sub_;
     rclcpp::Subscription<asr_comms::msg::UAVCommand>::SharedPtr             uav_command_sub_;
     rclcpp::Subscription<asr_comms::msg::GcsHeartbeat>::SharedPtr          gcs_heartbeat_sub_;

@@ -1,11 +1,17 @@
-# GCS-side node parameters.
-# Loaded by the GCS launch file and passed to comms_gcs and rtcm_reader.
+# GCS-side comms parameters.
+# serial_port: "auto" picks the first /dev/ttyUSB* or /dev/ttyACM* found.
+# Set serial_port to "" to fall back to UDP (bind_port / target_ip / target_port).
 
 /asr/gcs/comms_gcs:
   ros__parameters:
+    serial_port: "auto"
+    baud_rate: 115200
+
+    # UDP fallback — used only when serial_port is "".
     bind_port: 14550
     target_ip: "192.168.1.100"   # UAV IP — update to match your network
     target_port: 14551
+
     system_id: 255
     component_id: 0
 

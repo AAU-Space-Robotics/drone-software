@@ -15,8 +15,9 @@ def generate_launch_description():
     sensors_pkg_share = FindPackageShare('asr_drivers')
     thyra_pkg_share = FindPackageShare('thyra')
     
-    # Path to the thyra config file
+    # Path to the thyra config files
     params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'thyra_params.yaml'])
+    comms_path  = PathJoinSubstitution([thyra_pkg_share, 'config', 'comms', 'thyra_comms.yaml'])
     
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
@@ -64,10 +65,7 @@ def generate_launch_description():
             name='comms_uav',
             namespace='asr/thyra',
             output='screen',
-            parameters=[{
-                'serial_port': '/dev/ttyUSB0',
-                'baud_rate':   115200,
-            }]
+            parameters=[comms_path],
         ),
 
         # Delay and launch FlightControllerInterface node

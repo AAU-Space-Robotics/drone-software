@@ -248,6 +248,21 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
         break;
     }
 
+    case MAVLINK_MSG_ID_RADIO_STATUS: {
+        mavlink_radio_status_t radio{};
+        mavlink_msg_radio_status_decode(&msg, &radio);
+        radio_rssi_.store(radio.rssi);
+        radio_remrssi_.store(radio.remrssi);
+        radio_noise_.store(radio.noise);
+        radio_remnoise_.store(radio.remnoise);
+        radio_txbuf_.store(radio.txbuf);
+        radio_rxerrors_.store(radio.rxerrors);
+        radio_fixed_.store(radio.fixed);
+        last_radio_ns_.store(static_cast<uint64_t>(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+        break;
+    }
+
     default:
         break;
     }
@@ -267,13 +282,38 @@ void CommsGcs::publish_link_stats()
 {
     const uint64_t now_ns = static_cast<uint64_t>(
         std::chrono::steady_clock::now().time_since_epoch().count());
-    const uint64_t last  = last_rx_ns_.load();
-    constexpr uint64_t TIMEOUT_NS = 500'000'000ULL; // 0.5 s
+    constexpr uint64_t LINK_TIMEOUT_NS  = 500'000'000ULL;  // 0.5 s
+    constexpr uint64_t RADIO_TIMEOUT_NS = 2'000'000'000ULL; // 2 s
+
+    const uint64_t last_rx    = last_rx_ns_.load();
+    const uint64_t last_radio = last_radio_ns_.load();
 
     asr_comms::msg::LinkStats out{};
     out.tx_kbps   = static_cast<float>(tx_bytes_.exchange(0)) / 1024.0f;
     out.rx_kbps   = static_cast<float>(rx_bytes_.exchange(0)) / 1024.0f;
-    out.connected = (last != 0) && ((now_ns - last) < TIMEOUT_NS);
+    out.connected = (last_rx != 0) && ((now_ns - last_rx) < LINK_TIMEOUT_NS);
+
+    out.radio_ok  = (last_radio != 0) && ((now_ns - last_radio) < RADIO_TIMEOUT_NS);
+    out.rssi      = radio_rssi_.load();
+    out.remrssi   = radio_remrssi_.load();
+    out.noise     = radio_noise_.load();
+    out.remnoise  = radio_remnoise_.load();
+    out.txbuf     = radio_txbuf_.load();
+    out.rxerrors  = radio_rxerrors_.load();
+    out.fixed     = radio_fixed_.load();
+
+    using LS = asr_comms::msg::LinkStats;
+    if (!out.radio_ok) {
+        out.signal_quality = LS::QUALITY_NO_RADIO;
+    } else {
+        const int snr = static_cast<int>(out.rssi) - static_cast<int>(out.noise);
+        if      (snr <  20) out.signal_quality = LS::QUALITY_CRITICAL;
+        else if (snr <  40) out.signal_quality = LS::QUALITY_POOR;
+        else if (snr <  70) out.signal_quality = LS::QUALITY_FAIR;
+        else if (snr < 100) out.signal_quality = LS::QUALITY_GOOD;
+        else                out.signal_quality = LS::QUALITY_EXCELLENT;
+    }
+
     link_stats_pub_->publish(out);
 }
 
