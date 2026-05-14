@@ -92,3 +92,6 @@ ros2 action send_goal /system_control interfaces/action/SystemControl "{command_
 
 ## Full system reboot
 ros2 action send_goal /system_control interfaces/action/SystemControl "{command_type: 'REBOOT_PI'}"
+
+# Bonus command:
+ros2 run asr_comms comms_uav --ros-args -p serial_port:=auto

@@ -278,4 +278,7 @@ colcon build \
     --parallel-workers 4 \
     --packages-skip asr_gcs
 
+# Set ROS_DOMAIN_ID in .bashrc to ensure UAV and GCS are on the same ROS 2 domain for communication
+echo 'export ROS_DOMAIN_ID=203' >> ~/.bashrc
+
 echo "Workspace setup and build completed! :)"
