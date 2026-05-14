@@ -797,16 +797,15 @@ private:
     // Drone state publisher
     void publish_drone_state()
     {
-        const DroneState&        drone_state    = state_manager_.getDroneState();
+        const uint8_t tick = telemetry_tick_++;
+
         const Stamped3DVector&   position       = state_manager_.getGlobalPosition();
         const Stamped3DVector&   velocity       = state_manager_.getGlobalVelocity();
         const StampedQuaternion& attitude       = state_manager_.getAttitude();
         const Stamped4DVector&   target_profile = state_manager_.getTargetPositionProfile();
-        const auto&              battery        = state_manager_.getBatteryState();
-        const Stamped4DVector&   actuators      = state_manager_.getActuatorSpeeds();
-        const auto&              gps            = state_manager_.getGPSState();
         const Eigen::Vector3d    euler          = transformations_.quaternionToEuler(attitude.quaternion());
 
+        // 10 Hz — position and attitude
         {
             asr_comms::msg::TelemetryPosition msg{};
             msg.timestamp        = position.timestamp.seconds();
@@ -831,18 +830,9 @@ private:
             telemetry_attitude_pub_->publish(msg);
         }
 
-        {
-            asr_comms::msg::TelemetryBattery msg{};
-            msg.timestamp       = battery.timestamp.seconds();
-            msg.voltage         = battery.voltage;
-            msg.current         = battery.average_current;
-            msg.percentage      = battery.charge_remaining;
-            msg.discharged_mah  = battery.discharged_mah;
-            msg.average_current = battery.average_current;
-            telemetry_battery_pub_->publish(msg);
-        }
-
-        {
+        // 2 Hz — GPS (every 5th tick)
+        if (tick % 5 == 0) {
+            const auto& gps = state_manager_.getGPSState();
             asr_comms::msg::TelemetryGPS msg{};
             msg.timestamp       = get_clock()->now().seconds();
             msg.latitude        = gps.latitude;
@@ -851,20 +841,33 @@ private:
             telemetry_gps_pub_->publish(msg);
         }
 
-        {
-            asr_comms::msg::TelemetryStatus msg{};
-            msg.timestamp       = get_clock()->now().seconds();
-            msg.arming_state    = static_cast<uint8_t>(drone_state.arming_state);
-            msg.trajectory_mode = static_cast<uint8_t>(drone_state.trajectory_mode);
-            msg.flight_mode     = static_cast<int16_t>(drone_state.flight_mode);
-            msg.led_mode        = static_cast<int16_t>(drone_state.flight_mode_trait);
-            msg.flight_time     = drone_state.flight_time.seconds();
-            msg.probes_found    = state_manager_.getGlobalProbeLocations().getProbeCount();
-            msg.actuator_speeds = {static_cast<float>(actuators.x()),
-                                   static_cast<float>(actuators.y()),
-                                   static_cast<float>(actuators.z()),
-                                   static_cast<float>(actuators.w())};
-            telemetry_status_pub_->publish(msg);
+        // 1 Hz — battery and status (every 10th tick)
+        if (tick % 10 == 0) {
+            const auto& battery = state_manager_.getBatteryState();
+            asr_comms::msg::TelemetryBattery msg{};
+            msg.timestamp       = battery.timestamp.seconds();
+            msg.voltage         = battery.voltage;
+            msg.current         = battery.average_current;
+            msg.percentage      = battery.charge_remaining;
+            msg.discharged_mah  = battery.discharged_mah;
+            msg.average_current = battery.average_current;
+            telemetry_battery_pub_->publish(msg);
+
+            const DroneState&      drone_state = state_manager_.getDroneState();
+            const Stamped4DVector& actuators   = state_manager_.getActuatorSpeeds();
+            asr_comms::msg::TelemetryStatus smsg{};
+            smsg.timestamp       = get_clock()->now().seconds();
+            smsg.arming_state    = static_cast<uint8_t>(drone_state.arming_state);
+            smsg.trajectory_mode = static_cast<uint8_t>(drone_state.trajectory_mode);
+            smsg.flight_mode     = static_cast<int16_t>(drone_state.flight_mode);
+            smsg.led_mode        = static_cast<int16_t>(drone_state.flight_mode_trait);
+            smsg.flight_time     = drone_state.flight_time.seconds();
+            smsg.probes_found    = state_manager_.getGlobalProbeLocations().getProbeCount();
+            smsg.actuator_speeds = {static_cast<float>(actuators.x()),
+                                    static_cast<float>(actuators.y()),
+                                    static_cast<float>(actuators.z()),
+                                    static_cast<float>(actuators.w())};
+            telemetry_status_pub_->publish(smsg);
         }
     }
     // Offboard mode handling
@@ -1823,6 +1826,7 @@ private:
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::TimerBase::SharedPtr offboard_timer_;
     rclcpp::TimerBase::SharedPtr drone_state_timer;
+    uint8_t telemetry_tick_{0};
     rclcpp::TimerBase::SharedPtr safety_timer_;
     rclcpp::TimerBase::SharedPtr offset_timer;
     rclcpp::TimerBase::SharedPtr servo_hold_timer_;

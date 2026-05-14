@@ -35,7 +35,7 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     declare_parameter("target_ip",    DEFAULT_TARGET_IP);
     declare_parameter("target_port",  static_cast<int>(DEFAULT_TARGET_PORT));
     declare_parameter("serial_port",  std::string{});
-    declare_parameter("baud_rate",    57600);
+    declare_parameter("baud_rate",    115200);
     declare_parameter("system_id",    static_cast<int>(system_id_));
     declare_parameter("component_id", static_cast<int>(component_id_));
 
@@ -200,6 +200,7 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
             double   timestamp;
             double   flight_time;
             float    actuator_speeds[4];
+            float    uav_rx_kbps;
             int32_t  probes_found;
             int16_t  flight_mode;
             int16_t  led_mode;
@@ -211,6 +212,8 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
 
         StatusPod pod{};
         std::memcpy(&pod, ext.payload, sizeof(pod));
+
+        uav_rx_kbps_.store(pod.uav_rx_kbps);
 
         asr_comms::msg::TelemetryStatus out{};
         out.timestamp       = pod.timestamp;
@@ -292,6 +295,7 @@ void CommsGcs::publish_link_stats()
     out.rx_kbps   = static_cast<float>(rx_bytes_.exchange(0)) / 1024.0f;
     out.connected = (last_rx != 0) && ((now_ns - last_rx) < LINK_TIMEOUT_NS);
 
+    out.peer_rx_kbps = uav_rx_kbps_.load();
     out.radio_ok  = (last_radio != 0) && ((now_ns - last_radio) < RADIO_TIMEOUT_NS);
     out.rssi      = radio_rssi_.load();
     out.remrssi   = radio_remrssi_.load();

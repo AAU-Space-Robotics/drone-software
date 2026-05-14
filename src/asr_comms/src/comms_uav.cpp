@@ -37,7 +37,7 @@ CommsUav::CommsUav()
     declare_parameter("target_ip",    DEFAULT_TARGET_IP);
     declare_parameter("target_port",  static_cast<int>(DEFAULT_TARGET_PORT));
     declare_parameter("serial_port",  std::string{});
-    declare_parameter("baud_rate",    57600);
+    declare_parameter("baud_rate",    115200);
     declare_parameter("system_id",    static_cast<int>(system_id_));
     declare_parameter("component_id", static_cast<int>(component_id_));
 
@@ -77,7 +77,10 @@ CommsUav::CommsUav()
     // Outgoing to GCS — one subscription per telemetry topic.
     // best_effort + depth 1: only the latest sample matters; never queue stale data
     // that would arrive at the GCS as delayed or "duplicate" bursts.
-    heartbeat_timer_ = create_wall_timer(1s, std::bind(&CommsUav::send_heartbeat, this));
+    heartbeat_timer_ = create_wall_timer(1s, [this]() {
+        uav_rx_kbps_ = static_cast<float>(rx_bytes_.exchange(0)) / 1024.0f;
+        send_heartbeat();
+    });
 
     auto qos_rt = rclcpp::QoS(1).best_effort();
 
@@ -125,6 +128,7 @@ void CommsUav::recv_loop()
         const ssize_t n = transport_->recv(buf, sizeof(buf));
         if (n <= 0) continue;
 
+        rx_bytes_ += static_cast<size_t>(n);
         for (ssize_t i = 0; i < n; ++i) {
             if (mavlink_parse_char(MAVLINK_COMM_0, buf[i], &msg, &status))
                 handle_message(msg);
@@ -442,6 +446,7 @@ void CommsUav::on_status(const asr_comms::msg::TelemetryStatus::SharedPtr msg)
         double   timestamp;
         double   flight_time;
         float    actuator_speeds[4];
+        float    uav_rx_kbps;
         int32_t  probes_found;
         int16_t  flight_mode;
         int16_t  led_mode;
@@ -461,6 +466,7 @@ void CommsUav::on_status(const asr_comms::msg::TelemetryStatus::SharedPtr msg)
     pod.arming_state    = msg->arming_state;
     pod.trajectory_mode = msg->trajectory_mode;
     pod.estop           = msg->estop;
+    pod.uav_rx_kbps     = uav_rx_kbps_;
     for (int i = 0; i < 4; ++i)
         pod.actuator_speeds[i] = msg->actuator_speeds.size() > size_t(i)
                                  ? msg->actuator_speeds[i] : 0.f;

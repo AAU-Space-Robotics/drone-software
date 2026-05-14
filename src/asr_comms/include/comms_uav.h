@@ -61,6 +61,8 @@ private:
     std::thread       recv_thread_;
     std::atomic<bool> running_{true};
     std::mutex        send_mutex_;
+    std::atomic<size_t> rx_bytes_{0};
+    float               uav_rx_kbps_{0.0f};
 
     rclcpp::Publisher<asr_comms::msg::GcsHeartbeat>::SharedPtr        heartbeat_pub_;
     rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr        gps_inject_pub_;
