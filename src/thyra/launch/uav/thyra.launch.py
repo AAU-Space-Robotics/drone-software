@@ -20,9 +20,9 @@ def generate_launch_description():
     with_comms      = LaunchConfiguration('with_comms',      default='false')
     autopilot_delay = LaunchConfiguration('autopilot_delay', default='15.0')
 
-    # Jetson uses /dev/ttyTHS1, Pi uses /dev/ttyAMA0
+    # Jetson uses USB-to-TTL adapter (udev symlink), Pi uses native UART
     serial_device = PythonExpression([
-        '"/dev/ttyTHS1" if "', hardware, '" == "jetson" else "/dev/ttyAMA0"'
+        '"/dev/px4" if "', hardware, '" == "jetson" else "/dev/ttyAMA0"'
     ])
 
     return LaunchDescription([

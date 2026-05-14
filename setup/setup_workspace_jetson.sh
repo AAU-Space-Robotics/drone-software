@@ -9,7 +9,7 @@ SRC_DIR="$ROS_WORKSPACE_PATH/src"
 PARENT_DIR=$(dirname "$ROS_WORKSPACE_PATH")  # Directory containing drone-software
 ROS_DISTRO="humble"
 
-# 1. Check if ROS 2 is installed
+# Check if ROS 2 is installed
 if ! command -v ros2 &> /dev/null; then
     echo "WARNING: ROS 2 does not appear to be installed (ros2 command not found)."
     echo "This script requires ROS 2 $ROS_DISTRO to be installed and sourced before running."
@@ -24,7 +24,7 @@ else
     echo "ROS 2 found. Continuing..."
 fi
 
-# 2. Install Intel RealSense SDK
+# Install Intel RealSense SDK
 echo "Installing Intel RealSense SDK..."
 if ! command -v rs-enumerate-devices &> /dev/null; then
     # Install dependencies
@@ -75,7 +75,7 @@ else
     echo "Intel RealSense SDK is already installed."
 fi
 
-# 3. Install ROS RealSense wrapper
+# Install ROS RealSense wrapper
 echo "Installing ROS $ROS_DISTRO RealSense wrapper..."
 if ! dpkg -l | grep -q "ros-$ROS_DISTRO-realsense2-camera"; then
     # Create keyrings directory
@@ -123,7 +123,7 @@ else
     echo "ROS $ROS_DISTRO RealSense wrapper is already installed."
 fi
 
-# 4. Install additional ROS dependencies
+# Install additional ROS dependencies
 echo "Installing additional ROS $ROS_DISTRO dependencies..."
 if ! dpkg -l | grep -q "ros-$ROS_DISTRO-serial-driver"; then
     if ! sudo apt-get install -y "ros-$ROS_DISTRO-serial-driver"; then
@@ -143,16 +143,16 @@ else
     echo "ros-$ROS_DISTRO-asio-cmake-module is already installed."
 fi
 
-# 5. Check if the src directory exists, create it if it doesn't
+# Check if the src directory exists, create it if it doesn't
 if [ ! -d "$SRC_DIR" ]; then
   echo "Creating src directory at $SRC_DIR..."
   mkdir -p "$SRC_DIR"
 fi
 
-# 6. Navigate to the src directory
+# Navigate to the src directory
 cd "$SRC_DIR" || exit
 
-# 7. Function to clone a repository if it doesn't already exist
+# Function to clone a repository if it doesn't already exist
 clone_repo_if_not_exists() {
     local repo_url="$1"
     local target_dir="$2"
@@ -169,16 +169,16 @@ clone_repo_if_not_exists() {
     fi
 }
 
-# 8. Clone the Intel RealSense ROS wrapper repository
+# Clone the Intel RealSense ROS wrapper repository
 clone_repo_if_not_exists "git@github.com:IntelRealSense/realsense-ros.git" "realsense-ros" "ros2-master"
 
-# 9. Clone the px4_msgs repository
+# Clone the px4_msgs repository
 clone_repo_if_not_exists "git@github.com:AAU-Space-Robotics/px4_msgs_thyra.git" "px4_msgs_thyra"
 
-# 10. Navigate to the parent directory to check/install Micro-XRCE-DDS-Agent
+# Navigate to the parent directory to check/install Micro-XRCE-DDS-Agent
 cd "$PARENT_DIR" || exit
 
-# 11. Check and install Micro-XRCE-DDS-Agent
+# Check and install Micro-XRCE-DDS-Agent
 if [ -d "Micro-XRCE-DDS-Agent" ]; then
   echo "Micro-XRCE-DDS-Agent is already installed, skipping installation."
 else
@@ -194,16 +194,29 @@ else
   cd "$PARENT_DIR" || exit
 fi
 
-# 12. Disable nvgetty to free UART for PX4 link
+# Disable nvgetty to free UART for PX4 link
 echo "Disabling nvgetty serial console to free UART..."
 sudo systemctl stop nvgetty 2>/dev/null || true
 sudo systemctl disable nvgetty 2>/dev/null || true
 
-# 13. Grant UART access to the current user
+# Grant UART access to the current user
 echo "Granting dialout group access for UART..."
 sudo usermod -a -G dialout "${SUDO_USER:-$USER}"
 
-# 14. Pin the flight stack to the Jetson launch file
+# Install udev rules for stable USB device symlinks
+echo "Installing udev rules for USB device identification..."
+UDEV_RULES_FILE="/etc/udev/rules.d/99-drone-usb.rules"
+cat <<EOF | sudo tee "$UDEV_RULES_FILE" > /dev/null
+# PX4 bridge (Silicon Labs CP2102N USB-to-UART)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="px4"
+
+# SiK radio module (FTDI FT231X)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", SYMLINK+="sik"
+EOF
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+
+# Pin the flight stack to the Jetson launch file
 PARAMS_SRC="${ROS_WORKSPACE_PATH}/src/thyra/config/thyra_params.yaml"
 sed -i "s/flight_stack_launch: .*/flight_stack_launch: thyra_jetson/" "$PARAMS_SRC"
 
@@ -255,7 +268,7 @@ sudo chmod 440 "$SUDOERS_FILE"
 sudo systemctl daemon-reload
 sudo systemctl enable thyra.service
 
-# 15. Build the workspace
+# Build the workspace
 echo "Building workspace..."
 cd "$ROS_WORKSPACE_PATH" || exit
 
