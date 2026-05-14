@@ -17,7 +17,7 @@ def generate_launch_description():
     hardware        = LaunchConfiguration('hardware',        default='jetson')
     use_sim_time    = LaunchConfiguration('use_sim_time',    default='false')
     position_source = LaunchConfiguration('position_source', default='px4')
-    with_comms      = LaunchConfiguration('with_comms',      default='false')
+    with_comms      = LaunchConfiguration('with_comms',      default='true')
     autopilot_delay = LaunchConfiguration('autopilot_delay', default='15.0')
     use_led         = LaunchConfiguration('use_led',         default='false')
 
@@ -44,7 +44,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'with_comms',
-            default_value='false',
+            default_value='true',
             description='Launch comms_uav SiK radio bridge node',
         ),
         DeclareLaunchArgument(
