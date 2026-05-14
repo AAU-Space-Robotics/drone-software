@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -59,6 +60,7 @@ private:
     // Receive side
     std::thread       recv_thread_;
     std::atomic<bool> running_{true};
+    std::mutex        send_mutex_;
 
     rclcpp::Publisher<asr_comms::msg::GcsHeartbeat>::SharedPtr        heartbeat_pub_;
     rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr        gps_inject_pub_;

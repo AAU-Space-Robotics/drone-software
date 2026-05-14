@@ -79,19 +79,18 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
         "in/uav_command", 10,
         std::bind(&CommsGcs::on_uav_command, this, std::placeholders::_1));
 
-    auto qos_be_tl = rclcpp::QoS(10).best_effort().transient_local();
-    auto qos_be_vo = rclcpp::QoS(10).best_effort().durability_volatile();
+    auto qos_rt = rclcpp::QoS(1).best_effort();
 
     gcs_heartbeat_sub_ = create_subscription<asr_comms::msg::GcsHeartbeat>(
-        "in/gcs_heartbeat", qos_be_tl,
+        "in/gcs_heartbeat", 10,
         std::bind(&CommsGcs::on_gcs_heartbeat, this, std::placeholders::_1));
 
     manual_input_sub_ = create_subscription<asr_comms::msg::ManualControlInput>(
-        "in/manual_input", qos_be_tl,
+        "in/manual_input", qos_rt,
         std::bind(&CommsGcs::on_manual_input, this, std::placeholders::_1));
 
     servo_command_sub_ = create_subscription<asr_comms::msg::ServoCommand>(
-        "in/servo_command", qos_be_vo,
+        "in/servo_command", qos_rt,
         std::bind(&CommsGcs::on_servo_command, this, std::placeholders::_1));
 
     recv_thread_ = std::thread(&CommsGcs::recv_loop, this);

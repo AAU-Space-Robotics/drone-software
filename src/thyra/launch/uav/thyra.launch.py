@@ -17,7 +17,8 @@ def generate_launch_description():
     hardware        = LaunchConfiguration('hardware',        default='jetson')
     use_sim_time    = LaunchConfiguration('use_sim_time',    default='false')
     position_source = LaunchConfiguration('position_source', default='px4')
-    with_comms      = LaunchConfiguration('with_comms',      default='false')
+    with_comms      = LaunchConfiguration('with_comms',      default='true')
+    with_camera     = LaunchConfiguration('with_camera',     default='true')
     autopilot_delay = LaunchConfiguration('autopilot_delay', default='15.0')
     use_led         = LaunchConfiguration('use_led',         default='false')
 
@@ -44,8 +45,13 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'with_comms',
-            default_value='false',
+            default_value='true',
             description='Launch comms_uav SiK radio bridge node',
+        ),
+        DeclareLaunchArgument(
+            'with_camera',
+            default_value='true',
+            description='Launch RealSense camera and image republisher',
         ),
         DeclareLaunchArgument(
             'autopilot_delay',
@@ -76,6 +82,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution([sensors_pkg_share, 'launch', 'thyra_cam.launch.py'])
             ),
+            condition=IfCondition(with_camera),
         ),
 
         Node(

@@ -69,27 +69,30 @@ CommsUav::CommsUav()
     servo_command_pub_  = create_publisher<asr_comms::msg::ServoCommand>("in/servo_command", qos_be_vo);
 
     // Outgoing to GCS — one subscription per telemetry topic.
-    // The autopilot controls the publish rate (target ≤10 Hz).
+    // best_effort + depth 1: only the latest sample matters; never queue stale data
+    // that would arrive at the GCS as delayed or "duplicate" bursts.
     heartbeat_timer_ = create_wall_timer(1s, std::bind(&CommsUav::send_heartbeat, this));
 
+    auto qos_rt = rclcpp::QoS(1).best_effort();
+
     position_sub_ = create_subscription<asr_comms::msg::TelemetryPosition>(
-        "out/telemetry/position", 10,
+        "out/telemetry/position", qos_rt,
         std::bind(&CommsUav::on_position, this, std::placeholders::_1));
 
     attitude_sub_ = create_subscription<asr_comms::msg::TelemetryAttitude>(
-        "out/telemetry/attitude", 10,
+        "out/telemetry/attitude", qos_rt,
         std::bind(&CommsUav::on_attitude, this, std::placeholders::_1));
 
     battery_sub_ = create_subscription<asr_comms::msg::TelemetryBattery>(
-        "out/telemetry/battery", 10,
+        "out/telemetry/battery", qos_rt,
         std::bind(&CommsUav::on_battery, this, std::placeholders::_1));
 
     gps_sub_ = create_subscription<asr_comms::msg::TelemetryGPS>(
-        "out/telemetry/gps", 10,
+        "out/telemetry/gps", qos_rt,
         std::bind(&CommsUav::on_gps, this, std::placeholders::_1));
 
     status_sub_ = create_subscription<asr_comms::msg::TelemetryStatus>(
-        "out/telemetry/status", 10,
+        "out/telemetry/status", qos_rt,
         std::bind(&CommsUav::on_status, this, std::placeholders::_1));
 
     // Action client — forwards COMMAND_LONG from GCS to the autopilot action server
@@ -349,6 +352,7 @@ void CommsUav::send_mavlink(mavlink_message_t& msg)
 {
     uint8_t buf[MAVLINK_MAX_PACKET_LEN];
     const uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+    std::lock_guard<std::mutex> lock(send_mutex_);
     transport_->send(buf, len);
 }
 
