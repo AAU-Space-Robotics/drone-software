@@ -41,6 +41,12 @@ CommsUav::CommsUav()
     declare_parameter("system_id",    static_cast<int>(system_id_));
     declare_parameter("component_id", static_cast<int>(component_id_));
 
+    std::cout << "\n"
+              << "=============================\n"
+              << "    * COMMS UAV STARTING... *\n"
+              << "=============================\n"
+              << std::endl;
+
     system_id_    = static_cast<uint8_t>(get_parameter("system_id").as_int());
     component_id_ = static_cast<uint8_t>(get_parameter("component_id").as_int());
 
