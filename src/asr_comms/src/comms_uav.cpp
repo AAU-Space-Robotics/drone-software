@@ -78,7 +78,10 @@ CommsUav::CommsUav()
     // best_effort + depth 1: only the latest sample matters; never queue stale data
     // that would arrive at the GCS as delayed or "duplicate" bursts.
     heartbeat_timer_ = create_wall_timer(1s, [this]() {
-        uav_rx_kbps_ = static_cast<float>(rx_bytes_.exchange(0)) / 1024.0f;
+        const auto now = std::chrono::steady_clock::now();
+        const float dt = std::chrono::duration<float>(now - rx_rate_ts_).count();
+        rx_rate_ts_ = now;
+        uav_rx_kbps_ = static_cast<float>(rx_bytes_.exchange(0)) / 1024.0f / dt;
         send_heartbeat();
         send_rx_kbps();
     });

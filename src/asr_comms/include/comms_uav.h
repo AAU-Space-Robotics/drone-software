@@ -64,6 +64,7 @@ private:
     std::mutex        send_mutex_;
     std::atomic<size_t> rx_bytes_{0};
     float               uav_rx_kbps_{0.0f};
+    std::chrono::steady_clock::time_point rx_rate_ts_{std::chrono::steady_clock::now()};
 
     rclcpp::Publisher<asr_comms::msg::GcsHeartbeat>::SharedPtr        heartbeat_pub_;
     rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr        gps_inject_pub_;
