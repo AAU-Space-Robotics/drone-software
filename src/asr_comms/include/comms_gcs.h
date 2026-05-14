@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <thread>
 
 #include <rclcpp/rclcpp.hpp>
@@ -86,6 +87,7 @@ private:
     uint8_t  rtcm_seq_{0};
     int8_t   gcs_nominal_{1};          // latest value from in/gcs_heartbeat, sent in MAVLink heartbeat
     std::string pending_command_type_;
+    std::chrono::steady_clock::time_point last_command_sent_{};
 
     static constexpr uint16_t ASR_MSG_TELEMETRY_STATUS = 0x9001u;
     static constexpr uint16_t ASR_MSG_SERVO_COMMAND    = 0x9002u;

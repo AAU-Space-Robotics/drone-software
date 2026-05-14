@@ -148,7 +148,9 @@ class RtcmReaderNode(Node):
     # ------------------------------------------------------------------
 
     def _stream_rtcm(self):
-        reader = RTCMReader(self._serial)
+        # UBXReader with protfilter=4 handles mixed UBX+RTCM3 streams and
+        # silently discards UBX frames — RTCMReader would CRC-fail on them.
+        reader = UBXReader(self._serial, protfilter=4)
         consecutive_errors = 0
 
         for raw, _ in reader:

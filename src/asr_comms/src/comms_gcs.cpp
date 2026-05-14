@@ -76,13 +76,13 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
         std::bind(&CommsGcs::send_rtcm, this, std::placeholders::_1));
 
     uav_command_sub_ = create_subscription<asr_comms::msg::UAVCommand>(
-        "in/uav_command", 10,
+        "in/uav_command", 1,
         std::bind(&CommsGcs::on_uav_command, this, std::placeholders::_1));
 
     auto qos_rt = rclcpp::QoS(1).best_effort();
 
     gcs_heartbeat_sub_ = create_subscription<asr_comms::msg::GcsHeartbeat>(
-        "in/gcs_heartbeat", 10,
+        "in/gcs_heartbeat", rclcpp::QoS(10).best_effort(),
         std::bind(&CommsGcs::on_gcs_heartbeat, this, std::placeholders::_1));
 
     manual_input_sub_ = create_subscription<asr_comms::msg::ManualControlInput>(
@@ -424,6 +424,15 @@ void CommsGcs::send_rtcm(const std_msgs::msg::UInt8MultiArray::SharedPtr msg)
 
 void CommsGcs::on_uav_command(const asr_comms::msg::UAVCommand::SharedPtr msg)
 {
+    const auto now = std::chrono::steady_clock::now();
+    const auto ms_since_last = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - last_command_sent_).count();
+    if (msg->command_type == pending_command_type_ && ms_since_last < 300) {
+        RCLCPP_WARN(get_logger(), "Ignoring duplicate '%s' command (%lld ms since last)",
+                    msg->command_type.c_str(), ms_since_last);
+        return;
+    }
+    last_command_sent_ = now;
     pending_command_type_ = msg->command_type;
     const auto& cmd = msg->command_type;
     mavlink_message_t mav{};
