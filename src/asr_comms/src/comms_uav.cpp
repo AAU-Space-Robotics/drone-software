@@ -80,6 +80,7 @@ CommsUav::CommsUav()
     heartbeat_timer_ = create_wall_timer(1s, [this]() {
         uav_rx_kbps_ = static_cast<float>(rx_bytes_.exchange(0)) / 1024.0f;
         send_heartbeat();
+        send_rx_kbps();
     });
 
     auto qos_rt = rclcpp::QoS(1).best_effort();
@@ -366,6 +367,16 @@ void CommsUav::send_mavlink(mavlink_message_t& msg)
     transport_->send(buf, len);
 }
 
+void CommsUav::send_rx_kbps()
+{
+    mavlink_message_t msg{};
+    mavlink_msg_named_value_float_pack(system_id_, component_id_, &msg,
+        static_cast<uint32_t>(get_clock()->now().nanoseconds() / 1'000'000),
+        "rx_kbps",
+        uav_rx_kbps_);
+    send_mavlink(msg);
+}
+
 void CommsUav::send_heartbeat()
 {
     mavlink_message_t msg{};
@@ -446,7 +457,6 @@ void CommsUav::on_status(const asr_comms::msg::TelemetryStatus::SharedPtr msg)
         double   timestamp;
         double   flight_time;
         float    actuator_speeds[4];
-        float    uav_rx_kbps;
         int32_t  probes_found;
         int16_t  flight_mode;
         int16_t  led_mode;
@@ -466,7 +476,6 @@ void CommsUav::on_status(const asr_comms::msg::TelemetryStatus::SharedPtr msg)
     pod.arming_state    = msg->arming_state;
     pod.trajectory_mode = msg->trajectory_mode;
     pod.estop           = msg->estop;
-    pod.uav_rx_kbps     = uav_rx_kbps_;
     for (int i = 0; i < 4; ++i)
         pod.actuator_speeds[i] = msg->actuator_speeds.size() > size_t(i)
                                  ? msg->actuator_speeds[i] : 0.f;

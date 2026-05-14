@@ -200,7 +200,6 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
             double   timestamp;
             double   flight_time;
             float    actuator_speeds[4];
-            float    uav_rx_kbps;
             int32_t  probes_found;
             int16_t  flight_mode;
             int16_t  led_mode;
@@ -212,8 +211,6 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
 
         StatusPod pod{};
         std::memcpy(&pod, ext.payload, sizeof(pod));
-
-        uav_rx_kbps_.store(pod.uav_rx_kbps);
 
         asr_comms::msg::TelemetryStatus out{};
         out.timestamp       = pod.timestamp;
@@ -262,6 +259,14 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
         radio_fixed_.store(radio.fixed);
         last_radio_ns_.store(static_cast<uint64_t>(
             std::chrono::steady_clock::now().time_since_epoch().count()));
+        break;
+    }
+
+    case MAVLINK_MSG_ID_NAMED_VALUE_FLOAT: {
+        mavlink_named_value_float_t nv{};
+        mavlink_msg_named_value_float_decode(&msg, &nv);
+        if (std::strncmp(nv.name, "rx_kbps", sizeof(nv.name)) == 0)
+            uav_rx_kbps_.store(nv.value);
         break;
     }
 

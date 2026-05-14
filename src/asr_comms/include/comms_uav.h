@@ -46,6 +46,7 @@ private:
     // Send path
     void send_mavlink(mavlink_message_t& msg);
     void send_heartbeat();
+    void send_rx_kbps();
     void on_position(const asr_comms::msg::TelemetryPosition::SharedPtr msg);
     void on_attitude(const asr_comms::msg::TelemetryAttitude::SharedPtr msg);
     void on_battery(const asr_comms::msg::TelemetryBattery::SharedPtr msg);
