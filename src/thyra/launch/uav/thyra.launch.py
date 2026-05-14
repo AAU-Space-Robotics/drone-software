@@ -19,6 +19,7 @@ def generate_launch_description():
     position_source = LaunchConfiguration('position_source', default='px4')
     with_comms      = LaunchConfiguration('with_comms',      default='false')
     autopilot_delay = LaunchConfiguration('autopilot_delay', default='15.0')
+    use_led         = LaunchConfiguration('use_led',         default='false')
 
     # Jetson uses USB-to-TTL adapter (udev symlink), Pi uses native UART
     serial_device = PythonExpression([
@@ -51,6 +52,11 @@ def generate_launch_description():
             default_value='15.0',
             description='Seconds to wait before launching the autopilot node',
         ),
+        DeclareLaunchArgument(
+            'use_led',
+            default_value='false',
+            description='Use LED node',
+        ),
 
         ExecuteProcess(
             cmd=['MicroXRCEAgent', 'serial', '--dev', serial_device, '-b', '921600'],
@@ -58,6 +64,7 @@ def generate_launch_description():
         ),
 
         Node(
+            condition=IfCondition(use_led),
             package='asr_drivers',
             executable='LED.py',
             name='led',
