@@ -420,7 +420,7 @@ public:
 
         // Timers
         offboard_timer_ = create_wall_timer(200ms, [this](){ setOffboardMode(); });
-        drone_state_timer = create_wall_timer(20ms, [this](){ publish_drone_state(); });
+        drone_state_timer = create_wall_timer(100ms, [this](){ publish_drone_state(); });
         safety_timer_ = create_wall_timer(200ms, [this]() { safetyCheckCallback(); });
         offset_timer = create_wall_timer(1000ms, [this]() { publish_origin_offset(); });
         servo_hold_timer_ = create_wall_timer(100ms, [this]() { publishHeldDisarmedServoCommand(); });
