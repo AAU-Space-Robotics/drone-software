@@ -93,6 +93,7 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
         "in/servo_command", qos_rt,
         std::bind(&CommsGcs::on_servo_command, this, std::placeholders::_1));
 
+    mavlink_set_proto_version(MAVLINK_COMM_0, 2);
     recv_thread_ = std::thread(&CommsGcs::recv_loop, this);
 }
 

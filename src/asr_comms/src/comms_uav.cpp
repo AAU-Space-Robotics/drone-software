@@ -111,6 +111,7 @@ CommsUav::CommsUav()
     // Action client — forwards COMMAND_LONG from GCS to the autopilot action server
     action_client_ = rclcpp_action::create_client<DroneCommand>(this, "in/drone_command");
 
+    mavlink_set_proto_version(MAVLINK_COMM_0, 2);
     recv_thread_ = std::thread(&CommsUav::recv_loop, this);
 }
 
