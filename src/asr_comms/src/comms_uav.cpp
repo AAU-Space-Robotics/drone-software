@@ -40,6 +40,7 @@ CommsUav::CommsUav()
     declare_parameter("baud_rate",    115200);
     declare_parameter("system_id",    static_cast<int>(system_id_));
     declare_parameter("component_id", static_cast<int>(component_id_));
+    declare_parameter("wifi_port",    static_cast<int>(wifi_port_));
 
     std::cout << "\n"
               << "=============================\n"
@@ -49,6 +50,7 @@ CommsUav::CommsUav()
 
     system_id_    = static_cast<uint8_t>(get_parameter("system_id").as_int());
     component_id_ = static_cast<uint8_t>(get_parameter("component_id").as_int());
+    wifi_port_    = static_cast<uint16_t>(get_parameter("wifi_port").as_int());
 
     const auto serial_port = get_parameter("serial_port").as_string();
     if (!serial_port.empty()) {
@@ -111,14 +113,28 @@ CommsUav::CommsUav()
     // Action client — forwards COMMAND_LONG from GCS to the autopilot action server
     action_client_ = rclcpp_action::create_client<DroneCommand>(this, "in/drone_command");
 
+    // Open WiFi server socket — peer address latched from first incoming packet,
+    // or set immediately when a PEER_BEACON arrives via SiK.
+    try {
+        auto sock = std::make_unique<UdpSocket>(wifi_port_);
+        sock->set_recv_timeout_ms(200);
+        wifi_transport_ = std::move(sock);
+        wifi_recv_thread_ = std::thread(&CommsUav::wifi_recv_loop, this);
+        RCLCPP_INFO(get_logger(), "WiFi server socket bound on :%u — waiting for GCS beacon", wifi_port_);
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(get_logger(), "Failed to open WiFi socket: %s — dual-path disabled", e.what());
+    }
+
     mavlink_set_proto_version(MAVLINK_COMM_0, 2);
+    mavlink_set_proto_version(MAVLINK_COMM_1, 2);
     recv_thread_ = std::thread(&CommsUav::recv_loop, this);
 }
 
 CommsUav::~CommsUav()
 {
     running_ = false;
-    if (recv_thread_.joinable()) recv_thread_.join();
+    if (recv_thread_.joinable())      recv_thread_.join();
+    if (wifi_recv_thread_.joinable()) wifi_recv_thread_.join();
 }
 
 // --- Receive path ---
@@ -135,8 +151,34 @@ void CommsUav::recv_loop()
 
         rx_bytes_ += static_cast<size_t>(n);
         for (ssize_t i = 0; i < n; ++i) {
-            if (mavlink_parse_char(MAVLINK_COMM_0, buf[i], &msg, &status))
-                handle_message(msg);
+            if (mavlink_parse_char(MAVLINK_COMM_0, buf[i], &msg, &status)) {
+                if (dedup_.check(msg.sysid, msg.compid, msg.seq)) {
+                    std::lock_guard<std::mutex> lock(recv_mutex_);
+                    handle_message(msg);
+                }
+            }
+        }
+    }
+}
+
+void CommsUav::wifi_recv_loop()
+{
+    uint8_t           buf[UDP_BUF_SIZE];
+    mavlink_message_t msg{};
+    mavlink_status_t  status{};
+
+    while (running_) {
+        const ssize_t n = wifi_transport_->recv(buf, sizeof(buf));
+        if (n <= 0) continue;
+
+        rx_bytes_ += static_cast<size_t>(n);
+        for (ssize_t i = 0; i < n; ++i) {
+            if (mavlink_parse_char(MAVLINK_COMM_1, buf[i], &msg, &status)) {
+                if (dedup_.check(msg.sysid, msg.compid, msg.seq)) {
+                    std::lock_guard<std::mutex> lock(recv_mutex_);
+                    handle_message(msg);
+                }
+            }
         }
     }
 }
@@ -175,26 +217,27 @@ void CommsUav::handle_message(const mavlink_message_t& msg)
     case MAVLINK_MSG_ID_V2_EXTENSION: {
         mavlink_v2_extension_t ext{};
         mavlink_msg_v2_extension_decode(&msg, &ext);
-        if (ext.message_type != ASR_MSG_SERVO_COMMAND) break;
 
+        if (ext.message_type == ASR_MSG_SERVO_COMMAND) {
 #pragma pack(push, 1)
-        struct ServoPod {
-            uint64_t timestamp;
-            int32_t  aux_index;
-            int32_t  id;
-            float    value;
-        };
+            struct ServoPod {
+                uint64_t timestamp;
+                int32_t  aux_index;
+                int32_t  id;
+                float    value;
+            };
 #pragma pack(pop)
-
-        ServoPod pod{};
-        std::memcpy(&pod, ext.payload, sizeof(pod));
-
-        asr_comms::msg::ServoCommand out{};
-        out.timestamp = pod.timestamp;
-        out.aux_index = pod.aux_index;
-        out.id        = pod.id;
-        out.value     = pod.value;
-        servo_command_pub_->publish(out);
+            ServoPod pod{};
+            std::memcpy(&pod, ext.payload, sizeof(pod));
+            asr_comms::msg::ServoCommand out{};
+            out.timestamp = pod.timestamp;
+            out.aux_index = pod.aux_index;
+            out.id        = pod.id;
+            out.value     = pod.value;
+            servo_command_pub_->publish(out);
+        } else if (ext.message_type == ASR_MSG_PEER_BEACON) {
+            handle_peer_beacon(ext);
+        }
         break;
     }
 
@@ -372,6 +415,21 @@ void CommsUav::publish_gps_inject(const uint8_t* data, size_t len)
     }
 }
 
+void CommsUav::handle_peer_beacon(const mavlink_v2_extension_t& ext)
+{
+    if (!wifi_transport_) return;
+#pragma pack(push, 1)
+    struct PeerBeacon { uint32_t ip; uint16_t port; };
+#pragma pack(pop)
+    PeerBeacon beacon{};
+    std::memcpy(&beacon, ext.payload, sizeof(beacon));
+    const uint16_t port = ntohs(beacon.port);
+    wifi_transport_->set_target(beacon.ip, port);
+    char ip_str[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &beacon.ip, ip_str, sizeof(ip_str));
+    RCLCPP_INFO(get_logger(), "WiFi path to GCS: %s:%u", ip_str, port);
+}
+
 // --- Send path ---
 
 void CommsUav::send_mavlink(mavlink_message_t& msg)
@@ -380,6 +438,8 @@ void CommsUav::send_mavlink(mavlink_message_t& msg)
     const uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     std::lock_guard<std::mutex> lock(send_mutex_);
     transport_->send(buf, len);
+    if (wifi_transport_)
+        wifi_transport_->send(buf, len);
 }
 
 void CommsUav::send_radio_stats()

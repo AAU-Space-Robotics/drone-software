@@ -20,7 +20,9 @@
 #include <asr_comms/msg/link_stats.hpp>
 
 #include "common/mavlink.h"
+#include "dedup.h"
 #include "transport.h"
+#include "udp_socket.h"
 
 // Runs on the GCS machine. Transport is either UDP or a serial SiK radio.
 // Sends to drone:      heartbeat, RTK corrections.
@@ -33,11 +35,13 @@ public:
 private:
     // Receive path
     void recv_loop();
+    void wifi_recv_loop();
     void handle_message(const mavlink_message_t& msg);
 
     // Send path
     void send_mavlink(mavlink_message_t& msg);
     void send_heartbeat();
+    void send_peer_beacon();
     void send_rtcm(const std_msgs::msg::UInt8MultiArray::SharedPtr msg);
     void on_uav_command(const asr_comms::msg::UAVCommand::SharedPtr msg);
     void on_gcs_heartbeat(const asr_comms::msg::GcsHeartbeat::SharedPtr msg);
@@ -46,13 +50,22 @@ private:
     void publish_link_stats();
 
     std::unique_ptr<ITransport> transport_;
+    std::unique_ptr<UdpSocket>  wifi_transport_;  // server-mode UDP, nullptr until WiFi ready
+    uint32_t                    beacon_tick_{0};  // counts 1 Hz timer fires for keepalive pacing
 
     uint8_t system_id_   {255};
     uint8_t component_id_{  0};
 
     // Receive side
     std::thread       recv_thread_;
+    std::thread       wifi_recv_thread_;
     std::atomic<bool> running_{true};
+    std::mutex        recv_mutex_;   // serialises handle_message across both recv threads
+    DedupFilter       dedup_;
+
+    // WiFi peer-beacon config (GCS advertises itself; UAV IP is learned via recvfrom)
+    uint32_t wifi_ip_{0};    // GCS WiFi IP in network byte order, 0 = no route detected
+    uint16_t wifi_port_{0};  // GCS WiFi UDP bind port
 
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr              uav_heartbeat_pub_;
     rclcpp::Publisher<asr_comms::msg::TelemetryPosition>::SharedPtr position_pub_;
@@ -64,6 +77,7 @@ private:
     // Send side
     rclcpp::TimerBase::SharedPtr heartbeat_timer_;
     rclcpp::TimerBase::SharedPtr stats_timer_;
+    rclcpp::TimerBase::SharedPtr beacon_timer_;
     rclcpp::Publisher<asr_comms::msg::LinkStats>::SharedPtr link_stats_pub_;
     std::atomic<size_t>   tx_bytes_{0};
     std::atomic<size_t>   rx_bytes_{0};
@@ -100,6 +114,7 @@ private:
 
     static constexpr uint16_t ASR_MSG_TELEMETRY_STATUS = 0x9001u;
     static constexpr uint16_t ASR_MSG_SERVO_COMMAND    = 0x9002u;
+    static constexpr uint16_t ASR_MSG_PEER_BEACON      = 0x9003u;
 
     // ASR custom MAVLink command IDs (local experiment range ≥ 32768)
     static constexpr uint16_t ASR_CMD_GOTO              = 32768u;

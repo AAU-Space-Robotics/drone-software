@@ -38,9 +38,11 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     declare_parameter("baud_rate",    115200);
     declare_parameter("system_id",    static_cast<int>(system_id_));
     declare_parameter("component_id", static_cast<int>(component_id_));
+    declare_parameter("wifi_port",    14552);
 
     system_id_    = static_cast<uint8_t>(get_parameter("system_id").as_int());
     component_id_ = static_cast<uint8_t>(get_parameter("component_id").as_int());
+    wifi_port_    = static_cast<uint16_t>(get_parameter("wifi_port").as_int());
 
     const auto serial_port = get_parameter("serial_port").as_string();
     if (!serial_port.empty()) {
@@ -93,14 +95,52 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
         "in/servo_command", qos_rt,
         std::bind(&CommsGcs::on_servo_command, this, std::placeholders::_1));
 
+    // Auto-detect local WiFi IP via routing trick (no packets sent).
+    {
+        int s = ::socket(AF_INET, SOCK_DGRAM, 0);
+        if (s >= 0) {
+            sockaddr_in dummy{};
+            dummy.sin_family = AF_INET;
+            dummy.sin_port   = htons(80);
+            inet_pton(AF_INET, "8.8.8.8", &dummy.sin_addr);
+            if (connect(s, reinterpret_cast<sockaddr*>(&dummy), sizeof(dummy)) == 0) {
+                sockaddr_in local{};
+                socklen_t   len = sizeof(local);
+                getsockname(s, reinterpret_cast<sockaddr*>(&local), &len);
+                wifi_ip_ = local.sin_addr.s_addr;
+                char ip_str[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &local.sin_addr, ip_str, sizeof(ip_str));
+                RCLCPP_INFO(get_logger(), "WiFi peer beacon: advertising %s:%u", ip_str, wifi_port_);
+            } else {
+                RCLCPP_WARN(get_logger(), "No default route — WiFi dual-path beacon disabled");
+            }
+            close(s);
+        }
+    }
+
+    // Open the WiFi server socket (peer address learned from first incoming packet).
+    try {
+        auto sock = std::make_unique<UdpSocket>(wifi_port_);
+        sock->set_recv_timeout_ms(200);
+        wifi_transport_ = std::move(sock);
+        wifi_recv_thread_ = std::thread(&CommsGcs::wifi_recv_loop, this);
+        RCLCPP_INFO(get_logger(), "WiFi server socket bound on :%u", wifi_port_);
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(get_logger(), "Failed to open WiFi socket: %s — dual-path disabled", e.what());
+    }
+
+    beacon_timer_ = create_wall_timer(1s, std::bind(&CommsGcs::send_peer_beacon, this));
+
     mavlink_set_proto_version(MAVLINK_COMM_0, 2);
+    mavlink_set_proto_version(MAVLINK_COMM_1, 2);
     recv_thread_ = std::thread(&CommsGcs::recv_loop, this);
 }
 
 CommsGcs::~CommsGcs()
 {
     running_ = false;
-    if (recv_thread_.joinable()) recv_thread_.join();
+    if (recv_thread_.joinable())      recv_thread_.join();
+    if (wifi_recv_thread_.joinable()) wifi_recv_thread_.join();
 }
 
 // --- Receive path ---
@@ -119,8 +159,37 @@ void CommsGcs::recv_loop()
         last_rx_ns_.store(static_cast<uint64_t>(
             std::chrono::steady_clock::now().time_since_epoch().count()));
         for (ssize_t i = 0; i < n; ++i) {
-            if (mavlink_parse_char(MAVLINK_COMM_0, buf[i], &msg, &status))
-                handle_message(msg);
+            if (mavlink_parse_char(MAVLINK_COMM_0, buf[i], &msg, &status)) {
+                if (dedup_.check(msg.sysid, msg.compid, msg.seq)) {
+                    std::lock_guard<std::mutex> lock(recv_mutex_);
+                    handle_message(msg);
+                }
+            }
+        }
+    }
+}
+
+void CommsGcs::wifi_recv_loop()
+{
+    uint8_t           buf[UDP_BUF_SIZE];
+    mavlink_message_t msg{};
+    mavlink_status_t  status{};
+
+    while (running_) {
+        const ssize_t n = wifi_transport_->recv(buf, sizeof(buf));
+        if (n <= 0) continue;
+
+        rx_bytes_ += static_cast<size_t>(n);
+        last_rx_ns_.store(static_cast<uint64_t>(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+
+        for (ssize_t i = 0; i < n; ++i) {
+            if (mavlink_parse_char(MAVLINK_COMM_1, buf[i], &msg, &status)) {
+                if (dedup_.check(msg.sysid, msg.compid, msg.seq)) {
+                    std::lock_guard<std::mutex> lock(recv_mutex_);
+                    handle_message(msg);
+                }
+            }
         }
     }
 }
@@ -295,6 +364,30 @@ void CommsGcs::send_mavlink(mavlink_message_t& msg)
     const uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     transport_->send(buf, len);
     tx_bytes_ += len;
+    if (wifi_transport_)
+        wifi_transport_->send(buf, len);
+}
+
+void CommsGcs::send_peer_beacon()
+{
+    if (wifi_ip_ == 0) return;
+
+    // Discovery: 1 Hz until the WiFi peer is known. Keepalive: every 10 s.
+    const bool connected = wifi_transport_ && wifi_transport_->peer_known();
+    if (connected && (++beacon_tick_ % 10 != 0)) return;
+    if (!connected) beacon_tick_ = 0;  // reset so reconnection re-enters discovery
+
+#pragma pack(push, 1)
+    struct PeerBeacon { uint32_t ip; uint16_t port; };
+#pragma pack(pop)
+    PeerBeacon beacon{ wifi_ip_, htons(wifi_port_) };
+    uint8_t payload[249]{};
+    std::memcpy(payload, &beacon, sizeof(beacon));
+    mavlink_message_t msg{};
+    mavlink_msg_v2_extension_pack(system_id_, component_id_, &msg,
+        0, 0, 0, ASR_MSG_PEER_BEACON, payload);
+    send_mavlink(msg);
+    RCLCPP_DEBUG(get_logger(), "Peer beacon sent (connected=%s)", connected ? "yes" : "no");
 }
 
 void CommsGcs::publish_link_stats()

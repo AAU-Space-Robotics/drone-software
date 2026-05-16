@@ -5,3 +5,4 @@
   ros__parameters:
     serial_port: "/dev/sik"
     baud_rate: 115200
+    wifi_port: 14553

@@ -22,7 +22,9 @@
 #include <asr_comms/action/drone_command.hpp>
 
 #include "common/mavlink.h"
+#include "dedup.h"
 #include "transport.h"
+#include "udp_socket.h"
 
 // Runs on the drone. Transport is either UDP or a serial SiK radio.
 // Receives from GCS: heartbeat, RTK corrections, UAVCommand.
@@ -38,8 +40,10 @@ private:
 
     // Receive path
     void recv_loop();
+    void wifi_recv_loop();
     void handle_message(const mavlink_message_t& msg);
     void handle_rtcm(const mavlink_gps_rtcm_data_t& rtcm);
+    void handle_peer_beacon(const mavlink_v2_extension_t& ext);
     void publish_gps_inject(const uint8_t* data, size_t len);
     void forward_command(const mavlink_command_long_t& cmd);
 
@@ -55,14 +59,19 @@ private:
     void on_status(const asr_comms::msg::TelemetryStatus::SharedPtr msg);
 
     std::unique_ptr<ITransport> transport_;
+    std::unique_ptr<UdpSocket>  wifi_transport_;  // client socket, nullptr until beacon received
 
     uint8_t system_id_   {1};
     uint8_t component_id_{1};
+    uint16_t wifi_port_{14553};
 
     // Receive side
     std::thread       recv_thread_;
+    std::thread       wifi_recv_thread_;
     std::atomic<bool> running_{true};
+    std::mutex        recv_mutex_;   // serialises handle_message across both recv threads
     std::mutex        send_mutex_;
+    DedupFilter       dedup_;
     std::atomic<size_t> rx_bytes_{0};
     float               uav_rx_kbps_{0.0f};
     std::chrono::steady_clock::time_point rx_rate_ts_{std::chrono::steady_clock::now()};
@@ -109,6 +118,7 @@ private:
 
     static constexpr uint16_t ASR_MSG_TELEMETRY_STATUS = 0x9001u;
     static constexpr uint16_t ASR_MSG_SERVO_COMMAND    = 0x9002u;
+    static constexpr uint16_t ASR_MSG_PEER_BEACON      = 0x9003u;
 
     // ASR custom MAVLink command IDs (local experiment range ≥ 32768)
     static constexpr uint16_t ASR_CMD_GOTO              = 32768u;
