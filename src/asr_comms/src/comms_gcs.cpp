@@ -400,7 +400,7 @@ void CommsGcs::publish_link_stats()
 {
     const uint64_t now_ns = static_cast<uint64_t>(
         std::chrono::steady_clock::now().time_since_epoch().count());
-    constexpr uint64_t LINK_TIMEOUT_NS  = 500'000'000ULL;  // 0.5 s
+    constexpr uint64_t LINK_TIMEOUT_NS  = 2'000'000'000ULL; // 2 s
     constexpr uint64_t RADIO_TIMEOUT_NS = 2'000'000'000ULL; // 2 s
 
     const uint64_t last_rx    = last_rx_ns_.load();
