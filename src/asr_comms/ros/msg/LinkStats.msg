@@ -1,7 +1,12 @@
-float32 tx_kbps         # kilobytes per second written to serial (GCS side)
-float32 rx_kbps         # kilobytes per second received from UAV (GCS side)
-float32 peer_rx_kbps    # kilobytes per second the UAV actually received (reported by UAV)
-bool    connected    # true if a message was received within the last 0.5 s
+float32 tx_kbps         # bytes/s sent over the SiK radio (GCS→UAV)
+float32 rx_kbps         # total bytes/s received from UAV (both paths combined)
+float32 radio_rx_kbps   # bytes/s received via SiK radio only
+float32 wifi_rx_kbps    # bytes/s received via WiFi only
+uint32  radio_rx_msgs   # unique MAVLink messages first seen on the radio path (per interval)
+uint32  wifi_rx_msgs    # unique MAVLink messages first seen on the WiFi path (per interval)
+float32 peer_rx_kbps    # bytes/s the UAV actually received (reported by UAV)
+bool    connected        # true if any message was received within the last 0.5 s
+bool    wifi_connected   # true if the WiFi peer is currently known
 
 # SiK radio hardware stats (from MAVLink RADIO_STATUS, msg 109).
 # 255 in rssi/noise fields means no radio or value invalid.

@@ -80,8 +80,11 @@ private:
     rclcpp::TimerBase::SharedPtr beacon_timer_;
     rclcpp::Publisher<asr_comms::msg::LinkStats>::SharedPtr link_stats_pub_;
     std::atomic<size_t>   tx_bytes_{0};
-    std::atomic<size_t>   rx_bytes_{0};
-    std::atomic<uint64_t> last_rx_ns_{0};    // ns timestamp of last received byte
+    std::atomic<size_t>   radio_rx_bytes_{0};
+    std::atomic<size_t>   wifi_rx_bytes_{0};
+    std::atomic<uint32_t> radio_rx_msgs_{0};   // unique msgs first seen on radio path
+    std::atomic<uint32_t> wifi_rx_msgs_{0};    // unique msgs first seen on WiFi path
+    std::atomic<uint64_t> last_rx_ns_{0};      // ns timestamp of last received byte (either path)
 
     std::atomic<float>    uav_rx_kbps_{0.0f};  // reported by UAV via NAMED_VALUE_FLOAT
 

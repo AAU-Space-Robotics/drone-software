@@ -39,10 +39,12 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     declare_parameter("system_id",    static_cast<int>(system_id_));
     declare_parameter("component_id", static_cast<int>(component_id_));
     declare_parameter("wifi_port",    14552);
+    declare_parameter("wifi_enabled", true);
 
     system_id_    = static_cast<uint8_t>(get_parameter("system_id").as_int());
     component_id_ = static_cast<uint8_t>(get_parameter("component_id").as_int());
     wifi_port_    = static_cast<uint16_t>(get_parameter("wifi_port").as_int());
+    const bool wifi_enabled = get_parameter("wifi_enabled").as_bool();
 
     const auto serial_port = get_parameter("serial_port").as_string();
     if (!serial_port.empty()) {
@@ -95,8 +97,10 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
         "in/servo_command", qos_rt,
         std::bind(&CommsGcs::on_servo_command, this, std::placeholders::_1));
 
-    // Auto-detect local WiFi IP via routing trick (no packets sent).
-    {
+    if (!wifi_enabled) {
+        RCLCPP_INFO(get_logger(), "WiFi dual-path disabled (wifi_enabled: false)");
+    } else {
+        // Auto-detect local WiFi IP via routing trick (no packets sent).
         int s = ::socket(AF_INET, SOCK_DGRAM, 0);
         if (s >= 0) {
             sockaddr_in dummy{};
@@ -116,20 +120,20 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
             }
             close(s);
         }
-    }
 
-    // Open the WiFi server socket (peer address learned from first incoming packet).
-    try {
-        auto sock = std::make_unique<UdpSocket>(wifi_port_);
-        sock->set_recv_timeout_ms(200);
-        wifi_transport_ = std::move(sock);
-        wifi_recv_thread_ = std::thread(&CommsGcs::wifi_recv_loop, this);
-        RCLCPP_INFO(get_logger(), "WiFi server socket bound on :%u", wifi_port_);
-    } catch (const std::exception& e) {
-        RCLCPP_ERROR(get_logger(), "Failed to open WiFi socket: %s — dual-path disabled", e.what());
-    }
+        // Open the WiFi server socket (peer address learned from first incoming packet).
+        try {
+            auto sock = std::make_unique<UdpSocket>(wifi_port_);
+            sock->set_recv_timeout_ms(200);
+            wifi_transport_ = std::move(sock);
+            wifi_recv_thread_ = std::thread(&CommsGcs::wifi_recv_loop, this);
+            RCLCPP_INFO(get_logger(), "WiFi server socket bound on :%u", wifi_port_);
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(get_logger(), "Failed to open WiFi socket: %s — dual-path disabled", e.what());
+        }
 
-    beacon_timer_ = create_wall_timer(1s, std::bind(&CommsGcs::send_peer_beacon, this));
+        beacon_timer_ = create_wall_timer(1s, std::bind(&CommsGcs::send_peer_beacon, this));
+    }
 
     mavlink_set_proto_version(MAVLINK_COMM_0, 2);
     mavlink_set_proto_version(MAVLINK_COMM_1, 2);
@@ -155,12 +159,13 @@ void CommsGcs::recv_loop()
         const ssize_t n = transport_->recv(buf, sizeof(buf));
         if (n <= 0) continue;
 
-        rx_bytes_ += static_cast<size_t>(n);
+        radio_rx_bytes_ += static_cast<size_t>(n);
         last_rx_ns_.store(static_cast<uint64_t>(
             std::chrono::steady_clock::now().time_since_epoch().count()));
         for (ssize_t i = 0; i < n; ++i) {
             if (mavlink_parse_char(MAVLINK_COMM_0, buf[i], &msg, &status)) {
                 if (dedup_.check(msg.sysid, msg.compid, msg.seq)) {
+                    ++radio_rx_msgs_;
                     std::lock_guard<std::mutex> lock(recv_mutex_);
                     handle_message(msg);
                 }
@@ -179,13 +184,14 @@ void CommsGcs::wifi_recv_loop()
         const ssize_t n = wifi_transport_->recv(buf, sizeof(buf));
         if (n <= 0) continue;
 
-        rx_bytes_ += static_cast<size_t>(n);
+        wifi_rx_bytes_ += static_cast<size_t>(n);
         last_rx_ns_.store(static_cast<uint64_t>(
             std::chrono::steady_clock::now().time_since_epoch().count()));
 
         for (ssize_t i = 0; i < n; ++i) {
             if (mavlink_parse_char(MAVLINK_COMM_1, buf[i], &msg, &status)) {
                 if (dedup_.check(msg.sysid, msg.compid, msg.seq)) {
+                    ++wifi_rx_msgs_;
                     std::lock_guard<std::mutex> lock(recv_mutex_);
                     handle_message(msg);
                 }
@@ -400,10 +406,18 @@ void CommsGcs::publish_link_stats()
     const uint64_t last_rx    = last_rx_ns_.load();
     const uint64_t last_radio = last_radio_ns_.load();
 
+    const size_t radio_bytes = radio_rx_bytes_.exchange(0);
+    const size_t wifi_bytes  = wifi_rx_bytes_.exchange(0);
+
     asr_comms::msg::LinkStats out{};
-    out.tx_kbps   = static_cast<float>(tx_bytes_.exchange(0)) * 8.0f / 1000.0f;
-    out.rx_kbps   = static_cast<float>(rx_bytes_.exchange(0)) * 8.0f / 1000.0f;
-    out.connected = (last_rx != 0) && ((now_ns - last_rx) < LINK_TIMEOUT_NS);
+    out.tx_kbps       = static_cast<float>(tx_bytes_.exchange(0)) * 8.0f / 1000.0f;
+    out.rx_kbps       = static_cast<float>(radio_bytes + wifi_bytes) * 8.0f / 1000.0f;
+    out.radio_rx_kbps = static_cast<float>(radio_bytes) * 8.0f / 1000.0f;
+    out.wifi_rx_kbps  = static_cast<float>(wifi_bytes)  * 8.0f / 1000.0f;
+    out.radio_rx_msgs = radio_rx_msgs_.exchange(0);
+    out.wifi_rx_msgs  = wifi_rx_msgs_.exchange(0);
+    out.connected      = (last_rx != 0) && ((now_ns - last_rx) < LINK_TIMEOUT_NS);
+    out.wifi_connected = wifi_transport_ && wifi_transport_->peer_known();
 
     out.peer_rx_kbps = uav_rx_kbps_.load();
     out.radio_ok  = (last_radio != 0) && ((now_ns - last_radio) < RADIO_TIMEOUT_NS);

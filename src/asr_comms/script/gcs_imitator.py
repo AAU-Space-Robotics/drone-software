@@ -112,11 +112,14 @@ class GcsImitator(Node):
         if s is not None:
             quality_map = {0: 'NO RADIO', 1: 'CRITICAL', 2: 'POOR', 3: 'FAIR', 4: 'GOOD', 5: 'EXCELLENT'}
             lines.append('')
-            lines.append('--- GCS radio (RADIO_STATUS from local radio) ---')
-            lines.append(f'  connected      : {s.connected}')
-            lines.append(f'  tx_kbps (GCS)  : {s.tx_kbps:.2f} kbps  ← GCS→UAV measured at serial')
-            lines.append(f'  rx_kbps (GCS)  : {s.rx_kbps:.2f} kbps  ← UAV→GCS measured at serial')
+            lines.append('--- Link overview ---')
+            lines.append(f'  connected      : {s.connected}   wifi_connected: {s.wifi_connected}')
+            lines.append(f'  tx_kbps        : {s.tx_kbps:.2f} kbps  ← GCS→UAV over radio')
             lines.append(f'  peer_rx_kbps   : {s.peer_rx_kbps:.2f} kbps  ← UAV reports receiving this')
+            lines.append(f'  radio rx       : {s.radio_rx_kbps:.2f} kbps  {s.radio_rx_msgs} msgs/s  ← via SiK radio')
+            lines.append(f'  wifi  rx       : {s.wifi_rx_kbps:.2f} kbps  {s.wifi_rx_msgs} msgs/s  ← via WiFi')
+            lines.append('')
+            lines.append('--- GCS radio (RADIO_STATUS from local radio) ---')
             if s.radio_ok:
                 gcs_snr = int(s.rssi) - int(s.noise)
                 lines.append(f'  txbuf          : {s.txbuf}%  ← 0% = GCS radio TX buffer full')
