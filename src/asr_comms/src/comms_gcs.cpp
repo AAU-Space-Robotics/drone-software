@@ -456,7 +456,7 @@ void CommsGcs::on_uav_command(const asr_comms::msg::UAVCommand::SharedPtr msg)
     const auto ms_since_last = std::chrono::duration_cast<std::chrono::milliseconds>(
         now - last_command_sent_).count();
     if (msg->command_type == pending_command_type_ && ms_since_last < 300) {
-        RCLCPP_WARN(get_logger(), "Ignoring duplicate '%s' command (%lld ms since last)",
+        RCLCPP_WARN(get_logger(), "Ignoring duplicate '%s' command (%ld ms since last)",
                     msg->command_type.c_str(), ms_since_last);
         return;
     }
