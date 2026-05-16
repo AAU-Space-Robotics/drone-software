@@ -22,3 +22,11 @@ uint8 QUALITY_FAIR=3       # SNR 40-69 (~21-36 dB) — usable
 uint8 QUALITY_GOOD=4       # SNR 70-99 (~37-52 dB) — solid link
 uint8 QUALITY_EXCELLENT=5  # SNR ≥ 100 (~53 dB+)   — full signal
 uint8   signal_quality
+
+# UAV-side radio stats forwarded from comms_uav via NAMED_VALUE_FLOAT.
+# 255 in rssi/noise fields means not yet received.
+bool    uav_radio_ok     # true if UAV radio stats arrived within the last 2 s
+uint8   uav_txbuf        # UAV radio TX buffer remaining [%] — 0 = saturated
+uint8   uav_rssi         # UAV radio local RSSI
+uint8   uav_noise        # UAV radio local noise (SNR = uav_rssi - uav_noise)
+uint16  uav_rxerrors     # UAV radio RX error count (cumulative)

@@ -266,8 +266,19 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
     case MAVLINK_MSG_ID_NAMED_VALUE_FLOAT: {
         mavlink_named_value_float_t nv{};
         mavlink_msg_named_value_float_decode(&msg, &nv);
-        if (std::strncmp(nv.name, "rx_kbps", sizeof(nv.name)) == 0)
+        if      (std::strncmp(nv.name, "rx_kbps",  sizeof(nv.name)) == 0)
             uav_rx_kbps_.store(nv.value);
+        else if (std::strncmp(nv.name, "uav_txbuf", sizeof(nv.name)) == 0) {
+            uav_radio_txbuf_.store(static_cast<uint8_t>(nv.value));
+            last_uav_radio_ns_.store(static_cast<uint64_t>(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+        }
+        else if (std::strncmp(nv.name, "uav_rssi",  sizeof(nv.name)) == 0)
+            uav_radio_rssi_.store(static_cast<uint8_t>(nv.value));
+        else if (std::strncmp(nv.name, "uav_noise", sizeof(nv.name)) == 0)
+            uav_radio_noise_.store(static_cast<uint8_t>(nv.value));
+        else if (std::strncmp(nv.name, "uav_rxerr", sizeof(nv.name)) == 0)
+            uav_radio_rxerrors_.store(static_cast<uint16_t>(nv.value));
         break;
     }
 
@@ -297,12 +308,19 @@ void CommsGcs::publish_link_stats()
     const uint64_t last_radio = last_radio_ns_.load();
 
     asr_comms::msg::LinkStats out{};
-    out.tx_kbps   = static_cast<float>(tx_bytes_.exchange(0)) / 1024.0f;
-    out.rx_kbps   = static_cast<float>(rx_bytes_.exchange(0)) / 1024.0f;
+    out.tx_kbps   = static_cast<float>(tx_bytes_.exchange(0)) * 8.0f / 1000.0f;
+    out.rx_kbps   = static_cast<float>(rx_bytes_.exchange(0)) * 8.0f / 1000.0f;
     out.connected = (last_rx != 0) && ((now_ns - last_rx) < LINK_TIMEOUT_NS);
 
     out.peer_rx_kbps = uav_rx_kbps_.load();
     out.radio_ok  = (last_radio != 0) && ((now_ns - last_radio) < RADIO_TIMEOUT_NS);
+
+    const uint64_t last_uav_radio = last_uav_radio_ns_.load();
+    out.uav_radio_ok  = (last_uav_radio != 0) && ((now_ns - last_uav_radio) < RADIO_TIMEOUT_NS);
+    out.uav_txbuf     = uav_radio_txbuf_.load();
+    out.uav_rssi      = uav_radio_rssi_.load();
+    out.uav_noise     = uav_radio_noise_.load();
+    out.uav_rxerrors  = uav_radio_rxerrors_.load();
     out.rssi      = radio_rssi_.load();
     out.remrssi   = radio_remrssi_.load();
     out.noise     = radio_noise_.load();

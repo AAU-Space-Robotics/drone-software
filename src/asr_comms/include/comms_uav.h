@@ -47,6 +47,7 @@ private:
     void send_mavlink(mavlink_message_t& msg);
     void send_heartbeat();
     void send_rx_kbps();
+    void send_radio_stats();
     void on_position(const asr_comms::msg::TelemetryPosition::SharedPtr msg);
     void on_attitude(const asr_comms::msg::TelemetryAttitude::SharedPtr msg);
     void on_battery(const asr_comms::msg::TelemetryBattery::SharedPtr msg);
@@ -70,6 +71,12 @@ private:
     rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr        gps_inject_pub_;
     rclcpp::Publisher<asr_comms::msg::ManualControlInput>::SharedPtr  manual_input_pub_;
     rclcpp::Publisher<asr_comms::msg::ServoCommand>::SharedPtr        servo_command_pub_;
+
+    // UAV-side radio stats (populated from local RADIO_STATUS, forwarded to GCS)
+    std::atomic<uint8_t>  uav_radio_txbuf_{255};
+    std::atomic<uint8_t>  uav_radio_rssi_{255};
+    std::atomic<uint8_t>  uav_radio_noise_{255};
+    std::atomic<uint16_t> uav_radio_rxerrors_{0};
 
     // Fragment reassembly buffer for incoming RTCM.
     // MAVLink GPS_RTCM_DATA flags: bit0=fragmented, bits1-2=frag_idx, bits3-7=seq.

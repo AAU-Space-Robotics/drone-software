@@ -81,7 +81,7 @@ CommsUav::CommsUav()
         const auto now = std::chrono::steady_clock::now();
         const float dt = std::chrono::duration<float>(now - rx_rate_ts_).count();
         rx_rate_ts_ = now;
-        uav_rx_kbps_ = static_cast<float>(rx_bytes_.exchange(0)) / 1024.0f / dt;
+        uav_rx_kbps_ = static_cast<float>(rx_bytes_.exchange(0)) * 8.0f / 1000.0f / dt;
         send_heartbeat();
         send_rx_kbps();
     });
@@ -209,6 +209,17 @@ void CommsUav::handle_message(const mavlink_message_t& msg)
         mavlink_command_long_t cmd{};
         mavlink_msg_command_long_decode(&msg, &cmd);
         forward_command(cmd);
+        break;
+    }
+
+    case MAVLINK_MSG_ID_RADIO_STATUS: {
+        mavlink_radio_status_t radio{};
+        mavlink_msg_radio_status_decode(&msg, &radio);
+        uav_radio_txbuf_.store(radio.txbuf);
+        uav_radio_rssi_.store(radio.rssi);
+        uav_radio_noise_.store(radio.noise);
+        uav_radio_rxerrors_.store(radio.rxerrors);
+        send_radio_stats();
         break;
     }
 
@@ -369,6 +380,21 @@ void CommsUav::send_mavlink(mavlink_message_t& msg)
     const uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     std::lock_guard<std::mutex> lock(send_mutex_);
     transport_->send(buf, len);
+}
+
+void CommsUav::send_radio_stats()
+{
+    auto send_nv = [&](const char* name, float val) {
+        mavlink_message_t msg{};
+        mavlink_msg_named_value_float_pack(system_id_, component_id_, &msg,
+            static_cast<uint32_t>(get_clock()->now().nanoseconds() / 1'000'000),
+            name, val);
+        send_mavlink(msg);
+    };
+    send_nv("uav_txbuf", static_cast<float>(uav_radio_txbuf_.load()));
+    send_nv("uav_rssi",  static_cast<float>(uav_radio_rssi_.load()));
+    send_nv("uav_noise", static_cast<float>(uav_radio_noise_.load()));
+    send_nv("uav_rxerr", static_cast<float>(uav_radio_rxerrors_.load()));
 }
 
 void CommsUav::send_rx_kbps()

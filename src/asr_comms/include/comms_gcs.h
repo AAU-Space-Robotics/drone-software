@@ -69,7 +69,14 @@ private:
     std::atomic<size_t>   rx_bytes_{0};
     std::atomic<uint64_t> last_rx_ns_{0};    // ns timestamp of last received byte
 
-    std::atomic<float>    uav_rx_kbps_{0.0f};  // reported by UAV via StatusPod
+    std::atomic<float>    uav_rx_kbps_{0.0f};  // reported by UAV via NAMED_VALUE_FLOAT
+
+    // UAV-side radio stats forwarded from comms_uav via NAMED_VALUE_FLOAT
+    std::atomic<uint8_t>  uav_radio_txbuf_{255};
+    std::atomic<uint8_t>  uav_radio_rssi_{255};
+    std::atomic<uint8_t>  uav_radio_noise_{255};
+    std::atomic<uint16_t> uav_radio_rxerrors_{0};
+    std::atomic<uint64_t> last_uav_radio_ns_{0};
 
     // SiK RADIO_STATUS fields (MAVLINK_MSG_ID_RADIO_STATUS = 109)
     std::atomic<uint8_t>  radio_rssi_{255};

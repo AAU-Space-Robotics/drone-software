@@ -75,9 +75,14 @@ class GcsImitator(Node):
             msg.data = bytes([msg_id & 0xFF, (msg_id >> 8) & 0xFF] + [0xAA] * (size - 2))
             self._rtcm_pub.publish(msg)
 
-            # Each RTCM frame may become one or more GPS_RTCM_DATA MAVLink packets.
-            fragments = max(1, (size + 179) // 180)
-            self._bytes += fragments * (180 + _MAVLINK_RTCM_OVERHEAD)
+            # GPS_RTCM_DATA fragments: each carries up to 180 bytes of RTCM data.
+            # With MAVLink2 zero-trimming the payload is trimmed to the actual data length,
+            # so wire size = header(10) + flags(1) + len(1) + actual_chunk + CRC(2).
+            offset = 0
+            while offset < size:
+                chunk = min(size - offset, 180)
+                self._bytes += 10 + 1 + 1 + chunk + 2  # MAVLink2 trimmed wire size
+                offset += chunk
 
     def _hb_cb(self):
         hb = GcsHeartbeat()
@@ -105,23 +110,32 @@ class GcsImitator(Node):
         lines.append(f'  SiK capacity   : ~4–5 kbps per direction')
 
         if s is not None:
-            snr = int(s.rssi) - int(s.noise) if s.radio_ok else None
             quality_map = {0: 'NO RADIO', 1: 'CRITICAL', 2: 'POOR', 3: 'FAIR', 4: 'GOOD', 5: 'EXCELLENT'}
             lines.append('')
-            lines.append('--- Radio (from RADIO_STATUS) ---')
+            lines.append('--- GCS radio (RADIO_STATUS from local radio) ---')
             lines.append(f'  connected      : {s.connected}')
-            lines.append(f'  radio_ok       : {s.radio_ok}')
-            lines.append(f'  tx_kbps (GCS)  : {s.tx_kbps:.2f} kbps  ← measured bytes written to serial')
-            lines.append(f'  rx_kbps (GCS)  : {s.rx_kbps:.2f} kbps')
-            lines.append(f'  peer_rx_kbps   : {s.peer_rx_kbps:.2f} kbps  ← UAV reports this')
+            lines.append(f'  tx_kbps (GCS)  : {s.tx_kbps:.2f} kbps  ← GCS→UAV measured at serial')
+            lines.append(f'  rx_kbps (GCS)  : {s.rx_kbps:.2f} kbps  ← UAV→GCS measured at serial')
+            lines.append(f'  peer_rx_kbps   : {s.peer_rx_kbps:.2f} kbps  ← UAV reports receiving this')
             if s.radio_ok:
-                lines.append(f'  txbuf          : {s.txbuf}%  ← 0% = buffer full / saturated')
-                lines.append(f'  rssi/noise/snr : {s.rssi}/{s.noise}/{snr}')
+                gcs_snr = int(s.rssi) - int(s.noise)
+                lines.append(f'  txbuf          : {s.txbuf}%  ← 0% = GCS radio TX buffer full')
+                lines.append(f'  rssi/noise/snr : {s.rssi}/{s.noise}/{gcs_snr}')
                 lines.append(f'  remrssi/remnoise:{s.remrssi}/{s.remnoise}')
                 lines.append(f'  rx errors/fixed: {s.rxerrors}/{s.fixed}')
                 lines.append(f'  signal quality : {quality_map.get(s.signal_quality, "?")}')
             else:
-                lines.append('  (no RADIO_STATUS received — is the SiK radio connected?)')
+                lines.append('  (no RADIO_STATUS — is the GCS radio connected?)')
+
+            lines.append('')
+            lines.append('--- UAV radio (forwarded from comms_uav) ---')
+            if s.uav_radio_ok:
+                uav_snr = int(s.uav_rssi) - int(s.uav_noise)
+                lines.append(f'  uav_txbuf      : {s.uav_txbuf}%  ← 0% = UAV radio TX buffer full / saturated')
+                lines.append(f'  uav rssi/noise/snr: {s.uav_rssi}/{s.uav_noise}/{uav_snr}')
+                lines.append(f'  uav rx errors  : {s.uav_rxerrors}')
+            else:
+                lines.append('  (not yet received — is comms_uav running with a radio?)')
         else:
             lines.append('')
             lines.append('  (no link_stats yet — is comms_gcs running?)')
