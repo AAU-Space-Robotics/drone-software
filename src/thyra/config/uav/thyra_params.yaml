@@ -75,7 +75,7 @@
       console_level: INFO # INFO, DEBUG, WARN, ERROR
     # Flight logging (ulog)
     log_mode: general        # general | control_inspection
-    log_dir: /home/daroe/flight_logs
+    log_dir: ~/flight_logs
 
     # Setup Parameters
     setup:

@@ -40,11 +40,16 @@ static uint64_t nowUs()
 LoggerNode::LoggerNode()
 : Node("asr_logger")
 {
-    declare_parameter("log_dir",  std::string{"/home/daroe/flight_logs"});
+    declare_parameter("log_dir",  std::string{"~/flight_logs"});
     declare_parameter("log_mode", std::string{"general"});
 
     log_dir_  = get_parameter("log_dir").as_string();
     log_mode_ = get_parameter("log_mode").as_string();
+
+    if (!log_dir_.empty() && log_dir_[0] == '~') {
+        const char* home = std::getenv("HOME");
+        if (home) log_dir_ = std::string(home) + log_dir_.substr(1);
+    }
 
     initWriter();
 
