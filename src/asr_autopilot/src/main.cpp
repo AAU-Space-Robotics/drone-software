@@ -84,11 +84,11 @@ public:
           << std::endl;
 
         // Load and apply logging configuration from YAML
-        this->declare_parameter("logging.enabled", true);
-        this->declare_parameter("logging.console_level", "INFO");
+        this->declare_parameter("terminal_logging.enabled", true);
+        this->declare_parameter("terminal_logging.console_level", "INFO");
 
-        bool logging_enabled = this->get_parameter("logging.enabled").as_bool();
-        std::string console_level = this->get_parameter("logging.console_level").as_string();
+        bool logging_enabled = this->get_parameter("terminal_logging.enabled").as_bool();
+        std::string console_level = this->get_parameter("terminal_logging.console_level").as_string();
 
         if (logging_enabled) {
             // Map string to logger severity level

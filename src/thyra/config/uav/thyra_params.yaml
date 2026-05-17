@@ -69,10 +69,11 @@
       do_mode_change_delay: false        # Enable mode change delay #! FIX, not for going to manual
       mode_change_delay: 5.0            # Mode change delay (seconds)
 
-    # Logging Parameters
-    logging:
+    # Terminal (console) logging
+    terminal_logging:
       enabled: true
       console_level: INFO # INFO, DEBUG, WARN, ERROR
+    # Flight logging (ulog)
     log_mode: general        # general | control_inspection
     log_dir: /home/daroe/flight_logs
 
