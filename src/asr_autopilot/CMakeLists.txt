@@ -40,14 +40,5 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install Python modules
-ament_python_install_package(${PROJECT_NAME})
-
-# Install Python executables (adjust as needed)
-install(PROGRAMS
-  #src/dds_test.py
-  DESTINATION lib/${PROJECT_NAME}
-)
-
 # Mark the package as complete
 ament_package() 

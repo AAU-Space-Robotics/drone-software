@@ -15,7 +15,7 @@
           Kp: 1.0
           Ki: 0.0
           Kd: 0.01
-          
+
       pid_gains:
         roll:
           Kp: 0.15
@@ -30,7 +30,7 @@
           Ki: 0.0
           Kd: 0.05
         thrust:
-          Kp: 0.5 
+          Kp: 0.5
           Ki: 0.1
           Kd: 0.01
         hover_thrust_setpoint:
@@ -73,6 +73,8 @@
     logging:
       enabled: true
       console_level: INFO # INFO, DEBUG, WARN, ERROR
+    log_mode: general        # general | control_inspection
+    log_dir: /home/daroe/flight_logs
 
     # Setup Parameters
     setup:
@@ -105,7 +107,7 @@
         p1: 0
         p2: 0
       Skew: 0.0
-      K: 
+      K:
         - [910.7153, 0.0, 641.7375,
           0.0, 910.8062, 370.1866,
           0.0, 0.0, 1.0]

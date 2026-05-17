@@ -14,14 +14,13 @@ def generate_launch_description():
     params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'uav', 'thyra_params.yaml'])
     comms_path  = PathJoinSubstitution([thyra_pkg_share, 'config', 'comms', 'thyra_comms.yaml'])
 
-    hardware        = LaunchConfiguration('hardware',        default='jetson')
-    use_sim_time    = LaunchConfiguration('use_sim_time',    default='false')
-    position_source = LaunchConfiguration('position_source', default='px4')
-    with_comms      = LaunchConfiguration('with_comms',      default='true')
-    with_camera     = LaunchConfiguration('with_camera',     default='true')
-    autopilot_delay = LaunchConfiguration('autopilot_delay', default='15.0')
-    use_led         = LaunchConfiguration('use_led',         default='false')
-    log_mode        = LaunchConfiguration('log_mode',        default='general')
+    hardware        = LaunchConfiguration('hardware')
+    use_sim_time    = LaunchConfiguration('use_sim_time')
+    position_source = LaunchConfiguration('position_source')
+    with_comms      = LaunchConfiguration('with_comms')
+    with_camera     = LaunchConfiguration('with_camera')
+    autopilot_delay = LaunchConfiguration('autopilot_delay')
+    use_led         = LaunchConfiguration('use_led')
 
     # Jetson uses USB-to-TTL adapter (udev symlink), Pi uses native UART
     serial_device = PythonExpression([
@@ -64,12 +63,6 @@ def generate_launch_description():
             default_value='false',
             description='Use LED node',
         ),
-        DeclareLaunchArgument(
-            'log_mode',
-            default_value='general',
-            description='Logger mode: general or control_inspection',
-        ),
-
         ExecuteProcess(
             cmd=['MicroXRCEAgent', 'serial', '--dev', serial_device, '-b', '921600'],
             output='log',
@@ -107,7 +100,7 @@ def generate_launch_description():
             name='asr_logger',
             namespace='asr/thyra',
             output='screen',
-            parameters=[{'log_mode': log_mode}],
+            parameters=[params_path],
         ),
 
         TimerAction(
