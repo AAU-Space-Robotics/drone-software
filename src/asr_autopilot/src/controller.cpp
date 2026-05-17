@@ -53,7 +53,7 @@ Eigen::Vector3d Controller::positionControl(double sample_time,
     previous_position_error.Y.error = position_error_ned.y();
     previous_position_error.Z.error = position_error_ned.z();
 
-    // Saturate velocities (similar to PX4's MPC_XY_VEL_MAX and MPC_Z_VEL_MAX)
+    // Saturate velocities
     vx = std::clamp(vx, -max_horizontal_velocity_, max_horizontal_velocity_);
     vy = std::clamp(vy, -max_horizontal_velocity_, max_horizontal_velocity_);
     vz = std::clamp(vz, -max_vertical_velocity_, max_vertical_velocity_);

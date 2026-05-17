@@ -19,6 +19,7 @@
 #include <asr_comms/msg/gcs_heartbeat.hpp>
 #include <asr_comms/msg/manual_control_input.hpp>
 #include <asr_comms/msg/servo_command.hpp>
+#include <asr_comms/msg/comms_health.hpp>
 #include <asr_comms/action/drone_command.hpp>
 
 #include "common/mavlink.h"
@@ -75,8 +76,10 @@ private:
     std::atomic<size_t> rx_bytes_{0};
     float               uav_rx_kbps_{0.0f};
     std::chrono::steady_clock::time_point rx_rate_ts_{std::chrono::steady_clock::now()};
+    std::atomic<int64_t> last_gcs_msg_us_{0};
 
     rclcpp::Publisher<asr_comms::msg::GcsHeartbeat>::SharedPtr        heartbeat_pub_;
+    rclcpp::Publisher<asr_comms::msg::CommsHealth>::SharedPtr         comms_health_pub_;
     rclcpp::Publisher<px4_msgs::msg::GpsInjectData>::SharedPtr        gps_inject_pub_;
     rclcpp::Publisher<asr_comms::msg::ManualControlInput>::SharedPtr  manual_input_pub_;
     rclcpp::Publisher<asr_comms::msg::ServoCommand>::SharedPtr        servo_command_pub_;

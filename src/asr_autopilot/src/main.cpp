@@ -29,6 +29,8 @@
 #include <asr_comms/msg/telemetry_gps.hpp>
 #include <asr_comms/msg/telemetry_status.hpp>
 #include <asr_comms/msg/drone_scope.hpp>
+#include <asr_comms/msg/trajectory_setpoint.hpp>
+#include <asr_comms/msg/control_detail.hpp>
 #include <asr_comms/msg/gcs_heartbeat.hpp>
 #include <asr_comms/msg/probe_global_locations.hpp>
 #include <asr_comms/msg/attitude_setpoint_rpy.hpp>
@@ -345,6 +347,9 @@ public:
         origin_offset_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>("out/origin_offset", 10);
         actuator_servos_pub_ = create_publisher<px4_msgs::msg::ActuatorServos>("/fmu/in/actuator_servos", servo_qos);
         actuator_test_pub_ = create_publisher<px4_msgs::msg::ActuatorTest>("/fmu/in/actuator_test", servo_qos);
+        control_scope_pub_ = create_publisher<asr_comms::msg::DroneScope>("out/drone_scope", 10);
+        trajectory_setpoint_pub_ = create_publisher<asr_comms::msg::TrajectorySetpoint>("out/trajectory_setpoint", 10);
+        control_detail_pub_ = create_publisher<asr_comms::msg::ControlDetail>("out/control_detail", 10);
         
         
 
@@ -927,8 +932,23 @@ private:
                 Stamped4DVector target_profile(get_time(), target_point.position.x(), target_point.position.y(), target_point.position.z(), 0.0);
                 Stamped3DVector target_velocity_profile(get_time(), target_point.velocity.x(), target_point.velocity.y(), target_point.velocity.z());
                 state_manager_.setTargetPositionProfile(target_profile);
-                
+
                 state_manager_.setTargetAttitude(StampedQuaternion(get_time(), target_point.orientation));
+
+                asr_comms::msg::TrajectorySetpoint tsp{};
+                tsp.timestamp = get_time().seconds();
+                tsp.ref_pos_x = static_cast<float>(target_point.position.x());
+                tsp.ref_pos_y = static_cast<float>(target_point.position.y());
+                tsp.ref_pos_z = static_cast<float>(target_point.position.z());
+                tsp.ref_vel_x = static_cast<float>(target_point.velocity.x());
+                tsp.ref_vel_y = static_cast<float>(target_point.velocity.y());
+                tsp.ref_vel_z = static_cast<float>(target_point.velocity.z());
+                tsp.ref_acc_x = static_cast<float>(target_point.acceleration.x());
+                tsp.ref_acc_y = static_cast<float>(target_point.acceleration.y());
+                tsp.ref_acc_z = static_cast<float>(target_point.acceleration.z());
+                const Eigen::Vector3d ref_euler = transformations_.quaternionToEuler(target_point.orientation);
+                tsp.ref_yaw = static_cast<float>(ref_euler.x());
+                trajectory_setpoint_pub_->publish(tsp);
             }
         }
         else if (drone_state.flight_mode == FlightMode::LAND_POSITION && drone_state.trajectory_mode == TrajectoryMode::COMPLETED) {
@@ -1007,6 +1027,24 @@ private:
         );
 
         state_manager_.setLatestControlSignalVelocity(output);
+
+        asr_comms::msg::ControlDetail cd{};
+        cd.timestamp = get_time().seconds();
+        const Eigen::Vector3d pos_ctrl = state_manager_.getLatestControlSignalPosition();
+        cd.pos_ctrl_x = static_cast<float>(pos_ctrl.x());
+        cd.pos_ctrl_y = static_cast<float>(pos_ctrl.y());
+        cd.pos_ctrl_z = static_cast<float>(pos_ctrl.z());
+        cd.pos_err_x  = static_cast<float>(prev_position_error_.X.error);
+        cd.pos_err_y  = static_cast<float>(prev_position_error_.Y.error);
+        cd.pos_err_z  = static_cast<float>(prev_position_error_.Z.error);
+        cd.pos_int_x  = static_cast<float>(prev_position_error_.X.error_integral);
+        cd.pos_int_y  = static_cast<float>(prev_position_error_.Y.error_integral);
+        cd.pos_int_z  = static_cast<float>(prev_position_error_.Z.error_integral);
+        cd.vel_cmd_x  = static_cast<float>(vel_cmd_ned.x());
+        cd.vel_cmd_y  = static_cast<float>(vel_cmd_ned.y());
+        cd.vel_cmd_z  = static_cast<float>(vel_cmd_ned.z());
+        cd.hover_thrust_estimate = static_cast<float>(controller_.hover_thrust_estimate_);
+        control_detail_pub_->publish(cd);
 
         // Set yaw from trajectory
         Eigen::Vector3d target_euler = transformations_.quaternionToEuler(
@@ -1334,6 +1372,15 @@ private:
         msg.timeout_ms = servo_test_timeout_ms_;
         msg.action     = 1;    // 1 = set value
         actuator_test_pub_->publish(msg);
+    }
+
+    void publishControlScope()
+    {
+        asr_comms::msg::DroneScope msg{};
+        msg.timestamp        = get_time().seconds();
+        msg.control_output_z = state_manager_.getLatestControlSignalPosition().z();
+        msg.target_z         = state_manager_.getTargetPositionProfile().vector().z();
+        control_scope_pub_->publish(msg);
     }
 
     void publishHeldDisarmedServoCommand()
@@ -1809,6 +1856,9 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr origin_offset_pub_;
     rclcpp::Publisher<px4_msgs::msg::ActuatorServos>::SharedPtr actuator_servos_pub_;
     rclcpp::Publisher<px4_msgs::msg::ActuatorTest>::SharedPtr actuator_test_pub_;
+    rclcpp::Publisher<asr_comms::msg::DroneScope>::SharedPtr control_scope_pub_;
+    rclcpp::Publisher<asr_comms::msg::TrajectorySetpoint>::SharedPtr trajectory_setpoint_pub_;
+    rclcpp::Publisher<asr_comms::msg::ControlDetail>::SharedPtr control_detail_pub_;
 
     rclcpp::Subscription<asr_comms::msg::GcsHeartbeat>::SharedPtr gcs_heartbeat_sub_;
     rclcpp::Subscription<asr_comms::msg::MotionCapturePose>::SharedPtr motion_capture_local_position_sub_;

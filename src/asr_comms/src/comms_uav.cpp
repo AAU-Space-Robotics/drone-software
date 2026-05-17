@@ -72,6 +72,7 @@ CommsUav::CommsUav()
     auto qos_be_vo = rclcpp::QoS(10).best_effort().durability_volatile();
 
     heartbeat_pub_      = create_publisher<asr_comms::msg::GcsHeartbeat>("in/gcs_heartbeat", qos_be_tl);
+    comms_health_pub_   = create_publisher<asr_comms::msg::CommsHealth>("out/comms_health", rclcpp::QoS(1).best_effort());
     gps_inject_pub_     = create_publisher<px4_msgs::msg::GpsInjectData>("/fmu/in/gps_inject_data", 10);
     manual_input_pub_   = create_publisher<asr_comms::msg::ManualControlInput>("in/manual_input", qos_be_tl);
     servo_command_pub_  = create_publisher<asr_comms::msg::ServoCommand>("in/servo_command", qos_be_vo);
@@ -86,6 +87,18 @@ CommsUav::CommsUav()
         uav_rx_kbps_ = static_cast<float>(rx_bytes_.exchange(0)) * 8.0f / 1000.0f / dt;
         send_heartbeat();
         send_rx_kbps();
+
+        const int64_t last_us = last_gcs_msg_us_.load();
+        const int64_t now_us  = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        const float age_ms = (last_us > 0) ? static_cast<float>(now_us - last_us) / 1000.0f : 1e6f;
+        asr_comms::msg::CommsHealth health{};
+        health.timestamp       = std::chrono::duration<double>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        health.rx_kbps         = uav_rx_kbps_;
+        health.gcs_msg_age_ms  = age_ms;
+        health.gcs_connected   = age_ms < 1000.0f;
+        comms_health_pub_->publish(health);
     });
 
     auto qos_rt = rclcpp::QoS(1).best_effort();
@@ -150,6 +163,8 @@ void CommsUav::recv_loop()
         if (n <= 0) continue;
 
         rx_bytes_ += static_cast<size_t>(n);
+        last_gcs_msg_us_.store(std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
         for (ssize_t i = 0; i < n; ++i) {
             if (mavlink_parse_char(MAVLINK_COMM_0, buf[i], &msg, &status)) {
                 if (dedup_.check(msg.sysid, msg.compid, msg.seq)) {
@@ -172,6 +187,8 @@ void CommsUav::wifi_recv_loop()
         if (n <= 0) continue;
 
         rx_bytes_ += static_cast<size_t>(n);
+        last_gcs_msg_us_.store(std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
         for (ssize_t i = 0; i < n; ++i) {
             if (mavlink_parse_char(MAVLINK_COMM_1, buf[i], &msg, &status)) {
                 if (dedup_.check(msg.sysid, msg.compid, msg.seq)) {
