@@ -1,4 +1,8 @@
-# AAU Space Robotics: Thyra
+# AAU Space Robotics: ASR Drone Software
+
+[![Build Jazzy 24.04](https://img.shields.io/github/actions/workflow/status/AAU-Space-Robotics/drone-software/build.yml?job=build-jazzy&label=Jazzy%2024.04)](https://github.com/AAU-Space-Robotics/drone-software/actions/workflows/build.yml)
+[![Build Humble 22.04](https://img.shields.io/github/actions/workflow/status/AAU-Space-Robotics/drone-software/build.yml?job=build-humble&label=Humble%2022.04)](https://github.com/AAU-Space-Robotics/drone-software/actions/workflows/build.yml)
+[![Version](https://img.shields.io/github/v/tag/AAU-Space-Robotics/drone-software?label=version)](https://github.com/AAU-Space-Robotics/drone-software/tags)
 
 ## Setup
 To set up the drone software, refer to the [wiki](https://github.com/AAU-Space-Robotics/drone-software/wiki/Old-guide).
@@ -8,7 +12,6 @@ Two setup scripts are available in the `setup/` directory:
 - `setup_pi.sh` — for the onboard Raspberry Pi (includes RealSense camera, no simulation)
 
 ## How to Use the Drone Software
-
 ### 1. Ground Control Station
 A ground control station must be running to communicate with either a real or simulated drone. Install and start [QGroundControl](https://docs.qgroundcontrol.com/master/en/getting_started/download_and_install.html) before proceeding.
 

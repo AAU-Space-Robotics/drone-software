@@ -1,0 +1,114 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-jazzy:
+    name: Build (Jazzy / Ubuntu 24.04)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ROS2 Jazzy
+        run: |
+          sudo apt-get update && sudo apt-get install -y curl gnupg
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+            -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+            http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" \
+            | sudo tee /etc/apt/sources.list.d/ros2.list
+          sudo apt-get update
+          sudo apt-get install -y \
+            ros-jazzy-ros-base \
+            ros-jazzy-serial-driver \
+            ros-jazzy-asio-cmake-module \
+            python3-colcon-common-extensions \
+            python3-rosdep \
+            libtinyxml-dev \
+            libglfw3-dev \
+            libopengl0
+
+      - name: rosdep install
+        run: |
+          sudo rosdep init || true
+          rosdep update
+          source /opt/ros/jazzy/setup.bash
+          rosdep install --from-paths src --ignore-src -y
+
+      - name: Build
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build
+
+  build-humble:
+    name: Build (Humble / Ubuntu 22.04)
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ROS2 Humble
+        run: |
+          sudo apt-get update && sudo apt-get install -y curl gnupg
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+            -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+            http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" \
+            | sudo tee /etc/apt/sources.list.d/ros2.list
+          sudo apt-get update
+          sudo apt-get install -y \
+            ros-humble-ros-base \
+            ros-humble-serial-driver \
+            ros-humble-asio-cmake-module \
+            python3-colcon-common-extensions \
+            python3-rosdep \
+            libtinyxml-dev \
+            libglfw3-dev \
+            libopengl0
+
+      - name: rosdep install
+        run: |
+          sudo rosdep init || true
+          rosdep update
+          source /opt/ros/humble/setup.bash
+          rosdep install --from-paths src --ignore-src -y
+
+      - name: Build
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build
+
+  tag:
+    name: Tag version
+    needs: [build-jazzy, build-humble]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute tag
+        id: version
+        run: |
+          YY=$(date +%y)
+          MM=$(date +%m)
+          PREFIX="asr-v${YY}.${MM}."
+          LATEST=$(git tag --list "${PREFIX}*" | sort -t. -k3 -n | tail -1)
+          if [ -z "$LATEST" ]; then
+            N=0
+          else
+            N=$(echo "$LATEST" | awk -F. '{print $NF}')
+            N=$((N + 1))
+          fi
+          echo "tag=${PREFIX}${N}" >> $GITHUB_OUTPUT
+
+      - name: Push tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin ${{ steps.version.outputs.tag }}
