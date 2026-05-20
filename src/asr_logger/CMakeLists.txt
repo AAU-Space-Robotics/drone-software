@@ -17,7 +17,6 @@ find_package(std_msgs REQUIRED)
 set(ULOG_CPP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ulog_cpp)
 
 add_executable(asr_logger
-  src/main.cpp
   src/logger_node.cpp
   ${ULOG_CPP_DIR}/messages.cpp
   ${ULOG_CPP_DIR}/writer.cpp
