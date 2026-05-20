@@ -36,7 +36,7 @@ jobs:
           sudo rosdep init || true
           rosdep update
           source /opt/ros/jazzy/setup.bash
-          rosdep install --from-paths src --ignore-src -y
+          rosdep install --from-paths src --ignore-src -y --skip-keys "px4_msgs"
 
       - name: Build
         run: |
@@ -73,7 +73,7 @@ jobs:
           sudo rosdep init || true
           rosdep update
           source /opt/ros/humble/setup.bash
-          rosdep install --from-paths src --ignore-src -y
+          rosdep install --from-paths src --ignore-src -y --skip-keys "px4_msgs"
 
       - name: Build
         run: |
