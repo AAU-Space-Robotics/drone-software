@@ -12,6 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Clone px4_msgs
+        run: git clone https://github.com/AAU-Space-Robotics/px4_msgs_thyra.git src/px4_msgs_thyra
+
       - name: Install ROS2 Jazzy
         run: |
           sudo apt-get update && sudo apt-get install -y curl gnupg
@@ -49,6 +52,9 @@ jobs:
     runs-on: ubuntu-22.04-arm
     steps:
       - uses: actions/checkout@v4
+
+      - name: Clone px4_msgs
+        run: git clone https://github.com/AAU-Space-Robotics/px4_msgs_thyra.git src/px4_msgs_thyra
 
       - name: Install ROS2 Humble
         run: |
