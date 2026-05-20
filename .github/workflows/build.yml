@@ -34,7 +34,11 @@ jobs:
             python3-rosdep \
             libtinyxml-dev \
             libglfw3-dev \
-            libopengl0
+            libopengl0 \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxrandr-dev
 
       - name: rosdep install
         run: |
@@ -75,7 +79,11 @@ jobs:
             python3-rosdep \
             libtinyxml-dev \
             libglfw3-dev \
-            libopengl0
+            libopengl0 \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxrandr-dev
 
       - name: rosdep install
         run: |
