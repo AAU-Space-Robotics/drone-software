@@ -16,7 +16,6 @@
 
   <!-- System dependencies -->
   <exec_depend>libglfw3</exec_depend>
-  <exec_depend>libopengl0</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
