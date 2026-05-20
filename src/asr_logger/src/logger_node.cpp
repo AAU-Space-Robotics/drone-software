@@ -318,3 +318,11 @@ void LoggerNode::onCommsHealth(const asr_comms::msg::CommsHealth& msg)
 }
 
 }  // namespace asr_logger
+
+int main(int argc, char* argv[])
+{
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<asr_logger::LoggerNode>());
+    rclcpp::shutdown();
+    return 0;
+}
