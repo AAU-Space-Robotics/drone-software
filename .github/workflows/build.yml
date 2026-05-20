@@ -3,6 +3,8 @@ name: Build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
   workflow_dispatch:
 
 jobs:
@@ -114,9 +116,13 @@ jobs:
           fi
           echo "tag=${PREFIX}${N}" >> $GITHUB_OUTPUT
 
-      - name: Push tag
+      - name: Push tag and reset flight tested badge
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git tag ${{ steps.version.outputs.tag }}
           git push origin ${{ steps.version.outputs.tag }}
+          sed -i 's|flight_tested-.*-.*|flight_tested-not_performed-red|' README.md
+          git add README.md
+          git commit -m "reset flight tested badge for ${{ steps.version.outputs.tag }} [skip ci]"
+          git push origin main
