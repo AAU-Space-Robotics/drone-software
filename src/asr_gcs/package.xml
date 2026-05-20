@@ -14,9 +14,6 @@
   <depend>tinyxml</depend>
   <depend>asr_comms</depend>
 
-  <!-- System dependencies -->
-  <exec_depend>libglfw3</exec_depend>
-
   <export>
     <build_type>ament_cmake</build_type>
   </export>
