@@ -13,6 +13,7 @@
   <depend>ament_index_cpp</depend>
   <depend>tinyxml</depend>
   <depend>asr_comms</depend>
+  <depend>interfaces</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
