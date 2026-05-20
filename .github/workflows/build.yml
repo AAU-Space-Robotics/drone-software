@@ -42,7 +42,7 @@ jobs:
       - name: Build
         run: |
           source /opt/ros/jazzy/setup.bash
-          colcon build
+          colcon build --executor sequential
 
   build-humble:
     name: Build (Humble / Ubuntu 22.04)
@@ -80,7 +80,7 @@ jobs:
       - name: Build
         run: |
           source /opt/ros/humble/setup.bash
-          colcon build
+          colcon build --executor sequential
 
   tag:
     name: Tag version
