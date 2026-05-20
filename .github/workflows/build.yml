@@ -36,7 +36,8 @@ jobs:
           sudo rosdep init || true
           rosdep update
           source /opt/ros/jazzy/setup.bash
-          rosdep install --from-paths src --ignore-src -y --skip-keys "px4_msgs"
+          rosdep install --from-paths src --ignore-src -y \
+            --skip-keys "px4_msgs asr_comms asr_autopilot asr_drivers asr_gcs asr_logger asr_perception asr_sensors thyra interfaces"
 
       - name: Build
         run: |
@@ -73,7 +74,8 @@ jobs:
           sudo rosdep init || true
           rosdep update
           source /opt/ros/humble/setup.bash
-          rosdep install --from-paths src --ignore-src -y --skip-keys "px4_msgs"
+          rosdep install --from-paths src --ignore-src -y \
+            --skip-keys "px4_msgs asr_comms asr_autopilot asr_drivers asr_gcs asr_logger asr_perception asr_sensors thyra interfaces"
 
       - name: Build
         run: |
