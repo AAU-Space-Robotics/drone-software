@@ -3,7 +3,7 @@
 [![Build Jazzy 24.04](https://img.shields.io/github/actions/workflow/status/AAU-Space-Robotics/drone-software/build.yml?job=build-jazzy&label=Jazzy%2024.04)](https://github.com/AAU-Space-Robotics/drone-software/actions/workflows/build.yml)
 [![Build Humble 22.04](https://img.shields.io/github/actions/workflow/status/AAU-Space-Robotics/drone-software/build.yml?job=build-humble&label=Humble%2022.04)](https://github.com/AAU-Space-Robotics/drone-software/actions/workflows/build.yml)
 [![Version](https://img.shields.io/github/v/tag/AAU-Space-Robotics/drone-software?label=version)](https://github.com/AAU-Space-Robotics/drone-software/tags)
-![Flight tested](https://img.shields.io/badge/flight_tested-not_performed-red
+[!Flight tested](https://img.shields.io/badge/flight_tested-not_performed-red
 
 ## Setup
 To set up the drone software, refer to the [wiki](https://github.com/AAU-Space-Robotics/drone-software/wiki/Old-guide).
