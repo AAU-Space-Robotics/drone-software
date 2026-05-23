@@ -123,6 +123,10 @@ else
     echo "ROS $ROS_DISTRO RealSense wrapper is already installed."
 fi
 
+# Install Python dependencies for perception
+echo "Installing Python dependencies for asr_perception..."
+pip3 install ultralytics
+
 # Install additional ROS dependencies
 echo "Installing additional ROS $ROS_DISTRO dependencies..."
 if ! dpkg -l | grep -q "ros-$ROS_DISTRO-serial-driver"; then
