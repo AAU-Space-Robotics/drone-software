@@ -132,5 +132,5 @@ jobs:
           git push origin ${{ steps.version.outputs.tag }}
           sed -i 's|flight_tested-[^)]*|flight_tested-not_performed-red|' README.md
           git add README.md
-          git commit -m "reset flight tested badge for ${{ steps.version.outputs.tag }} [skip ci]"
+          git diff --staged --quiet || git commit -m "reset flight tested badge for ${{ steps.version.outputs.tag }} [skip ci]"
           git push origin main
