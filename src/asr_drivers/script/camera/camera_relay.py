@@ -2,8 +2,9 @@
 """
 camera_relay — compresses and republishes RealSense frames at a fixed rate.
 
-Subscribes to raw color + depth + pose data, synchronises them, and publishes
-CompressedImage (JPEG/PNG) + a PoseStamped at the configured fps.
+Color is published independently of pose — it only needs the camera to be up.
+Depth + pose are published together only when the flight stack is also running
+and all four inputs can be time-synchronised.
 
 Parameters (set statically in thyra_params.yaml / launch file):
   fps           float  Target publish rate. 0 = publish every synced frame.
@@ -35,8 +36,11 @@ class CameraRelay(Node):
 
         self._bridge        = CvBridge()
         self._jpeg_quality  = int(jpeg_quality)
-        self._latest        = {}   # keyed by field name, holds latest synced set
+        self._latest_color  = None   # latest raw color frame (no sync required)
+        self._latest_synced = {}     # keyed by field name, holds latest synced set
         self._origin_offset = (0.0, 0.0, 0.0)
+        self._last_color_stamp  = None
+        self._last_synced_stamp = None
 
         qos = QoSProfile(
             depth=10,
@@ -45,14 +49,16 @@ class CameraRelay(Node):
             history=QoSHistoryPolicy.KEEP_LAST,
         )
 
-        # Synchronised subscribers
-        color_sub    = message_filters.Subscriber(self, Image, '/camera/camera/color/image_raw',       qos_profile=qos)
+        # Color: direct subscription — publishes even without the flight stack.
+        self.create_subscription(Image, '/camera/camera/color/image_raw', self._on_color, qos_profile=qos)
+
+        # Depth + pose: synced — requires FMU topics to be live.
         depth_sub    = message_filters.Subscriber(self, Image, '/camera/camera/depth/image_rect_raw',  qos_profile=qos)
         position_sub = message_filters.Subscriber(self, VehicleLocalPosition, '/fmu/out/vehicle_local_position', qos_profile=qos)
         attitude_sub = message_filters.Subscriber(self, VehicleAttitude,      '/fmu/out/vehicle_attitude',       qos_profile=qos)
 
         self._sync = message_filters.ApproximateTimeSynchronizer(
-            [color_sub, depth_sub, position_sub, attitude_sub],
+            [depth_sub, position_sub, attitude_sub],
             queue_size=10, slop=0.1, allow_headerless=True,
         )
         self._sync.registerCallback(self._on_synced)
@@ -60,19 +66,15 @@ class CameraRelay(Node):
         self.create_subscription(PoseStamped, '/thyra/out/origin_offset', self._on_origin_offset, 10)
 
         # Publishers
-        self._color_pub = self.create_publisher(CompressedImage, '/thyra/out/color_image/compressed', qos)
-        self._depth_pub = self.create_publisher(CompressedImage, '/thyra/out/depth_image/compressed', qos)
-        self._pose_pub  = self.create_publisher(PoseStamped,     '/thyra/out/pose/synced_with_RGBD',  qos)
+        self._color_unsynced_pub = self.create_publisher(CompressedImage, '/thyra/out/cam/unsynced/color', qos)
+        self._color_synced_pub   = self.create_publisher(CompressedImage, '/thyra/out/cam/synced/color',   qos)
+        self._depth_pub          = self.create_publisher(CompressedImage, '/thyra/out/cam/synced/depth',   qos)
+        self._pose_pub           = self.create_publisher(PoseStamped,     '/thyra/out/cam/synced/pose',    qos)
 
+        self._publish_on_sync = (fps <= 0.0)
         interval = 1.0 / fps if fps > 0.0 else 0.0
         if interval > 0.0:
             self.create_timer(interval, self._publish)
-        else:
-            # Publish directly in the sync callback when fps=0
-            self._publish_on_sync = True
-
-        self._publish_on_sync = (fps <= 0.0)
-        self._last_stamp = None
 
         self.get_logger().info(
             f'Camera relay ready — {fps:.1f} Hz, JPEG quality {self._jpeg_quality}'
@@ -82,13 +84,14 @@ class CameraRelay(Node):
         p = msg.pose.position
         self._origin_offset = (p.x, p.y, p.z)
 
-    def _on_synced(self, color_msg, depth_msg, position_msg, attitude_msg):
-        stamp = color_msg.header.stamp
-        if self._last_stamp is not None:
-            if (stamp.sec, stamp.nanosec) <= (self._last_stamp.sec, self._last_stamp.nanosec):
-                return
-        self._latest = {
-            'color':    color_msg,
+    def _on_color(self, msg: Image):
+        self._latest_color = msg
+        if self._publish_on_sync:
+            self._publish()
+
+    def _on_synced(self, depth_msg, position_msg, attitude_msg):
+        self._latest_synced = {
+            'color':    self._latest_color,   # best color frame at this moment
             'depth':    depth_msg,
             'position': position_msg,
             'attitude': attitude_msg,
@@ -97,51 +100,67 @@ class CameraRelay(Node):
             self._publish()
 
     def _publish(self):
-        if not self._latest:
-            return
-        color_msg    = self._latest.get('color')
-        depth_msg    = self._latest.get('depth')
-        position_msg = self._latest.get('position')
-        attitude_msg = self._latest.get('attitude')
-        if not all([color_msg, depth_msg, position_msg, attitude_msg]):
-            return
+        self._publish_color()
+        self._publish_depth_pose()
 
-        stamp = color_msg.header.stamp
-        if self._last_stamp is not None:
-            if (stamp.sec, stamp.nanosec) <= (self._last_stamp.sec, self._last_stamp.nanosec):
+    def _publish_color(self):
+        msg = self._latest_color
+        if msg is None:
+            return
+        stamp = msg.header.stamp
+        if self._last_color_stamp is not None:
+            if (stamp.sec, stamp.nanosec) <= (self._last_color_stamp.sec, self._last_color_stamp.nanosec):
                 return
-        self._last_stamp = stamp
-        self._latest = {}
+        self._last_color_stamp = stamp
+        self._latest_color = None
 
         try:
-            # Colour → JPEG
-            color_cv  = self._bridge.imgmsg_to_cv2(color_msg, desired_encoding='rgb8')
+            color_cv  = self._bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
             color_bgr = cv2.cvtColor(color_cv, cv2.COLOR_RGB2BGR)
-            ok, color_buf = cv2.imencode('.jpg', color_bgr, [cv2.IMWRITE_JPEG_QUALITY, self._jpeg_quality])
+            ok, buf = cv2.imencode('.jpg', color_bgr, [cv2.IMWRITE_JPEG_QUALITY, self._jpeg_quality])
             if not ok:
                 self.get_logger().error('JPEG encoding failed')
                 return
+            out        = CompressedImage()
+            out.header = msg.header
+            out.format = 'jpeg'
+            out.data   = buf.tobytes()
+            self._color_unsynced_pub.publish(out)
+        except CvBridgeError as e:
+            self.get_logger().error(f'CvBridge error (color): {e}')
 
-            # Depth → PNG
+    def _publish_depth_pose(self):
+        if not self._latest_synced:
+            return
+        color_msg    = self._latest_synced.get('color')
+        depth_msg    = self._latest_synced.get('depth')
+        position_msg = self._latest_synced.get('position')
+        attitude_msg = self._latest_synced.get('attitude')
+        if not all([depth_msg, position_msg, attitude_msg]):
+            return
+
+        stamp = depth_msg.header.stamp
+        if self._last_synced_stamp is not None:
+            if (stamp.sec, stamp.nanosec) <= (self._last_synced_stamp.sec, self._last_synced_stamp.nanosec):
+                return
+        self._last_synced_stamp = stamp
+        self._latest_synced = {}
+
+        try:
             depth_cv = self._bridge.imgmsg_to_cv2(depth_msg, desired_encoding='16UC1')
-            ok, depth_buf = cv2.imencode('.png', depth_cv)
+            ok, buf = cv2.imencode('.png', depth_cv)
             if not ok:
                 self.get_logger().error('PNG encoding failed')
                 return
 
-            color_out        = CompressedImage()
-            color_out.header = color_msg.header
-            color_out.format = 'jpeg'
-            color_out.data   = color_buf.tobytes()
-
             depth_out        = CompressedImage()
             depth_out.header = depth_msg.header
             depth_out.format = 'png'
-            depth_out.data   = depth_buf.tobytes()
+            depth_out.data   = buf.tobytes()
 
             ox, oy, oz = self._origin_offset
             pose_out = PoseStamped()
-            pose_out.header = color_msg.header
+            pose_out.header = depth_msg.header
             pose_out.pose.position.x    = float(position_msg.x - ox)
             pose_out.pose.position.y    = float(position_msg.y - oy)
             pose_out.pose.position.z    = float(position_msg.z - oz)
@@ -150,12 +169,22 @@ class CameraRelay(Node):
             pose_out.pose.orientation.z = float(attitude_msg.q[3])
             pose_out.pose.orientation.w = float(attitude_msg.q[0])
 
-            self._color_pub.publish(color_out)
             self._depth_pub.publish(depth_out)
             self._pose_pub.publish(pose_out)
 
+            if color_msg is not None:
+                color_cv  = self._bridge.imgmsg_to_cv2(color_msg, desired_encoding='rgb8')
+                color_bgr = cv2.cvtColor(color_cv, cv2.COLOR_RGB2BGR)
+                ok, buf = cv2.imencode('.jpg', color_bgr, [cv2.IMWRITE_JPEG_QUALITY, self._jpeg_quality])
+                if ok:
+                    synced_color        = CompressedImage()
+                    synced_color.header = depth_msg.header
+                    synced_color.format = 'jpeg'
+                    synced_color.data   = buf.tobytes()
+                    self._color_synced_pub.publish(synced_color)
+
         except CvBridgeError as e:
-            self.get_logger().error(f'CvBridge error: {e}')
+            self.get_logger().error(f'CvBridge error (depth): {e}')
         except Exception as e:
             self.get_logger().error(f'Relay error: {e}')
 
