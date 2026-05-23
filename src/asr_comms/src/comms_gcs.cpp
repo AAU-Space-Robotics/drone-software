@@ -429,43 +429,48 @@ void CommsGcs::publish_link_stats()
     const size_t wifi_bytes  = wifi_rx_bytes_.exchange(0);
 
     asr_comms::msg::LinkStats out{};
-    out.tx_kbps       = static_cast<float>(tx_bytes_.exchange(0)) * 8.0f / 1000.0f;
-    out.rx_kbps       = static_cast<float>(radio_bytes + wifi_bytes) * 8.0f / 1000.0f;
-    out.radio_rx_kbps = static_cast<float>(radio_bytes) * 8.0f / 1000.0f;
-    out.wifi_rx_kbps  = static_cast<float>(wifi_bytes)  * 8.0f / 1000.0f;
-    out.radio_rx_msgs = radio_rx_msgs_.exchange(0);
-    out.wifi_rx_msgs  = wifi_rx_msgs_.exchange(0);
-    out.connected      = (last_rx != 0) && ((now_ns - last_rx) < LINK_TIMEOUT_NS);
-    out.wifi_connected = wifi_transport_ && wifi_transport_->peer_known();
 
-    out.peer_rx_kbps = uav_rx_kbps_.load();
-    out.radio_ok  = (last_radio != 0) && ((now_ns - last_radio) < RADIO_TIMEOUT_NS);
+    out.mavlink_connected = (last_rx != 0) && ((now_ns - last_rx) < LINK_TIMEOUT_NS);
+    out.wifi_connected    = wifi_transport_ && wifi_transport_->peer_known();
+    out.camera_streaming  = camera_streaming_.load();
 
-    const uint64_t last_uav_radio = last_uav_radio_ns_.load();
-    out.uav_radio_ok  = (last_uav_radio != 0) && ((now_ns - last_uav_radio) < RADIO_TIMEOUT_NS);
-    out.uav_txbuf     = uav_radio_txbuf_.load();
-    out.uav_rssi      = uav_radio_rssi_.load();
-    out.uav_noise     = uav_radio_noise_.load();
-    out.uav_rxerrors  = uav_radio_rxerrors_.load();
-    out.rssi      = radio_rssi_.load();
-    out.remrssi   = radio_remrssi_.load();
-    out.noise     = radio_noise_.load();
-    out.remnoise  = radio_remnoise_.load();
-    out.txbuf     = radio_txbuf_.load();
-    out.rxerrors  = radio_rxerrors_.load();
-    out.fixed     = radio_fixed_.load();
+    out.radio_tx_kbps   = static_cast<float>(tx_bytes_.exchange(0)) * 8.0f / 1000.0f;
+    out.mavlink_rx_kbps = static_cast<float>(radio_bytes + wifi_bytes) * 8.0f / 1000.0f;
+    out.radio_rx_kbps   = static_cast<float>(radio_bytes) * 8.0f / 1000.0f;
+    out.wifi_rx_kbps    = static_cast<float>(wifi_bytes)  * 8.0f / 1000.0f;
+    out.radio_rx_msgs   = radio_rx_msgs_.exchange(0);
+    out.wifi_rx_msgs    = wifi_rx_msgs_.exchange(0);
+    out.uav_rx_kbps     = uav_rx_kbps_.load();
+
+    out.camera_rx_kbps = static_cast<float>(camera_rx_bytes_.exchange(0)) * 8.0f / 1000.0f;
+
+    out.radio_ok      = (last_radio != 0) && ((now_ns - last_radio) < RADIO_TIMEOUT_NS);
+    out.radio_rssi    = radio_rssi_.load();
+    out.radio_remrssi = radio_remrssi_.load();
+    out.radio_noise   = radio_noise_.load();
+    out.radio_remnoise = radio_remnoise_.load();
+    out.radio_txbuf   = radio_txbuf_.load();
+    out.radio_rxerrors = radio_rxerrors_.load();
+    out.radio_fixed   = radio_fixed_.load();
 
     using LS = asr_comms::msg::LinkStats;
     if (!out.radio_ok) {
         out.signal_quality = LS::QUALITY_NO_RADIO;
     } else {
-        const int snr = static_cast<int>(out.rssi) - static_cast<int>(out.noise);
+        const int snr = static_cast<int>(out.radio_rssi) - static_cast<int>(out.radio_noise);
         if      (snr <  20) out.signal_quality = LS::QUALITY_CRITICAL;
         else if (snr <  40) out.signal_quality = LS::QUALITY_POOR;
         else if (snr <  70) out.signal_quality = LS::QUALITY_FAIR;
         else if (snr < 100) out.signal_quality = LS::QUALITY_GOOD;
         else                out.signal_quality = LS::QUALITY_EXCELLENT;
     }
+
+    const uint64_t last_uav_radio = last_uav_radio_ns_.load();
+    out.uav_radio_ok  = (last_uav_radio != 0) && ((now_ns - last_uav_radio) < RADIO_TIMEOUT_NS);
+    out.uav_rssi      = uav_radio_rssi_.load();
+    out.uav_noise     = uav_radio_noise_.load();
+    out.uav_txbuf     = uav_radio_txbuf_.load();
+    out.uav_rxerrors  = uav_radio_rxerrors_.load();
 
     link_stats_pub_->publish(out);
 }
@@ -638,6 +643,7 @@ void CommsGcs::camera_recv_loop()
     while (running_) {
         const ssize_t n = camera_transport_->recv(buf.data(), buf.size());
         if (n < static_cast<ssize_t>(sizeof(VideoFrameHeader))) continue;
+        camera_rx_bytes_ += static_cast<size_t>(n);
 
         VideoFrameHeader hdr{};
         std::memcpy(&hdr, buf.data(), sizeof(hdr));
@@ -683,19 +689,27 @@ void CommsGcs::camera_recv_loop()
 void CommsGcs::on_camera_stream_request(
     const asr_comms::msg::CameraStreamRequest::SharedPtr msg)
 {
+    if (!wifi_transport_ || !wifi_transport_->peer_known()) {
+        RCLCPP_WARN(get_logger(), "Camera stream request ignored — WiFi peer not connected");
+        return;
+    }
     mavlink_message_t mav{};
     if (msg->enabled) {
         mavlink_msg_command_long_pack(system_id_, component_id_, &mav,
             1, 1, MAV_CMD_VIDEO_START_STREAMING,
             0, 0, 0, 0, 0, 0, 0, 0);
+        camera_streaming_ = true;
         RCLCPP_INFO(get_logger(), "Requesting camera stream start");
     } else {
         mavlink_msg_command_long_pack(system_id_, component_id_, &mav,
             1, 1, MAV_CMD_VIDEO_STOP_STREAMING,
             0, 0, 0, 0, 0, 0, 0, 0);
+        camera_streaming_ = false;
         RCLCPP_INFO(get_logger(), "Stopping camera stream");
     }
-    send_mavlink(mav);
+    uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+    const uint16_t len = mavlink_msg_to_send_buffer(buf, &mav);
+    wifi_transport_->send(buf, len);
 }
 
 int main(int argc, char* argv[])

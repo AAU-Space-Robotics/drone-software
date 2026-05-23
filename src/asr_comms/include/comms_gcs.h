@@ -124,6 +124,8 @@ private:
     uint16_t                   camera_port_{5600};
     std::unique_ptr<UdpSocket> camera_transport_;
     std::thread                camera_recv_thread_;
+    std::atomic<bool>          camera_streaming_{false};  // tracks start/stop request state
+    std::atomic<size_t>        camera_rx_bytes_{0};       // bytes received in camera_recv_loop
 
     // Frame reassembly
     struct CameraFrag { std::vector<uint8_t> data; bool received{false}; };
