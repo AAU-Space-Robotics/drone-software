@@ -217,7 +217,7 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger
 
 # Pin the flight stack to the Jetson launch file
-PARAMS_SRC="${ROS_WORKSPACE_PATH}/src/thyra/config/thyra_params.yaml"
+PARAMS_SRC="${ROS_WORKSPACE_PATH}/src/thyra/config/uav/thyra_params.yaml"
 sed -i "s/flight_stack_launch: .*/flight_stack_launch: thyra_jetson/" "$PARAMS_SRC"
 
 # Install the thyra systemd service and restricted sudo rules
@@ -282,16 +282,24 @@ colcon build \
 echo 'export ROS_DOMAIN_ID=203' >> ~/.bashrc
 
 # Add CUDA to PATH so nvcc is available for CMake (needed for asr_perception TensorRT inference)
-if [ -d "/usr/local/cuda/bin" ]; then
-    if ! grep -qF 'export PATH=/usr/local/cuda/bin' ~/.bashrc; then
-        echo 'export PATH=/usr/local/cuda/bin:$PATH' >> ~/.bashrc
+CUDA_DIR=""
+for candidate in /usr/local/cuda /usr/local/cuda-12.6 /usr/local/cuda-12 /usr/local/cuda-11.8; do
+    if [ -f "$candidate/bin/nvcc" ]; then
+        CUDA_DIR="$candidate"
+        break
+    fi
+done
+
+if [ -n "$CUDA_DIR" ]; then
+    if ! grep -qF 'export PATH=/usr/local/cuda' ~/.bashrc; then
+        echo "export PATH=${CUDA_DIR}/bin:\$PATH" >> ~/.bashrc
     fi
     if ! grep -qF 'export CUDA_HOME=' ~/.bashrc; then
-        echo 'export CUDA_HOME=/usr/local/cuda' >> ~/.bashrc
+        echo "export CUDA_HOME=${CUDA_DIR}" >> ~/.bashrc
     fi
-    echo "CUDA PATH exports added to ~/.bashrc"
+    echo "CUDA PATH exports added to ~/.bashrc (using ${CUDA_DIR})"
 else
-    echo "WARNING: /usr/local/cuda/bin not found — skipping CUDA PATH export"
+    echo "WARNING: nvcc not found in any expected CUDA location — skipping CUDA PATH export"
 fi
 
 echo "Workspace setup and build completed! :)"
