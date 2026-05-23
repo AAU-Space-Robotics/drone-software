@@ -10,6 +10,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
 #include <px4_msgs/msg/gps_inject_data.hpp>
 #include <asr_comms/msg/telemetry_position.hpp>
 #include <asr_comms/msg/telemetry_attitude.hpp>
@@ -22,6 +23,7 @@
 #include <asr_comms/msg/comms_health.hpp>
 #include <asr_comms/action/drone_command.hpp>
 
+#include "camera_protocol.h"
 #include "common/mavlink.h"
 #include "dedup.h"
 #include "transport.h"
@@ -58,6 +60,25 @@ private:
     void on_battery(const asr_comms::msg::TelemetryBattery::SharedPtr msg);
     void on_gps(const asr_comms::msg::TelemetryGPS::SharedPtr msg);
     void on_status(const asr_comms::msg::TelemetryStatus::SharedPtr msg);
+
+    // Camera streaming (WiFi-only, started via MAV_CMD_VIDEO_START_STREAMING)
+    void start_camera_stream(float fps, uint16_t gcs_camera_port);
+    void stop_camera_stream();
+    void setup_camera_transport(uint32_t gcs_ip_net, uint16_t gcs_port);
+    void send_camera_frame();
+    void on_camera_frame(const sensor_msgs::msg::CompressedImage::SharedPtr msg);
+
+    std::mutex                   camera_mutex_;
+    std::atomic<bool>            camera_streaming_{false};
+    std::atomic<uint32_t>        gcs_wifi_ip_{0};      // GCS WiFi IP (network byte order), set on beacon
+    float                        camera_fps_{5.0f};    // under camera_mutex_
+    uint16_t                     camera_gcs_port_{0};  // under camera_mutex_
+    std::unique_ptr<UdpSocket>   camera_transport_;    // under camera_mutex_
+    rclcpp::TimerBase::SharedPtr camera_timer_;        // under camera_mutex_
+    std::mutex                   camera_frame_mutex_;
+    std::vector<uint8_t>         camera_latest_frame_;
+    uint32_t                     camera_frame_id_{0};
+    rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr camera_sub_;
 
     std::unique_ptr<ITransport> transport_;
     std::unique_ptr<UdpSocket>  wifi_transport_;  // client socket, nullptr until beacon received

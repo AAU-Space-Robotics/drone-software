@@ -43,6 +43,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "ros/msg/telemetry/TelemetryBattery.msg"
   "ros/msg/telemetry/TelemetryGPS.msg"
   "ros/msg/telemetry/TelemetryStatus.msg"
+  "ros/msg/CameraStreamRequest.msg"
   "ros/action/DroneCommand.action"
   "ros/action/MissionComand.action"
   "ros/action/SystemControl.action"
@@ -52,7 +53,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 
 set(MAVLINK_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mavlink)
 
-set(COMMS_DEPS rclcpp px4_msgs std_msgs)
+set(COMMS_DEPS rclcpp px4_msgs std_msgs sensor_msgs)
 
 # --- comms_uav: runs on the drone ---
 add_executable(comms_uav

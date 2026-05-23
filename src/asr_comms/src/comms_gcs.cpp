@@ -40,10 +40,12 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     declare_parameter("component_id", static_cast<int>(component_id_));
     declare_parameter("wifi_port",    14552);
     declare_parameter("wifi_enabled", true);
+    declare_parameter("camera_port",  static_cast<int>(camera_port_));
 
     system_id_    = static_cast<uint8_t>(get_parameter("system_id").as_int());
     component_id_ = static_cast<uint8_t>(get_parameter("component_id").as_int());
     wifi_port_    = static_cast<uint16_t>(get_parameter("wifi_port").as_int());
+    camera_port_  = static_cast<uint16_t>(get_parameter("camera_port").as_int());
     const bool wifi_enabled = get_parameter("wifi_enabled").as_bool();
 
     const auto serial_port = get_parameter("serial_port").as_string();
@@ -69,6 +71,11 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     gps_pub_      = create_publisher<asr_comms::msg::TelemetryGPS>(     "telemetry/gps",      10);
     status_pub_   = create_publisher<asr_comms::msg::TelemetryStatus>(  "telemetry/status",   10);
     command_ack_pub_ = create_publisher<asr_comms::msg::CommandAck>("command_ack", 10);
+    camera_pub_      = create_publisher<sensor_msgs::msg::CompressedImage>("camera/image", 10);
+
+    camera_stream_sub_ = create_subscription<asr_comms::msg::CameraStreamRequest>(
+        "in/camera_stream", 1,
+        std::bind(&CommsGcs::on_camera_stream_request, this, std::placeholders::_1));
 
     // Send side
     heartbeat_timer_  = create_wall_timer(1s, std::bind(&CommsGcs::send_heartbeat, this));
@@ -133,6 +140,17 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
         }
 
         beacon_timer_ = create_wall_timer(1s, std::bind(&CommsGcs::send_peer_beacon, this));
+
+        // Camera receive socket — UAV streams JPEG frames here over WiFi only.
+        try {
+            auto cam_sock = std::make_unique<UdpSocket>(camera_port_);
+            cam_sock->set_recv_timeout_ms(200);
+            camera_transport_ = std::move(cam_sock);
+            camera_recv_thread_ = std::thread(&CommsGcs::camera_recv_loop, this);
+            RCLCPP_INFO(get_logger(), "Camera RX socket bound on :%u", camera_port_);
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(get_logger(), "Failed to open camera socket: %s", e.what());
+        }
     }
 
     mavlink_set_proto_version(MAVLINK_COMM_0, 2);
@@ -143,8 +161,9 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
 CommsGcs::~CommsGcs()
 {
     running_ = false;
-    if (recv_thread_.joinable())      recv_thread_.join();
-    if (wifi_recv_thread_.joinable()) wifi_recv_thread_.join();
+    if (recv_thread_.joinable())        recv_thread_.join();
+    if (wifi_recv_thread_.joinable())   wifi_recv_thread_.join();
+    if (camera_recv_thread_.joinable()) camera_recv_thread_.join();
 }
 
 // --- Receive path ---
@@ -607,6 +626,83 @@ void CommsGcs::on_uav_command(const asr_comms::msg::UAVCommand::SharedPtr msg)
 
     send_mavlink(mav);
     RCLCPP_INFO(get_logger(), "Sent command '%s' over MAVLink", cmd.c_str());
+}
+
+// --- Camera streaming ---
+
+void CommsGcs::camera_recv_loop()
+{
+    static constexpr size_t BUF_SIZE = sizeof(VideoFrameHeader) + CAMERA_MAX_FRAG_PAYLOAD;
+    std::vector<uint8_t> buf(BUF_SIZE);
+
+    while (running_) {
+        const ssize_t n = camera_transport_->recv(buf.data(), buf.size());
+        if (n < static_cast<ssize_t>(sizeof(VideoFrameHeader))) continue;
+
+        VideoFrameHeader hdr{};
+        std::memcpy(&hdr, buf.data(), sizeof(hdr));
+
+        const size_t payload_len = static_cast<size_t>(n) - sizeof(VideoFrameHeader);
+        if (hdr.payload_size > payload_len || hdr.total_frags == 0) continue;
+
+        const uint8_t* payload = buf.data() + sizeof(VideoFrameHeader);
+
+        std::lock_guard<std::mutex> lock(camera_assembler_mutex_);
+
+        if (hdr.frame_id != camera_assembler_.frame_id) {
+            camera_assembler_.frame_id       = hdr.frame_id;
+            camera_assembler_.frame_size     = hdr.frame_size;
+            camera_assembler_.total_frags    = hdr.total_frags;
+            camera_assembler_.received_count = 0;
+            camera_assembler_.frags.assign(hdr.total_frags, {});
+        }
+
+        if (hdr.frag_idx >= camera_assembler_.frags.size()) continue;
+        auto& frag = camera_assembler_.frags[hdr.frag_idx];
+        if (frag.received) continue;
+
+        frag.data.assign(payload, payload + hdr.payload_size);
+        frag.received = true;
+        ++camera_assembler_.received_count;
+
+        if (camera_assembler_.received_count == camera_assembler_.total_frags) {
+            std::vector<uint8_t> frame;
+            frame.reserve(camera_assembler_.frame_size);
+            for (auto& f : camera_assembler_.frags)
+                frame.insert(frame.end(), f.data.begin(), f.data.end());
+
+            sensor_msgs::msg::CompressedImage img{};
+            img.header.stamp = get_clock()->now();
+            img.format       = "jpeg";
+            img.data         = std::move(frame);
+            camera_pub_->publish(img);
+        }
+    }
+}
+
+void CommsGcs::on_camera_stream_request(
+    const asr_comms::msg::CameraStreamRequest::SharedPtr msg)
+{
+    mavlink_message_t mav{};
+    if (msg->enabled) {
+        const float fps = msg->fps > 0.0f ? msg->fps : 5.0f;
+        // param1 = stream_id (0 = main), param2 = fps, param3 = GCS camera port
+        mavlink_msg_command_long_pack(system_id_, component_id_, &mav,
+            1, 1, MAV_CMD_VIDEO_START_STREAMING,
+            0,                                  // confirmation
+            0.0f,                               // param1: stream_id
+            fps,                                // param2: fps
+            static_cast<float>(camera_port_),   // param3: port UAV should send to
+            0, 0, 0, 0);
+        RCLCPP_INFO(get_logger(),
+            "Requesting camera stream at %.1f Hz → UAV sends to port %u", fps, camera_port_);
+    } else {
+        mavlink_msg_command_long_pack(system_id_, component_id_, &mav,
+            1, 1, MAV_CMD_VIDEO_STOP_STREAMING,
+            0, 0, 0, 0, 0, 0, 0, 0);
+        RCLCPP_INFO(get_logger(), "Stopping camera stream");
+    }
+    send_mavlink(mav);
 }
 
 int main(int argc, char* argv[])

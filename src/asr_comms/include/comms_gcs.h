@@ -7,6 +7,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/u_int8_multi_array.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
+#include <asr_comms/msg/camera_stream_request.hpp>
 #include <asr_comms/msg/telemetry_position.hpp>
 #include <asr_comms/msg/telemetry_attitude.hpp>
 #include <asr_comms/msg/telemetry_battery.hpp>
@@ -19,6 +21,7 @@
 #include <asr_comms/msg/servo_command.hpp>
 #include <asr_comms/msg/link_stats.hpp>
 
+#include "camera_protocol.h"
 #include "common/mavlink.h"
 #include "dedup.h"
 #include "transport.h"
@@ -48,6 +51,10 @@ private:
     void on_manual_input(const asr_comms::msg::ManualControlInput::SharedPtr msg);
     void on_servo_command(const asr_comms::msg::ServoCommand::SharedPtr msg);
     void publish_link_stats();
+
+    // Camera streaming
+    void camera_recv_loop();
+    void on_camera_stream_request(const asr_comms::msg::CameraStreamRequest::SharedPtr msg);
 
     std::unique_ptr<ITransport> transport_;
     std::unique_ptr<UdpSocket>  wifi_transport_;  // server-mode UDP, nullptr until WiFi ready
@@ -110,6 +117,24 @@ private:
     rclcpp::Subscription<asr_comms::msg::ManualControlInput>::SharedPtr    manual_input_sub_;
     rclcpp::Subscription<asr_comms::msg::ServoCommand>::SharedPtr          servo_command_sub_;
     rclcpp::Publisher<asr_comms::msg::CommandAck>::SharedPtr               command_ack_pub_;
+    rclcpp::Subscription<asr_comms::msg::CameraStreamRequest>::SharedPtr   camera_stream_sub_;
+    rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr        camera_pub_;
+
+    // Camera receive socket and thread (WiFi-only)
+    uint16_t                   camera_port_{5600};
+    std::unique_ptr<UdpSocket> camera_transport_;
+    std::thread                camera_recv_thread_;
+
+    // Frame reassembly
+    struct CameraFrag { std::vector<uint8_t> data; bool received{false}; };
+    struct {
+        uint32_t              frame_id{UINT32_MAX};
+        uint32_t              frame_size{0};
+        uint16_t              total_frags{0};
+        uint16_t              received_count{0};
+        std::vector<CameraFrag> frags;
+    } camera_assembler_;
+    std::mutex camera_assembler_mutex_;
     uint8_t  rtcm_seq_{0};
     int8_t   gcs_nominal_{1};          // latest value from in/gcs_heartbeat, sent in MAVLink heartbeat
     std::string pending_command_type_;
