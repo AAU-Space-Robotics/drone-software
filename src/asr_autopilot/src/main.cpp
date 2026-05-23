@@ -32,7 +32,7 @@
 #include <asr_comms/msg/trajectory_setpoint.hpp>
 #include <asr_comms/msg/control_detail.hpp>
 #include <asr_comms/msg/gcs_heartbeat.hpp>
-#include <asr_comms/msg/probe_global_locations.hpp>
+#include <asr_comms/msg/probe_locations.hpp>
 #include <asr_comms/msg/attitude_setpoint_rpy.hpp>
 #include <asr_comms/msg/servo_command.hpp>
 
@@ -395,9 +395,9 @@ public:
             "/fmu/out/actuator_outputs", qos,
             [this](const ActuatorOutputs::SharedPtr msg)
             { ActuatorOutputCallback(msg);});
-        probe_global_locations_sub_ = create_subscription<asr_comms::msg::ProbeGlobalLocations>(
-            "/probe_detector/global_probe_locations", qos,
-            [this](const asr_comms::msg::ProbeGlobalLocations::SharedPtr msg)
+        probe_global_locations_sub_ = create_subscription<asr_comms::msg::ProbeLocations>(
+            "/probe_detector/locations", qos,
+            [this](const asr_comms::msg::ProbeLocations::SharedPtr msg)
             { GlobalProbeLocationsCallback(msg); });
         gps_sub_ = create_subscription<SensorGps>(
             "/fmu/out/vehicle_gps_position", qos,
@@ -748,17 +748,20 @@ private:
         state_manager_.setActuatorSpeeds(actuator_speeds);
     }
 
-    void GlobalProbeLocationsCallback(const asr_comms::msg::ProbeGlobalLocations::SharedPtr msg)
+    void GlobalProbeLocationsCallback(const asr_comms::msg::ProbeLocations::SharedPtr msg)
     {
-        // Set the probe locations in the state manager
         GlobalProbeLocations probe_locations;
-        probe_locations.stamp = get_time();
-        probe_locations.probe_count = msg->probe_count;
-        probe_locations.x = msg->x;
-        probe_locations.y = msg->y;
-        probe_locations.z = msg->z;
-        probe_locations.confidence = msg->confidence;
-        probe_locations.contribution = msg->contribution;
+        probe_locations.stamp       = get_time();
+        probe_locations.probe_count = static_cast<int32_t>(msg->num_probes);
+        probe_locations.confidence  = msg->confidence;
+
+        // Unpack flattened 3xN positions array into x, y, z vectors
+        for (uint32_t i = 0; i < msg->num_probes; ++i) {
+            probe_locations.x.push_back(msg->positions[i * 3 + 0]);
+            probe_locations.y.push_back(msg->positions[i * 3 + 1]);
+            probe_locations.z.push_back(msg->positions[i * 3 + 2]);
+        }
+
         state_manager_.setGlobalProbeLocations(probe_locations);
     }
 
@@ -1869,7 +1872,7 @@ private:
     rclcpp::Subscription<BatteryStatus>::SharedPtr battery_status_sub_;
     rclcpp::Subscription<DistanceSensor>::SharedPtr ground_distance_sub_;
     rclcpp::Subscription<ActuatorOutputs>::SharedPtr actuator_output_sub_;
-    rclcpp::Subscription<asr_comms::msg::ProbeGlobalLocations>::SharedPtr probe_global_locations_sub_;
+    rclcpp::Subscription<asr_comms::msg::ProbeLocations>::SharedPtr probe_global_locations_sub_;
     rclcpp::Subscription<SensorGps>::SharedPtr gps_sub_;
     rclcpp::Subscription<asr_comms::msg::ServoCommand>::SharedPtr servo_command_sub_;
 
