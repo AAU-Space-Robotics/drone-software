@@ -20,7 +20,7 @@ using PoseStamped     = geometry_msgs::msg::PoseStamped;
 
 // ---------------------------------------------------------------------------
 // KalmanTrack — one tracked probe
-// State:       x = [px, py, pz, vx, vy, vz]^T   (6x1)
+// State:       x = [px, py, pz, bx, by, bz]^T   (6x1)
 // Observation: z = [px, py, pz]^T                (3x1)
 // ---------------------------------------------------------------------------
 struct KalmanTrack {
@@ -31,50 +31,46 @@ struct KalmanTrack {
     Eigen::Matrix<double, 6, 1> x;   // state
     Eigen::Matrix<double, 6, 6> P;   // covariance
 
-    // Constant-velocity state transition — call with measured dt each step.
-    static Eigen::Matrix<double, 6, 6> F(double dt) {
-        Eigen::Matrix<double, 6, 6> mat = Eigen::Matrix<double, 6, 6>::Identity();
-        mat.topRightCorner<3, 3>() = dt * Eigen::Matrix3d::Identity();
-        return mat;
-    }
-
-    // Observation matrix: we measure position directly.
+    // Observation matrix: we measure position directly, and add bias terms
     static const Eigen::Matrix<double, 3, 6> H() {
         Eigen::Matrix<double, 3, 6> mat = Eigen::Matrix<double, 3, 6>::Zero();
         mat.leftCols<3>() = Eigen::Matrix3d::Identity();
+        mat.rightCols<3>() = Eigen::Matrix3d::Identity();
         return mat;
     }
 
-    // Process noise — tune Q_pos (position uncertainty) and Q_vel (velocity uncertainty).
-    static Eigen::Matrix<double, 6, 6> Q(double dt,
-                                          double q_pos = 0.01,
-                                          double q_vel = 0.1)
+    // Process noise. Not more uncertain over time
+    static Eigen::Matrix<double, 6, 6> Q()
     {
+        double sigma_pos = 0.01; // meters
+        double sigma_bias = 0.001; // meters
+
         Eigen::Matrix<double, 6, 6> mat = Eigen::Matrix<double, 6, 6>::Zero();
-        mat.topLeftCorner<3, 3>()     = q_pos * dt * Eigen::Matrix3d::Identity();
-        mat.bottomRightCorner<3, 3>() = q_vel * dt * Eigen::Matrix3d::Identity();
+        mat.topLeftCorner<3, 3>()     = sigma_pos * sigma_pos * Eigen::Matrix3d::Identity();
+        mat.bottomRightCorner<3, 3>() = sigma_bias * sigma_bias * Eigen::Matrix3d::Identity();
         return mat;
     }
 
-    // Measurement noise — tune to expected depth noise (metres).
-    static Eigen::Matrix<double, 3, 3> R(double r_pos = 0.05) {
-        return r_pos * Eigen::Matrix3d::Identity();
+    // Measurement noise
+    static Eigen::Matrix<double, 3, 3> R(double confidence = 1.0f) {
+        double sigma_meas = 0.05; // meters
+        return sigma_meas * sigma_meas * (1.0 / confidence) *  Eigen::Matrix3d::Identity();
     }
 
     // Predict forward by dt seconds.
-    void predict(double dt) {
-        const auto Fk = F(dt);
-        x = Fk * x;
-        P = Fk * P * Fk.transpose() + Q(dt);
+    void predict() {
+        P = P + Q();
     }
 
     // Update with a new 3-D measurement.
-    void update(const Eigen::Vector3d& z_meas) {
+    void update(const Eigen::Vector3d& z_meas, double confidence) {
         const auto  Hk = H();
-        const auto  S  = Hk * P * Hk.transpose() + R();
-        const auto  K  = P * Hk.transpose() * S.inverse();   // Kalman gain
+        const auto  Rk = R(confidence); // Measurement noise scaled by confidence
+        const auto  S  = Hk * P * Hk.transpose() + Rk;
+        const auto K = S.transpose().llt().solve((Hk * P).transpose()).transpose(); // Kalman gain
+        auto IKH = Eigen::Matrix<double,6,6>::Identity() - K * Hk;
         x = x + K * (z_meas - Hk * x);
-        P = (Eigen::Matrix<double, 6, 6>::Identity() - K * Hk) * P;
+        P = IKH * P * IKH.transpose() + K * Rk * K.transpose();
         ++observations;
     }
 

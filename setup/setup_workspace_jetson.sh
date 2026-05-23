@@ -125,7 +125,8 @@ fi
 
 # Install Python dependencies for perception
 echo "Installing Python dependencies for asr_perception..."
-pip3 install ultralytics
+sudo apt-get install -y python3-pip
+pip3 install "numpy<2" ultralytics
 
 # Install additional ROS dependencies
 echo "Installing additional ROS $ROS_DISTRO dependencies..."
