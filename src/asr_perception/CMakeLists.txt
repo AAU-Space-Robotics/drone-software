@@ -13,9 +13,11 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 
 # CUDA — required on Jetson for YOLO GPU inference.
+set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
 find_package(CUDA QUIET)
 if(CUDA_FOUND)
   message(STATUS "CUDA ${CUDA_VERSION} found")
+  include_directories(${CUDA_INCLUDE_DIRS})
 else()
   message(WARNING "CUDA not found — YOLO will fall back to CPU")
 endif()

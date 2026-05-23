@@ -281,4 +281,17 @@ colcon build \
 # Set ROS_DOMAIN_ID in .bashrc to ensure UAV and GCS are on the same ROS 2 domain for communication
 echo 'export ROS_DOMAIN_ID=203' >> ~/.bashrc
 
+# Add CUDA to PATH so nvcc is available for CMake (needed for asr_perception TensorRT inference)
+if [ -d "/usr/local/cuda/bin" ]; then
+    if ! grep -qF 'export PATH=/usr/local/cuda/bin' ~/.bashrc; then
+        echo 'export PATH=/usr/local/cuda/bin:$PATH' >> ~/.bashrc
+    fi
+    if ! grep -qF 'export CUDA_HOME=' ~/.bashrc; then
+        echo 'export CUDA_HOME=/usr/local/cuda' >> ~/.bashrc
+    fi
+    echo "CUDA PATH exports added to ~/.bashrc"
+else
+    echo "WARNING: /usr/local/cuda/bin not found — skipping CUDA PATH export"
+fi
+
 echo "Workspace setup and build completed! :)"
