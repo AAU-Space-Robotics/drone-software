@@ -11,7 +11,7 @@
   <depend>rclcpp</depend>
 <depend>asr_comms</depend>
   <depend>px4_msgs</depend>
-  <depend>serial</depend>
+  <depend>serial_driver</depend>
 
 
   <test_depend>ament_lint_auto</test_depend>

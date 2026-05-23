@@ -3,6 +3,8 @@ name: Build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
   workflow_dispatch:
 
 jobs:
@@ -11,6 +13,9 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
+
+      - name: Clone px4_msgs
+        run: git clone https://github.com/AAU-Space-Robotics/px4_msgs_thyra.git src/px4_msgs_thyra
 
       - name: Install ROS2 Jazzy
         run: |
@@ -29,7 +34,11 @@ jobs:
             python3-rosdep \
             libtinyxml-dev \
             libglfw3-dev \
-            libopengl0
+            libopengl0 \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxrandr-dev
 
       - name: rosdep install
         run: |
@@ -42,13 +51,16 @@ jobs:
       - name: Build
         run: |
           source /opt/ros/jazzy/setup.bash
-          colcon build
+          colcon build --executor sequential
 
   build-humble:
     name: Build (Humble / Ubuntu 22.04)
     runs-on: ubuntu-22.04-arm
     steps:
       - uses: actions/checkout@v4
+
+      - name: Clone px4_msgs
+        run: git clone https://github.com/AAU-Space-Robotics/px4_msgs_thyra.git src/px4_msgs_thyra
 
       - name: Install ROS2 Humble
         run: |
@@ -67,7 +79,11 @@ jobs:
             python3-rosdep \
             libtinyxml-dev \
             libglfw3-dev \
-            libopengl0
+            libopengl0 \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxrandr-dev
 
       - name: rosdep install
         run: |
@@ -80,7 +96,7 @@ jobs:
       - name: Build
         run: |
           source /opt/ros/humble/setup.bash
-          colcon build
+          colcon build --executor sequential
 
   tag:
     name: Tag version
@@ -108,9 +124,13 @@ jobs:
           fi
           echo "tag=${PREFIX}${N}" >> $GITHUB_OUTPUT
 
-      - name: Push tag
+      - name: Push tag and reset flight tested badge
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git tag ${{ steps.version.outputs.tag }}
           git push origin ${{ steps.version.outputs.tag }}
+          sed -i 's|flight_tested-[^)]*|flight_tested-not_performed-red|' README.md
+          git add README.md
+          git commit -m "reset flight tested badge for ${{ steps.version.outputs.tag }} [skip ci]"
+          git push origin main
