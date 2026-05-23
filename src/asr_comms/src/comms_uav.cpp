@@ -43,6 +43,7 @@ CommsUav::CommsUav()
     declare_parameter("component_id", static_cast<int>(component_id_));
     declare_parameter("wifi_port",    static_cast<int>(wifi_port_));
     declare_parameter("camera_topic", std::string{"camera/image/compressed"});
+    declare_parameter("camera_port",  static_cast<int>(camera_port_));
 
     std::cout << "\n"
               << "=============================\n"
@@ -53,6 +54,7 @@ CommsUav::CommsUav()
     system_id_    = static_cast<uint8_t>(get_parameter("system_id").as_int());
     component_id_ = static_cast<uint8_t>(get_parameter("component_id").as_int());
     wifi_port_    = static_cast<uint16_t>(get_parameter("wifi_port").as_int());
+    camera_port_  = static_cast<uint16_t>(get_parameter("camera_port").as_int());
 
     const auto serial_port = get_parameter("serial_port").as_string();
     if (!serial_port.empty()) {
@@ -308,9 +310,7 @@ void CommsUav::forward_command(const mavlink_command_long_t& cmd)
     };
 
     if (cmd.command == MAV_CMD_VIDEO_START_STREAMING) {
-        const float    fps      = cmd.param2 > 0.0f ? cmd.param2 : 5.0f;
-        const uint16_t gcs_port = static_cast<uint16_t>(cmd.param3);
-        start_camera_stream(fps, gcs_port);
+        start_camera_stream();
         ack_cmd(MAV_RESULT_ACCEPTED);
         return;
     }
@@ -481,7 +481,7 @@ void CommsUav::handle_peer_beacon(const mavlink_v2_extension_t& ext)
     // If a stream was already requested before WiFi came up, start it now.
     std::lock_guard<std::mutex> lock(camera_mutex_);
     if (camera_streaming_.load() && !camera_transport_) {
-        setup_camera_transport(beacon.ip, camera_gcs_port_);
+        setup_camera_transport(beacon.ip);
     }
 }
 
@@ -636,43 +636,26 @@ void CommsUav::on_status(const asr_comms::msg::TelemetryStatus::SharedPtr msg)
 
 // --- Camera streaming (WiFi-only) ---
 
-void CommsUav::on_camera_frame(const sensor_msgs::msg::CompressedImage::SharedPtr msg)
-{
-    std::lock_guard<std::mutex> lock(camera_frame_mutex_);
-    camera_latest_frame_ = msg->data;
-}
-
-void CommsUav::setup_camera_transport(uint32_t gcs_ip_net, uint16_t gcs_port)
+void CommsUav::setup_camera_transport(uint32_t gcs_ip_net)
 {
     // Called under camera_mutex_.
     char ip_str[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &gcs_ip_net, ip_str, sizeof(ip_str));
-    camera_transport_ = std::make_unique<UdpSocket>(0u, std::string(ip_str), gcs_port);
-
-    const auto interval = std::chrono::milliseconds(
-        static_cast<int64_t>(1000.0 / camera_fps_));
-    camera_timer_ = create_wall_timer(interval, [this]() { send_camera_frame(); });
-
-    RCLCPP_INFO(get_logger(), "Camera streaming to %s:%u at %.1f Hz", ip_str, gcs_port, camera_fps_);
+    camera_transport_ = std::make_unique<UdpSocket>(0u, std::string(ip_str), camera_port_);
+    RCLCPP_INFO(get_logger(), "Camera streaming to %s:%u", ip_str, camera_port_);
 }
 
-void CommsUav::start_camera_stream(float fps, uint16_t gcs_port)
+void CommsUav::start_camera_stream()
 {
     std::lock_guard<std::mutex> lock(camera_mutex_);
-    camera_streaming_ = false;
-    camera_timer_.reset();
     camera_transport_.reset();
-
-    camera_fps_      = fps;
-    camera_gcs_port_ = gcs_port;
     camera_streaming_ = true;
 
     const uint32_t gcs_ip = gcs_wifi_ip_.load();
     if (gcs_ip != 0) {
-        setup_camera_transport(gcs_ip, gcs_port);
+        setup_camera_transport(gcs_ip);
     } else {
-        RCLCPP_INFO(get_logger(),
-            "Camera stream requested at %.1f Hz — will start once WiFi peer is known", fps);
+        RCLCPP_INFO(get_logger(), "Camera stream enabled — will start once WiFi peer is known");
     }
 }
 
@@ -680,26 +663,19 @@ void CommsUav::stop_camera_stream()
 {
     std::lock_guard<std::mutex> lock(camera_mutex_);
     camera_streaming_ = false;
-    camera_timer_.reset();
     camera_transport_.reset();
     RCLCPP_INFO(get_logger(), "Camera streaming stopped");
 }
 
-void CommsUav::send_camera_frame()
+void CommsUav::on_camera_frame(const sensor_msgs::msg::CompressedImage::SharedPtr msg)
 {
     if (!camera_streaming_.load()) return;
 
-    std::vector<uint8_t> frame;
-    {
-        std::lock_guard<std::mutex> flock(camera_frame_mutex_);
-        if (camera_latest_frame_.empty()) return;
-        frame = camera_latest_frame_;
-    }
-
-    std::lock_guard<std::mutex> clock(camera_mutex_);
+    std::lock_guard<std::mutex> lock(camera_mutex_);
     if (!camera_transport_) return;
 
-    const size_t   total       = frame.size();
+    const auto&    data        = msg->data;
+    const size_t   total       = data.size();
     const uint16_t total_frags = static_cast<uint16_t>(
         (total + CAMERA_MAX_FRAG_PAYLOAD - 1) / CAMERA_MAX_FRAG_PAYLOAD);
     const uint32_t frame_id = ++camera_frame_id_;
@@ -719,7 +695,7 @@ void CommsUav::send_camera_frame()
         hdr.payload_size = payload_size;
 
         std::memcpy(buf.data(), &hdr, sizeof(hdr));
-        std::memcpy(buf.data() + sizeof(hdr), frame.data() + offset, payload_size);
+        std::memcpy(buf.data() + sizeof(hdr), data.data() + offset, payload_size);
         camera_transport_->send(buf.data(), sizeof(hdr) + payload_size);
     }
 }

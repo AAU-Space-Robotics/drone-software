@@ -685,17 +685,10 @@ void CommsGcs::on_camera_stream_request(
 {
     mavlink_message_t mav{};
     if (msg->enabled) {
-        const float fps = msg->fps > 0.0f ? msg->fps : 5.0f;
-        // param1 = stream_id (0 = main), param2 = fps, param3 = GCS camera port
         mavlink_msg_command_long_pack(system_id_, component_id_, &mav,
             1, 1, MAV_CMD_VIDEO_START_STREAMING,
-            0,                                  // confirmation
-            0.0f,                               // param1: stream_id
-            fps,                                // param2: fps
-            static_cast<float>(camera_port_),   // param3: port UAV should send to
-            0, 0, 0, 0);
-        RCLCPP_INFO(get_logger(),
-            "Requesting camera stream at %.1f Hz → UAV sends to port %u", fps, camera_port_);
+            0, 0, 0, 0, 0, 0, 0, 0);
+        RCLCPP_INFO(get_logger(), "Requesting camera stream start");
     } else {
         mavlink_msg_command_long_pack(system_id_, component_id_, &mav,
             1, 1, MAV_CMD_VIDEO_STOP_STREAMING,

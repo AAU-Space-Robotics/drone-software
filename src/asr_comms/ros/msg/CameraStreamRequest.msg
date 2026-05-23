@@ -1,2 +1,1 @@
-bool    enabled   # true = start streaming, false = stop
-float32 fps       # requested frame rate (ignored when enabled = false)
+bool enabled   # true = start streaming to GCS, false = stop

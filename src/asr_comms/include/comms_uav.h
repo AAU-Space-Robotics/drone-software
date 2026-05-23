@@ -62,22 +62,17 @@ private:
     void on_status(const asr_comms::msg::TelemetryStatus::SharedPtr msg);
 
     // Camera streaming (WiFi-only, started via MAV_CMD_VIDEO_START_STREAMING)
-    void start_camera_stream(float fps, uint16_t gcs_camera_port);
+    void start_camera_stream();
     void stop_camera_stream();
-    void setup_camera_transport(uint32_t gcs_ip_net, uint16_t gcs_port);
-    void send_camera_frame();
+    void setup_camera_transport(uint32_t gcs_ip_net);
     void on_camera_frame(const sensor_msgs::msg::CompressedImage::SharedPtr msg);
 
-    std::mutex                   camera_mutex_;
-    std::atomic<bool>            camera_streaming_{false};
-    std::atomic<uint32_t>        gcs_wifi_ip_{0};      // GCS WiFi IP (network byte order), set on beacon
-    float                        camera_fps_{5.0f};    // under camera_mutex_
-    uint16_t                     camera_gcs_port_{0};  // under camera_mutex_
-    std::unique_ptr<UdpSocket>   camera_transport_;    // under camera_mutex_
-    rclcpp::TimerBase::SharedPtr camera_timer_;        // under camera_mutex_
-    std::mutex                   camera_frame_mutex_;
-    std::vector<uint8_t>         camera_latest_frame_;
-    uint32_t                     camera_frame_id_{0};
+    std::mutex                 camera_mutex_;
+    std::atomic<bool>          camera_streaming_{false};
+    std::atomic<uint32_t>      gcs_wifi_ip_{0};     // GCS WiFi IP (network byte order), set on beacon
+    uint16_t                   camera_port_{5600};   // static param — GCS camera UDP port
+    std::unique_ptr<UdpSocket> camera_transport_;    // under camera_mutex_
+    uint32_t                   camera_frame_id_{0};  // under camera_mutex_
     rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr camera_sub_;
 
     std::unique_ptr<ITransport> transport_;

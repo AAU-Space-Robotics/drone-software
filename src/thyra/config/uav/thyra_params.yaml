@@ -112,3 +112,10 @@
         - [910.7153, 0.0, 641.7375,
           0.0, 910.8062, 370.1866,
           0.0, 0.0, 1.0]
+
+# Camera relay node — controls the fixed rate/quality for both perception and GCS streaming.
+# These are static: changing them requires a restart of the camera_relay node.
+/camera_relay:
+  ros__parameters:
+    fps: 5.0          # Target publish rate (Hz). 0 = every synced frame (up to camera max ~30 Hz).
+    jpeg_quality: 50  # JPEG quality 0–100 for the colour image sent to perception and GCS.
