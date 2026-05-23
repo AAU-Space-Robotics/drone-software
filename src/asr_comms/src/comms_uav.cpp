@@ -506,10 +506,11 @@ void CommsUav::send_radio_stats()
             name, val);
         send_mavlink(msg);
     };
-    send_nv("uav_txbuf", static_cast<float>(uav_radio_txbuf_.load()));
-    send_nv("uav_rssi",  static_cast<float>(uav_radio_rssi_.load()));
-    send_nv("uav_noise", static_cast<float>(uav_radio_noise_.load()));
-    send_nv("uav_rxerr", static_cast<float>(uav_radio_rxerrors_.load()));
+    send_nv("uav_txbuf",   static_cast<float>(uav_radio_txbuf_.load()));
+    send_nv("uav_rssi",    static_cast<float>(uav_radio_rssi_.load()));
+    send_nv("uav_noise",   static_cast<float>(uav_radio_noise_.load()));
+    send_nv("uav_rxerr",   static_cast<float>(uav_radio_rxerrors_.load()));
+    send_nv("cam_stream",  camera_streaming_.load() ? 1.0f : 0.0f);
 }
 
 void CommsUav::send_rx_kbps()

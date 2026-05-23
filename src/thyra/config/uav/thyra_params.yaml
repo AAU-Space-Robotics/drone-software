@@ -113,9 +113,26 @@
           0.0, 910.8062, 370.1866,
           0.0, 0.0, 1.0]
 
+      # Camera-to-drone homogeneous transform (4x4, row-major).
+      # Transforms a point in camera frame to drone body frame.
+      camera_to_drone_transform:
+        - [ 0.0, -0.70710678,  0.70710678,  0.137751,
+            1.0,  0.0,         0.0,         -0.018467,
+            0.0,  0.70710678,  0.70710678,   0.12126,
+            0.0,  0.0,         0.0,          1.0]
+
 # Camera relay node — controls the fixed rate/quality for both perception and GCS streaming.
 # These are static: changing them requires a restart of the camera_relay node.
 /camera_relay:
   ros__parameters:
     fps: 5.0          # Target publish rate (Hz). 0 = every synced frame (up to camera max ~30 Hz).
     jpeg_quality: 50  # JPEG quality 0–100 for the colour image sent to perception and GCS.
+
+# Probe detector node — YOLO-based 2D detection.
+# model: filename only (resolved to share/asr_perception/models/ at runtime).
+# On first run the .pt model is exported to a TensorRT .engine file (~2-5 min).
+# Subsequent runs load the .engine directly for full GPU performance.
+/probe_detector:
+  ros__parameters:
+    model: YOLO11m.pt
+    confidence_threshold: 0.75

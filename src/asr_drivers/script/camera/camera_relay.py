@@ -67,8 +67,8 @@ class CameraRelay(Node):
 
         # Publishers
         self._color_unsynced_pub = self.create_publisher(CompressedImage, '/thyra/out/cam/unsynced/color', qos)
-        self._color_synced_pub   = self.create_publisher(CompressedImage, '/thyra/out/cam/synced/color',   qos)
-        self._depth_pub          = self.create_publisher(CompressedImage, '/thyra/out/cam/synced/depth',   qos)
+        self._color_synced_pub   = self.create_publisher(Image,           '/thyra/out/cam/synced/color',   qos)
+        self._depth_pub          = self.create_publisher(Image,           '/thyra/out/cam/synced/depth',   qos)
         self._pose_pub           = self.create_publisher(PoseStamped,     '/thyra/out/cam/synced/pose',    qos)
 
         self._publish_on_sync = (fps <= 0.0)
@@ -147,17 +147,6 @@ class CameraRelay(Node):
         self._latest_synced = {}
 
         try:
-            depth_cv = self._bridge.imgmsg_to_cv2(depth_msg, desired_encoding='16UC1')
-            ok, buf = cv2.imencode('.png', depth_cv)
-            if not ok:
-                self.get_logger().error('PNG encoding failed')
-                return
-
-            depth_out        = CompressedImage()
-            depth_out.header = depth_msg.header
-            depth_out.format = 'png'
-            depth_out.data   = buf.tobytes()
-
             ox, oy, oz = self._origin_offset
             pose_out = PoseStamped()
             pose_out.header = depth_msg.header
@@ -169,19 +158,11 @@ class CameraRelay(Node):
             pose_out.pose.orientation.z = float(attitude_msg.q[3])
             pose_out.pose.orientation.w = float(attitude_msg.q[0])
 
-            self._depth_pub.publish(depth_out)
+            self._depth_pub.publish(depth_msg)
             self._pose_pub.publish(pose_out)
 
             if color_msg is not None:
-                color_cv  = self._bridge.imgmsg_to_cv2(color_msg, desired_encoding='rgb8')
-                color_bgr = cv2.cvtColor(color_cv, cv2.COLOR_RGB2BGR)
-                ok, buf = cv2.imencode('.jpg', color_bgr, [cv2.IMWRITE_JPEG_QUALITY, self._jpeg_quality])
-                if ok:
-                    synced_color        = CompressedImage()
-                    synced_color.header = depth_msg.header
-                    synced_color.format = 'jpeg'
-                    synced_color.data   = buf.tobytes()
-                    self._color_synced_pub.publish(synced_color)
+                self._color_synced_pub.publish(color_msg)
 
         except CvBridgeError as e:
             self.get_logger().error(f'CvBridge error (depth): {e}')

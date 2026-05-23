@@ -71,7 +71,7 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     gps_pub_      = create_publisher<asr_comms::msg::TelemetryGPS>(     "telemetry/gps",      10);
     status_pub_   = create_publisher<asr_comms::msg::TelemetryStatus>(  "telemetry/status",   10);
     command_ack_pub_ = create_publisher<asr_comms::msg::CommandAck>("command_ack", 10);
-    camera_pub_      = create_publisher<sensor_msgs::msg::CompressedImage>("camera/image", 10);
+    camera_pub_      = create_publisher<sensor_msgs::msg::CompressedImage>("camera/image/compressed", 10);
 
     camera_stream_sub_ = create_subscription<asr_comms::msg::CameraStreamRequest>(
         "in/camera_stream", 1,
@@ -371,8 +371,10 @@ void CommsGcs::handle_message(const mavlink_message_t& msg)
             uav_radio_rssi_.store(static_cast<uint8_t>(nv.value));
         else if (std::strncmp(nv.name, "uav_noise", sizeof(nv.name)) == 0)
             uav_radio_noise_.store(static_cast<uint8_t>(nv.value));
-        else if (std::strncmp(nv.name, "uav_rxerr", sizeof(nv.name)) == 0)
+        else if (std::strncmp(nv.name, "uav_rxerr",   sizeof(nv.name)) == 0)
             uav_radio_rxerrors_.store(static_cast<uint16_t>(nv.value));
+        else if (std::strncmp(nv.name, "cam_stream",  sizeof(nv.name)) == 0)
+            camera_streaming_.store(nv.value >= 0.5f);
         break;
     }
 

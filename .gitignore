@@ -27,3 +27,4 @@ src/asr_sensors/script/.lgd-nfy0/
 
 **/rosbag*/
 probe_data/
+**/*.engine
