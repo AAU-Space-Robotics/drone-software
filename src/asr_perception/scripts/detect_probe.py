@@ -46,6 +46,13 @@ class ProbeDetector(Node):
         if not os.path.exists(model_path):
             raise FileNotFoundError(f'YOLO model not found: {model_path}')
 
+        import torch
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                'CUDA not available — cannot run probe detector without GPU. '
+                'Install the Jetson-specific PyTorch wheel from developer.nvidia.com.')
+        self._device = 0
+
         self._model = self._load_model(model_path)
         self.get_logger().info(f'confidence threshold: {self._conf_thresh:.2f}')
 
@@ -123,7 +130,8 @@ class ProbeDetector(Node):
             return
 
         results = self._model.predict(
-            source=img, imgsz=640, conf=self._conf_thresh, device=0, verbose=False)
+            source=img, imgsz=640, conf=self._conf_thresh, device=self._device,
+            verbose=False, save=False)
 
         out = ProbeDetections()
         out.header = msg.header
