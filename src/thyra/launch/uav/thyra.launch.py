@@ -7,20 +7,21 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
+
 def generate_launch_description():
     thyra_pkg_share = FindPackageShare('thyra')
-    sensors_pkg_share = FindPackageShare('asr_drivers')
 
     params_path = PathJoinSubstitution([thyra_pkg_share, 'config', 'uav', 'thyra_params.yaml'])
     comms_path  = PathJoinSubstitution([thyra_pkg_share, 'config', 'comms', 'thyra_comms.yaml'])
 
-    hardware        = LaunchConfiguration('hardware')
-    use_sim_time    = LaunchConfiguration('use_sim_time')
-    position_source = LaunchConfiguration('position_source')
-    with_comms      = LaunchConfiguration('with_comms')
-    with_camera     = LaunchConfiguration('with_camera')
-    autopilot_delay = LaunchConfiguration('autopilot_delay')
-    use_led         = LaunchConfiguration('use_led')
+    hardware         = LaunchConfiguration('hardware')
+    use_sim_time     = LaunchConfiguration('use_sim_time')
+    position_source  = LaunchConfiguration('position_source')
+    with_comms       = LaunchConfiguration('with_comms')
+    with_camera      = LaunchConfiguration('with_camera')
+    with_perception  = LaunchConfiguration('with_perception')
+    autopilot_delay  = LaunchConfiguration('autopilot_delay')
+    use_led          = LaunchConfiguration('use_led')
 
     # Jetson uses USB-to-TTL adapter (udev symlink), Pi uses native UART
     serial_device = PythonExpression([
@@ -51,7 +52,12 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'with_camera',
             default_value='true',
-            description='Launch RealSense camera and image republisher',
+            description='Launch the Intel RealSense camera and relay',
+        ),
+        DeclareLaunchArgument(
+            'with_perception',
+            default_value='true',
+            description='Launch the YOLO probe detector',
         ),
         DeclareLaunchArgument(
             'autopilot_delay',
@@ -79,9 +85,12 @@ def generate_launch_description():
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                PathJoinSubstitution([sensors_pkg_share, 'launch', 'thyra_cam.launch.py'])
+                PathJoinSubstitution([thyra_pkg_share, 'launch', 'uav', 'thyra_perception.launch.py'])
             ),
-            condition=IfCondition(with_camera),
+            launch_arguments={
+                'with_camera':     with_camera,
+                'with_perception': with_perception,
+            }.items(),
         ),
 
         Node(

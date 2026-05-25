@@ -1,4 +1,6 @@
 *.json
+**/__pycache__/
+**/*.pyc
 .vscode/
 build/
 install/
@@ -28,3 +30,5 @@ src/asr_sensors/script/.lgd-nfy0/
 **/rosbag*/
 probe_data/
 **/*.engine
+**/*.engine.meta
+**/*.onnx

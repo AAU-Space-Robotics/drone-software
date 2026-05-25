@@ -87,7 +87,7 @@
     # System Parameters
     system:
       autostart_flight_stack: false   # Set false to skip auto-start; use START_FLIGHT_STACK action to start manually
-      flight_stack_launch: thyra
+      flight_stack_launch: thyra_jetson
 
     # Camera Parameters
     camera:

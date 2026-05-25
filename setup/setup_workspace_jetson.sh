@@ -123,9 +123,130 @@ else
     echo "ROS $ROS_DISTRO RealSense wrapper is already installed."
 fi
 
+# Install Jetson-specific PyTorch, torchvision, and ultralytics.
+#
+# Supports any JetPack 6.x device (L4T 36.x, aarch64).
+# The jp/v61 PyTorch wheel is the latest NVIDIA release and works on
+# L4T 36.2 through 36.5 (JetPack 6.0 – 6.2).
+install_jetson_pytorch_stack() {
+    local cuda_lib_path="/usr/local/cuda-12.6/targets/aarch64-linux/lib:/usr/local/cuda/targets/aarch64-linux/lib"
+    local cupti_lib_path="/usr/local/cuda-12.6/extras/CUPTI/lib64:/usr/local/cuda/extras/CUPTI/lib64"
+    local cusparselt_lib_path="/usr/local/cusparselt/lib"
+
+    if ! command -v python3 &> /dev/null; then
+        echo "WARNING: python3 not found; skipping Jetson PyTorch install."
+        return 0
+    fi
+
+    # Only run on aarch64 (Jetson). On x86_64, torch+CUDA comes from PyPI.
+    if [[ "$(uname -m)" != "aarch64" ]]; then
+        echo "Not an aarch64 system; skipping Jetson-specific PyTorch install."
+        return 0
+    fi
+
+    local l4t_version
+    l4t_version="$(dpkg-query -W -f='${Version}' nvidia-l4t-core 2>/dev/null | cut -d- -f1)"
+    local l4t_major
+    l4t_major="$(echo "$l4t_version" | cut -d. -f1)"
+
+    if [[ "$l4t_major" != "36" ]]; then
+        echo "L4T $l4t_version is not a JetPack 6.x device (L4T 36.x required); skipping."
+        return 0
+    fi
+
+    # Install CUDA runtime libraries that PyTorch depends on.
+    if ! ldconfig -p | grep -q 'libnvToolsExt.so.1'; then
+        echo "Installing CUDA NVTX support required by Jetson PyTorch..."
+        sudo apt-get update -qq
+        sudo apt-get install -y cuda-nvtx-12-6
+        sudo ldconfig
+    fi
+
+    if ! ldconfig -p | grep -q 'libcupti.so.12'; then
+        echo "Installing CUDA CUPTI support required by Jetson PyTorch..."
+        sudo apt-get update -qq
+        sudo apt-get install -y cuda-cupti-12-6
+        sudo ldconfig
+    fi
+
+    if [ ! -e /usr/local/cusparselt/lib/libcusparseLt.so.0 ]; then
+        echo "Installing cuSPARSELt support required by Jetson PyTorch..."
+        local tmp_archive
+        tmp_archive="$(mktemp /tmp/libcusparse_lt.XXXXXX.tar.xz)"
+        curl -fsSL -o "$tmp_archive" \
+            https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/linux-aarch64/libcusparse_lt-linux-aarch64-0.8.1.1_cuda12-archive.tar.xz
+        sudo mkdir -p /usr/local/cusparselt
+        sudo tar -xJf "$tmp_archive" -C /usr/local/cusparselt --strip-components=1
+        rm -f "$tmp_archive"
+    fi
+
+    if [ ! -f /etc/ld.so.conf.d/cusparselt.conf ] || \
+       ! grep -qx '/usr/local/cusparselt/lib' /etc/ld.so.conf.d/cusparselt.conf; then
+        echo "Registering cuSPARSELt with the system dynamic loader..."
+        echo '/usr/local/cusparselt/lib' | sudo tee /etc/ld.so.conf.d/cusparselt.conf > /dev/null
+        sudo ldconfig
+    fi
+
+    export LD_LIBRARY_PATH="${cuda_lib_path}:${cupti_lib_path}:${cusparselt_lib_path}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+
+    # If a CUDA-enabled torch >= 2.3 is already present, nothing to do.
+    if python3 - <<'PY' 2>/dev/null
+import sys, torch
+ok = torch.cuda.is_available() and \
+     tuple(int(x) for x in torch.__version__.split('a')[0].split('.')[:2]) >= (2, 3)
+sys.exit(0 if ok else 1)
+PY
+    then
+        echo "CUDA-enabled torch >= 2.3 already installed ($(python3 -c 'import torch; print(torch.__version__)')); skipping PyTorch install."
+    else
+        echo "Installing NVIDIA Jetson PyTorch for L4T $l4t_version..."
+        pip3 uninstall -y torch torchvision 2>/dev/null || true
+
+        # jp/v61 is the latest NVIDIA release; compatible with L4T 36.2 – 36.5.
+        local torch_url="https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl"
+        if ! python3 -m pip install --no-cache-dir "$torch_url"; then
+            echo "Error: Failed to install the NVIDIA Jetson PyTorch wheel"
+            exit 1
+        fi
+
+        if ! python3 -m pip install --no-cache-dir --no-deps "torchvision==0.20.0"; then
+            echo "Error: Failed to install torchvision 0.20.0"
+            exit 1
+        fi
+
+        if ! python3 - <<'PY'
+import torch
+print(torch.__version__, torch.cuda.is_available())
+if not torch.cuda.is_available():
+    raise SystemExit(1)
+PY
+        then
+            echo "Error: Jetson PyTorch verification failed"
+            exit 1
+        fi
+    fi
+
+    # ultralytics must be installed with --no-deps so pip does not replace the
+    # Jetson-specific torch wheel with an incompatible PyPI build.
+    if ! python3 -c "import ultralytics" 2>/dev/null; then
+        echo "Installing ultralytics (no-deps to preserve Jetson torch)..."
+        if ! python3 -m pip install --no-cache-dir --no-deps ultralytics; then
+            echo "Error: Failed to install ultralytics"
+            exit 1
+        fi
+        # ONNX is needed for the intermediate export step during engine generation.
+        if ! python3 -m pip install --no-cache-dir --no-deps "onnx>=1.12.0,<2.0.0" "onnxslim>=0.1.71"; then
+            echo "Error: Failed to install ONNX export dependencies"
+            exit 1
+        fi
+    else
+        echo "ultralytics already installed ($(python3 -c 'import ultralytics; print(ultralytics.__version__)'))."
+    fi
+}
+
 # Install Python dependencies for perception
 echo "Installing Python dependencies for asr_perception..."
-pip3 install ultralytics
+install_jetson_pytorch_stack
 
 # Install additional ROS dependencies
 echo "Installing additional ROS $ROS_DISTRO dependencies..."
@@ -256,6 +377,7 @@ User=${SERVICE_USER}
 Group=${SERVICE_USER}
 WorkingDirectory=${ROS_WORKSPACE_PATH}
 Environment=PYTHONUNBUFFERED=1
+Environment=LD_LIBRARY_PATH=/usr/local/cuda-12.6/targets/aarch64-linux/lib:/usr/local/cuda/targets/aarch64-linux/lib:/usr/local/cuda-12.6/extras/CUPTI/lib64:/usr/local/cuda/extras/CUPTI/lib64:/usr/local/cusparselt/lib
 ExecStart=/bin/bash -lc 'source ${ROS_SETUP_FILE} && source ${WORKSPACE_SETUP_FILE} && exec ros2 run thyra system_manager.py --ros-args -r __ns:=/asr/thyra --params-file ${PARAMS_INSTALLED}'
 Restart=on-failure
 RestartSec=5
@@ -275,6 +397,8 @@ sudo systemctl enable thyra.service
 # Build the workspace
 echo "Building workspace..."
 cd "$ROS_WORKSPACE_PATH" || exit
+
+chmod +x "$ROS_WORKSPACE_PATH/src/asr_perception/scripts/detect_probe.py"
 
 source "$ROS_SETUP_FILE"
 
