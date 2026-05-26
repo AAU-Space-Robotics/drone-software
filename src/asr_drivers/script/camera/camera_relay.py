@@ -63,13 +63,13 @@ class CameraRelay(Node):
         )
         self._sync.registerCallback(self._on_synced)
 
-        self.create_subscription(PoseStamped, '/thyra/out/origin_offset', self._on_origin_offset, 10)
+        self.create_subscription(PoseStamped, 'out/origin_offset', self._on_origin_offset, 10)
 
         # Publishers
-        self._color_unsynced_pub = self.create_publisher(CompressedImage, '/thyra/out/cam/unsynced/color', qos)
-        self._color_synced_pub   = self.create_publisher(Image,           '/thyra/out/cam/synced/color',   qos)
-        self._depth_pub          = self.create_publisher(Image,           '/thyra/out/cam/synced/depth',   qos)
-        self._pose_pub           = self.create_publisher(PoseStamped,     '/thyra/out/cam/synced/pose',    qos)
+        self._color_unsynced_pub = self.create_publisher(CompressedImage, 'out/cam/unsynced/color', qos)
+        self._color_synced_pub   = self.create_publisher(Image,           'out/cam/synced/color',   qos)
+        self._depth_pub          = self.create_publisher(Image,           'out/cam/synced/depth',   qos)
+        self._pose_pub           = self.create_publisher(PoseStamped,     'out/cam/synced/pose',    qos)
 
         self._publish_on_sync = (fps <= 0.0)
         interval = 1.0 / fps if fps > 0.0 else 0.0

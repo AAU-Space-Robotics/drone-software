@@ -228,9 +228,19 @@ PY
 
     # ultralytics must be installed with --no-deps so pip does not replace the
     # Jetson-specific torch wheel with an incompatible PyPI build.
-    if ! python3 -c "import ultralytics" 2>/dev/null; then
-        echo "Installing ultralytics (no-deps to preserve Jetson torch)..."
-        if ! python3 -m pip install --no-cache-dir --no-deps ultralytics; then
+    # Pinned to 8.3.x: 8.4+ re-introduced SAM which imports torchvision at startup,
+    # and the PyPI torchvision wheel is incompatible with the Jetson torch C++ operators.
+    local ul_ok
+    ul_ok=$(python3 -c "
+import ultralytics, sys
+v = tuple(int(x) for x in ultralytics.__version__.split('.')[:2])
+sys.exit(0 if v == (8, 3) else 1)
+" 2>/dev/null && echo yes || echo no)
+
+    if [[ "$ul_ok" != "yes" ]]; then
+        echo "Installing ultralytics 8.3.x (no-deps to preserve Jetson torch)..."
+        python3 -m pip uninstall -y ultralytics 2>/dev/null || true
+        if ! python3 -m pip install --no-cache-dir --no-deps "ultralytics==8.3.253"; then
             echo "Error: Failed to install ultralytics"
             exit 1
         fi
@@ -240,7 +250,32 @@ PY
             exit 1
         fi
     else
-        echo "ultralytics already installed ($(python3 -c 'import ultralytics; print(ultralytics.__version__)'))."
+        echo "ultralytics $(python3 -c 'import ultralytics; print(ultralytics.__version__)') already installed."
+    fi
+
+    # ultralytics 8.3.x reads torchvision's version via importlib.metadata at startup.
+    # Installing the full PyPI wheel causes a crash (torchvision::nms not in Jetson torch),
+    # so we provide only a minimal dist-info stub — metadata only, no C++ ops.
+    local tv_distinfo
+    tv_distinfo="$(python3 -c 'import site; print(site.getusersitepackages())')/torchvision-0.20.0.dist-info"
+    if ! python3 -c "import importlib.metadata; importlib.metadata.version('torchvision')" &>/dev/null; then
+        echo "Creating torchvision dist-info stub (metadata only, no C++ ops)..."
+        mkdir -p "$tv_distinfo"
+        cat > "$tv_distinfo/METADATA" << 'TVEOF'
+Metadata-Version: 2.1
+Name: torchvision
+Version: 0.20.0
+Summary: image and video datasets and models for torch deep learning
+TVEOF
+    fi
+
+    # ultralytics 8.3.x's SAM3 model unconditionally imports torchvision at module level.
+    # Guard that import so YOLO still loads on Jetson where torchvision C++ ops are absent.
+    local ul_models
+    ul_models="$(python3 -c 'import ultralytics; import os; print(os.path.join(os.path.dirname(ultralytics.__file__), "models", "__init__.py"))')"
+    if [[ -f "$ul_models" ]] && ! grep -q "except (ImportError, RuntimeError)" "$ul_models"; then
+        echo "Patching ultralytics models/__init__.py to guard SAM import on Jetson..."
+        sed -i 's/^from \.sam import SAM$/try:\n    from .sam import SAM\nexcept (ImportError, RuntimeError):\n    SAM = None/' "$ul_models"
     fi
 }
 

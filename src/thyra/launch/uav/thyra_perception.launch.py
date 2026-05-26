@@ -1,14 +1,14 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import Node
+from launch_ros.actions import Node, PushRosNamespace
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    with_camera    = LaunchConfiguration('with_camera')
+    with_camera     = LaunchConfiguration('with_camera')
     with_perception = LaunchConfiguration('with_perception')
 
     params_path = PathJoinSubstitution(
@@ -21,16 +21,24 @@ def generate_launch_description():
         DeclareLaunchArgument('with_perception', default_value='true',
                               description='Launch the YOLO probe detector'),
 
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                PathJoinSubstitution(
-                    [FindPackageShare('asr_drivers'), 'launch', 'intel_cam.launch.py']
-                )
-            ),
+        # PushRosNamespace only affects Node actions — the rs_launch.py ExecuteProcess
+        # inside intel_cam.launch.py is unaffected, so the camera driver keeps its own
+        # /camera namespace while camera_relay lands under asr/thyra.
+        GroupAction(
             condition=IfCondition(with_camera),
-            launch_arguments={
-                'params_path': params_path,
-            }.items(),
+            actions=[
+                PushRosNamespace('asr/thyra'),
+                IncludeLaunchDescription(
+                    PythonLaunchDescriptionSource(
+                        PathJoinSubstitution(
+                            [FindPackageShare('asr_drivers'), 'launch', 'intel_cam.launch.py']
+                        )
+                    ),
+                    launch_arguments={
+                        'params_path': params_path,
+                    }.items(),
+                ),
+            ],
         ),
 
         Node(

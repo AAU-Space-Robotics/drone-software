@@ -67,7 +67,7 @@ struct KalmanTrack {
         const auto  Hk = H();
         const auto  Rk = R(confidence); // Measurement noise scaled by confidence
         const auto  S  = Hk * P * Hk.transpose() + Rk;
-        const auto K = S.transpose().llt().solve((Hk * P).transpose()).transpose(); // Kalman gain
+        const auto K = S.llt().solve(Hk * P).transpose(); // Kalman gain (6×3)
         auto IKH = Eigen::Matrix<double,6,6>::Identity() - K * Hk;
         x = x + K * (z_meas - Hk * x);
         P = IKH * P * IKH.transpose() + K * Rk * K.transpose();
@@ -118,9 +118,9 @@ public:
         // --- Sync subscribers ---
         auto qos = rclcpp::QoS(5).best_effort();
 
-        det_sub_.subscribe(this,   "/probe_detector/detections",    qos.get_rmw_qos_profile());
-        depth_sub_.subscribe(this, "/thyra/out/cam/synced/depth",   qos.get_rmw_qos_profile());
-        pose_sub_.subscribe(this,  "/thyra/out/cam/synced/pose",    qos.get_rmw_qos_profile());
+        det_sub_.subscribe(this,   "probe_detector/detections",    qos.get_rmw_qos_profile());
+        depth_sub_.subscribe(this, "out/cam/synced/depth",          qos.get_rmw_qos_profile());
+        pose_sub_.subscribe(this,  "out/cam/synced/pose",           qos.get_rmw_qos_profile());
 
         sync_ = std::make_shared<Synchronizer>(
             SyncPolicy(10), det_sub_, depth_sub_, pose_sub_);
@@ -131,7 +131,7 @@ public:
                       std::placeholders::_2,
                       std::placeholders::_3));
 
-        probe_pub_ = create_publisher<ProbeLocations>("/probe_detector/locations", 10);
+        probe_pub_ = create_publisher<ProbeLocations>("probe_detector/locations", 10);
 
         RCLCPP_INFO(get_logger(), "Probe filter ready");
     }

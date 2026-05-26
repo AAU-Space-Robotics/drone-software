@@ -2,8 +2,8 @@
 """
 detect_probe — runs YOLO on colour frames and publishes 2D detections.
 
-Subscribes: /thyra/out/cam/synced/color   (sensor_msgs/Image)
-Publishes:  /probe_detector/detections    (asr_comms/ProbeDetections)
+Subscribes: out/cam/synced/color   (sensor_msgs/Image)   — relative, inherits node namespace
+Publishes:  probe_detector/detections    (asr_comms/ProbeDetections)
 
 On first run the .pt model is exported to a TensorRT .engine file (~2-5 min).
 Subsequent runs load the .engine directly for full GPU performance.
@@ -30,7 +30,7 @@ class ProbeDetector(Node):
     def __init__(self):
         super().__init__('probe_detector')
 
-        self.declare_parameter('confidence_threshold', 0.1)
+        self.declare_parameter('confidence_threshold', 0.75)
         self.declare_parameter('model', 'YOLO11m.pt')
         self.declare_parameter('publish_debug_image', False)
 
@@ -64,7 +64,7 @@ class ProbeDetector(Node):
         )
 
         self._sub = self.create_subscription(
-            Image, '/thyra/out/cam/synced/color',
+            Image, 'out/cam/synced/color',
             self._on_image, qos_profile=qos)
 
         self._pub       = self.create_publisher(ProbeDetections, 'probe_detector/detections', 10)

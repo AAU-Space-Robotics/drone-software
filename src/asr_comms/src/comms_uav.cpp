@@ -42,7 +42,7 @@ CommsUav::CommsUav()
     declare_parameter("system_id",    static_cast<int>(system_id_));
     declare_parameter("component_id", static_cast<int>(component_id_));
     declare_parameter("wifi_port",    static_cast<int>(wifi_port_));
-    declare_parameter("camera_topic", std::string{"/thyra/out/cam/unsynced/color"});
+    declare_parameter("camera_topic", std::string{"out/cam/unsynced/color"});
     declare_parameter("camera_port",  static_cast<int>(camera_port_));
 
     std::cout << "\n"
