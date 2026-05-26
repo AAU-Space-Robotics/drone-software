@@ -14,7 +14,7 @@
 
     system_id: 255
     component_id: 0
-    wifi_enabled: false
+    wifi_enabled: true
     wifi_port: 14552
 
 /asr/gcs/rtcm_reader:
