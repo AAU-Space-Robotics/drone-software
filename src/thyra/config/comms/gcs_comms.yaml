@@ -22,5 +22,5 @@
     port: "/dev/ttyACM0"         # Serial device for u-blox receiver
     baudrate: 115200
     configure_receiver: true     # Run u-blox config + survey-in on startup
-    survey_min_duration: 120     # Survey-in minimum duration (seconds)
-    survey_accuracy_mm: 500000   # Survey-in accuracy limit (0.1 mm units, 500000 = 50 m)
+    survey_min_duration: 220     # Survey-in minimum duration (seconds)
+    survey_accuracy_mm: 25000    # Survey-in accuracy limit in mm (25000 mm = 25 m)

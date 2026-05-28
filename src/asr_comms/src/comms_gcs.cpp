@@ -83,7 +83,7 @@ CommsGcs::CommsGcs() : Node("comms_gcs")
     link_stats_pub_   = create_publisher<asr_comms::msg::LinkStats>("link_stats", 10);
 
     rtcm_sub_ = create_subscription<std_msgs::msg::UInt8MultiArray>(
-        "/rtcm", 10,
+        "rtcm", 10,
         std::bind(&CommsGcs::send_rtcm, this, std::placeholders::_1));
 
     uav_command_sub_ = create_subscription<asr_comms::msg::UAVCommand>(

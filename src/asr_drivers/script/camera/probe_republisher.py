@@ -3,7 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy, QoSHistoryPolicy
-from asr_comms.msg import ProbeGlobalLocations  # Adjust based on your message package
+from asr_comms.msg import ProbeLocations
 
 class ProbeRepublisher(Node):
     def __init__(self):
@@ -27,7 +27,7 @@ class ProbeRepublisher(Node):
 
         # Create subscriber for /probe_detector/global_probe_locations_cyclone
         self.subscription = self.create_subscription(
-            ProbeGlobalLocations,
+            ProbeLocations,
             '/probe_detector/global_probe_locations_cyclone',
             self.listener_callback,
             qos2
@@ -35,7 +35,7 @@ class ProbeRepublisher(Node):
 
         # Create publisher for /probe_detector/global_probe_locations
         self.publisher = self.create_publisher(
-            ProbeGlobalLocations,
+            ProbeLocations,
             '/probe_detector/global_probe_locations',
             qos
         )

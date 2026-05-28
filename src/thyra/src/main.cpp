@@ -13,7 +13,7 @@
 #include <asr_comms/msg/telemetry_status.hpp>
 #include <asr_comms/msg/drone_scope.hpp>
 #include <asr_comms/msg/gcs_heartbeat.hpp>
-#include <asr_comms/msg/probe_global_locations.hpp>
+#include <asr_comms/msg/probe_locations.hpp>
 #include <asr_comms/msg/attitude_setpoint_rpy.hpp>
 #include <opencv2/opencv.hpp>
 #include <opencv2/objdetect/objdetect.hpp>

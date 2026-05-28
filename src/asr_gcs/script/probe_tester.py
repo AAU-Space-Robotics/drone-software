@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from asr_comms.msg import ProbeGlobalLocations  # Ensure this matches your package
+from asr_comms.msg import ProbeLocations
 from builtin_interfaces.msg import Time
 
 class DummyProbeGlobalPublisher(Node):
@@ -11,7 +11,7 @@ class DummyProbeGlobalPublisher(Node):
 
         # Publisher
         self.publisher_ = self.create_publisher(
-            ProbeGlobalLocations,
+            ProbeLocations,
             '/thyra/out/probe_locations_global',
             10
         )
@@ -21,10 +21,10 @@ class DummyProbeGlobalPublisher(Node):
         self.counter = 0
         self.probe_count = 1
 
-        self.get_logger().info('Dummy ProbeGlobalLocations Publisher Started')
+        self.get_logger().info('Dummy ProbeLocations Publisher Started')
 
     def timer_callback(self):
-        msg = ProbeGlobalLocations()
+        msg = ProbeLocations()
 
         # Update probe count every 50 iterations
         if self.counter % 50 == 0 and self.counter > 0:

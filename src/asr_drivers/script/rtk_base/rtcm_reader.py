@@ -52,7 +52,7 @@ class RtcmReaderNode(Node):
         self._survey_min_dur = self.get_parameter('survey_min_duration').value
         self._survey_acc_limit = self.get_parameter('survey_accuracy_mm').value
 
-        self._rtcm_pub = self.create_publisher(UInt8MultiArray, '/rtcm', 10)
+        self._rtcm_pub = self.create_publisher(UInt8MultiArray, 'rtcm', 10)
 
         self.get_logger().info(f'Opening serial port {port} @ {baudrate} baud')
         self._serial = Serial(port, baudrate, timeout=1)
@@ -94,20 +94,30 @@ class RtcmReaderNode(Node):
             self._serial.write(msg.serialize())
             time.sleep(0.05)
 
+        # Enable NAV-SVIN output via CFG-MSG (works across all u-blox generations)
+        msg = UBXMessage('CFG', 'CFG-MSG', SET, msgClass=0x01, msgID=0x3B, rateUSB=1)
+        self._serial.write(msg.serialize())
+        time.sleep(0.05)
+
+        # Reset time mode first so the new acc_limit applies to a fresh survey-in
+        reset = UBXMessage.config_set(layers=1, transaction=0, cfgData=[('CFG_TMODE_MODE', 0)])
+        self._serial.write(reset.serialize())
+        time.sleep(0.1)
+
         # Start survey-in via CFG-VALSET (modern u-blox API)
-        acc_limit = int(round(self._survey_acc_limit / 0.1))
+        # CFG_TMODE_SVIN_ACC_LIMIT is in 0.1 mm units; parameter is in mm
+        acc_limit = int(round(self._survey_acc_limit * 10))
         cfg_data = [
             ('CFG_TMODE_MODE', 1),
             ('CFG_TMODE_SVIN_ACC_LIMIT', acc_limit),
             ('CFG_TMODE_SVIN_MIN_DUR', self._survey_min_dur),
-            ('CFG_MSGOUT_UBX_NAV_SVIN_USB', 1),
         ]
         ubx = UBXMessage.config_set(layers=1, transaction=0, cfgData=cfg_data)
         self._serial.write(ubx.serialize())
 
         self.get_logger().info(
             f'Survey-in started — min {self._survey_min_dur}s, '
-            f'acc limit {self._survey_acc_limit / 10000:.1f} m'
+            f'acc limit {self._survey_acc_limit / 1000:.1f} m'
         )
 
     # ------------------------------------------------------------------
@@ -118,6 +128,7 @@ class RtcmReaderNode(Node):
         self.get_logger().info('Waiting for survey-in to complete...')
         reader = UBXReader(self._serial)
         consecutive_errors = 0
+        last_log = (None, None, None)  # (active, acc_rounded, dur_rounded)
 
         while rclpy.ok():
             try:
@@ -135,12 +146,22 @@ class RtcmReaderNode(Node):
                 continue
 
             if msg.identity == 'NAV-SVIN':
-                self.get_logger().info(
-                    f'Survey: active={msg.active}, valid={msg.valid}, '
-                    f'acc={msg.meanAcc / 10000:.2f} m, dur={msg.dur} s'
-                )
-                if msg.valid:
-                    self.get_logger().info('Survey-in complete — streaming RTCM')
+                acc_m = msg.meanAcc / 10000.0
+                acc_limit_m = self._survey_acc_limit / 1000.0
+
+                # Log only when something meaningful changes (active state, 0.1m acc step, 10s dur step)
+                log_key = (msg.active, round(acc_m, 1), msg.dur // 10)
+                if log_key != last_log:
+                    self.get_logger().info(
+                        f'Survey: active={msg.active}, valid={msg.valid}, '
+                        f'acc={acc_m:.2f} m, dur={msg.dur} s'
+                    )
+                    last_log = log_key
+
+                threshold_met = acc_m <= acc_limit_m and msg.dur >= self._survey_min_dur
+                if msg.valid or threshold_met:
+                    reason = 'receiver valid' if msg.valid else f'threshold met ({acc_m:.2f} m <= {acc_limit_m:.1f} m, {msg.dur} s)'
+                    self.get_logger().info(f'Survey-in complete ({reason}) — streaming RTCM')
                     return
 
     # ------------------------------------------------------------------
@@ -148,9 +169,8 @@ class RtcmReaderNode(Node):
     # ------------------------------------------------------------------
 
     def _stream_rtcm(self):
-        # UBXReader with protfilter=4 handles mixed UBX+RTCM3 streams and
-        # silently discards UBX frames — RTCMReader would CRC-fail on them.
-        reader = UBXReader(self._serial, protfilter=4)
+        # quitonerror=0 makes RTCMReader silently skip non-RTCM frames (e.g. UBX)
+        reader = RTCMReader(self._serial, quitonerror=0)
         consecutive_errors = 0
 
         for raw, _ in reader:

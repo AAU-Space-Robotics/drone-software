@@ -35,7 +35,7 @@ from asr_comms.msg import TelemetryPosition, TelemetryAttitude, TelemetryBattery
 from asr_comms.msg import GcsHeartbeat
 from asr_comms.msg import UAVCommand, CommandAck
 from asr_comms.msg import ServoCommand
-from asr_comms.msg import ProbeGlobalLocations
+from asr_comms.msg import ProbeLocations
 from dataclasses import dataclass
 from decimal import Decimal as _BaseDecimal
 import numpy as _np
@@ -338,7 +338,7 @@ class DroneGuiNode(Node):
         )
         
         self.subscription = self.create_subscription(
-           ProbeGlobalLocations,
+           ProbeLocations,
            '/asr/probe_detector/global_probe_locations',
            self.probe_callback,
            qos
